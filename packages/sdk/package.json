@@ -1,0 +1,28 @@
+{
+  "name": "@adaptivemcp/sdk",
+  "version": "0.0.1",
+  "description": "Middleware APIs and developer experience for Adaptive MCP.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@adaptivemcp/spec": "workspace:*",
+    "@adaptivemcp/telemetry": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
