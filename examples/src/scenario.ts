@@ -1,7 +1,8 @@
 import { AdaptiveRuntime } from "./runtime.js";
+import { runTool, section } from "./scenarios/shared.js";
 
 /**
- * Scenario: improvement over time.
+ * Scenario: improvement over time (the headline demo).
  *
  * We simulate a tool whose behavior changes across three phases and watch the
  * derived YAML metadata evolve — without anyone editing the YAML by hand.
@@ -10,30 +11,10 @@ import { AdaptiveRuntime } from "./runtime.js";
  *  Phase 2: a regression makes it flaky (failure rate ~30%).
  *  Phase 3: a fix restores reliability, and a human annotates it as high-risk.
  *
- * After each phase we print the YAML view so the evolution is visible.
+ * After each phase we print the YAML view so the evolution is visible. This
+ * scenario exercises the whole stack: telemetry -> memory (SSOT) -> evaluation
+ * -> extension (YAML view).
  */
-function phase(label: string, runtime: AdaptiveRuntime, opts: {
-  calls: number;
-  failRate: number;
-  toolName: string;
-  durationBase: number;
-}): void {
-  console.log(`\n================ ${label} ================`);
-  for (let i = 0; i < opts.calls; i++) {
-    const failed = Math.random() < opts.failRate;
-    runtime.observeCompleted({
-      toolName: opts.toolName,
-      serverName: "scenario-server",
-      durationMs: opts.durationBase + Math.floor(Math.random() * 200),
-      status: failed ? "failed" : "completed",
-      model: "gpt-5-mini",
-      cost: { amount: 0.0021 },
-      error: failed ? { message: "rollout timed out" } : undefined,
-    });
-  }
-  console.log(runtime.extension.resourceText());
-}
-
 function main(): void {
   const runtime = new AdaptiveRuntime({ yamlPath: "tools-metadata.scenario.yaml" });
 
@@ -46,30 +27,47 @@ function main(): void {
     description: "Deploys a service to production.",
   });
 
-  phase("Phase 1: healthy service", runtime, {
+  section("Phase 1: healthy service");
+  runTool(runtime, "deploy_service", "scenario-server", {
     calls: 40,
     failRate: 0.02,
-    toolName: "deploy_service",
     durationBase: 900,
+    cost: 0.0021,
   });
+  console.log(runtime.extension.resourceText());
 
-  phase("Phase 2: regression -> flaky", runtime, {
+  section("Phase 2: regression -> flaky");
+  runTool(runtime, "deploy_service", "scenario-server", {
     calls: 40,
     failRate: 0.3,
-    toolName: "deploy_service",
     durationBase: 1400,
+    cost: 0.0021,
   });
+  console.log(runtime.extension.resourceText());
 
-  phase("Phase 3: fix applied", runtime, {
+  section("Phase 3: fix applied");
+  runTool(runtime, "deploy_service", "scenario-server", {
     calls: 40,
     failRate: 0.03,
-    toolName: "deploy_service",
     durationBase: 950,
+    cost: 0.0021,
   });
+  // A suggested adaptation, written into the SSOT (e.g. by a future routing pkg).
+  runtime.memory.addRecommendation({
+    toolName: "deploy_service",
+    type: "approval",
+    payload: { requireConfirmation: true },
+    rationale: "High-risk deploy with observed flakiness; require human confirmation.",
+    confidence: 0.8,
+    generatedAt: new Date().toISOString(),
+  });
+  runtime.extension.sync();
+  console.log(runtime.extension.resourceText());
 
   console.log("\nObservation: the YAML `insights.observed_failure_rate` and `stats`");
   console.log("track the regression and recovery automatically. The `annotation.risk`");
   console.log("field stays 'high' because it is the human's static view, not learned.");
+  console.log("The `recommendations` list is populated from the SSOT, not the YAML.");
   runtime.close();
 }
 
