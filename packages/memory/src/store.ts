@@ -3,6 +3,7 @@ import type {
   Annotation,
   Insight,
   Recommendation,
+  RecommendationType,
   ToolExecutionEvent,
   ToolRecord,
   ToolStats,
@@ -132,6 +133,22 @@ export class MemoryStore {
     const updated: ToolRecord = {
       ...record,
       recommendations: [...record.recommendations, rec],
+      updatedAt: new Date().toISOString(),
+    };
+    this.write(updated);
+    return updated;
+  }
+
+  /**
+   * Remove all recommendations of a given type for a tool. Used by the routing,
+   * orchestration, and approval packages so each adaptation pass recomputes its
+   * own recommendations instead of appending duplicates on every observation.
+   */
+  clearRecommendations(toolName: string, type: RecommendationType): ToolRecord {
+    const record = this.ensureTool(toolName);
+    const updated: ToolRecord = {
+      ...record,
+      recommendations: record.recommendations.filter((r) => r.type !== type),
       updatedAt: new Date().toISOString(),
     };
     this.write(updated);

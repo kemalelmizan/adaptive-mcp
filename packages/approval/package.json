@@ -20,7 +20,8 @@
     "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
-    "@adaptivemcp/spec": "workspace:*"
+    "@adaptivemcp/spec": "workspace:*",
+    "@adaptivemcp/memory": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

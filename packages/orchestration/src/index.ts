@@ -1,7 +1,10 @@
 /**
- * @adaptivemcp/orchestration (stub)
+ * @adaptivemcp/orchestration
  *
- * Planned: execution composition, retries, and planning experiments.
- * Not yet implemented in the first vertical slice.
+ * Execution composition and strategies driven by observed behavior. Currently
+ * derives retry policies from observed failure rates and writes them into the
+ * SSOT as `workflow` recommendations. The actual retry execution is the
+ * caller's responsibility (e.g. the thin client or an agent loop).
  */
-export const ORCHESTRATION_STATUS = "stub" as const;
+export { Orchestrator } from "./retry.js";
+export type { RetryPolicy, OrchestrationOptions } from "./retry.js";

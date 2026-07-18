@@ -1,7 +1,11 @@
 /**
- * @adaptivemcp/thin-client (stub)
+ * @adaptivemcp/thin-client
  *
- * Planned: minimal MCP client (transport, capability negotiation, lifecycle).
- * Not yet implemented in the first vertical slice.
+ * A minimal client-side execution loop. It owns the *execution lifecycle* and
+ * the *middleware hooks* (approval gate + retry), but delegates all learning to
+ * the other packages. MCP transport and capability negotiation remain the job of
+ * the official SDK; this package is the operational machinery that runs on the
+ * client side.
  */
-export const THIN_CLIENT_STATUS = "stub" as const;
+export { ThinClient } from "./loop.js";
+export type { ThinClientOptions, ToolHandler } from "./loop.js";

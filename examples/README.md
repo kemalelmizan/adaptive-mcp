@@ -212,6 +212,7 @@ own `tools-metadata.*.yaml` next to them so you can diff the view across phases.
 | `node --experimental-sqlite dist/scenarios/ssot.js` | spec · memory · extension | The SQLite store is the SSOT; the YAML is a pure projection. Writes metadata directly to the store. |
 | `node --experimental-sqlite dist/scenarios/insights.js` | telemetry · evaluation · extension | Telemetry folds events into the SSOT; evaluation emits `observed_failure_rate` / `avg_duration_ms` insights as sample size grows. |
 | `node --experimental-sqlite dist/scenarios/annotation.js` | spec · extension | Human `Annotation` (static) vs. learned `Insight` (dynamic) live side by side; only insights move on their own. |
+| `node --experimental-sqlite dist/scenarios/adaptive.js` | routing · orchestration · approval · thin-client | **Full adaptive stack**: model selection + budget, retry policy for flaky tools, the approval gate enforcement hook, and the thin-client loop that consults both. |
 
 Run them all:
 
@@ -220,6 +221,7 @@ node --experimental-sqlite dist/scenario.js
 node --experimental-sqlite dist/scenarios/ssot.js
 node --experimental-sqlite dist/scenarios/insights.js
 node --experimental-sqlite dist/scenarios/annotation.js
+node --experimental-sqlite dist/scenarios/adaptive.js
 ```
 
 ### Sample YAML views
@@ -243,6 +245,9 @@ These mirror what the scenarios print. Use them to see the schema at a glance.
 | `@adaptivemcp/telemetry` | `TelemetryRecorder` + `MemoryBackedTelemetryStore` fold every execution event into the SSOT. |
 | `@adaptivemcp/evaluation` | `Evaluator` reads SSOT stats and writes derived `Insight`s once a confidence threshold is met. |
 | `@adaptivemcp/extension` | `ExtensionController` renders the SSOT to `tools-metadata.yaml` and exposes it as an MCP resource. |
+| `@adaptivemcp/routing` | `Router` writes `model` (cheapest model meeting observed latency/failure) and `routing` (budget warning) recommendations into the SSOT. |
+| `@adaptivemcp/orchestration` | `Orchestrator` writes a `workflow` recommendation with a retry policy scaled to the observed failure rate. |
+| `@adaptivemcp/approval` | `ApprovalGate` is the enforcement hook: `gate()` returns `allow` / `require_confirmation` / `deny` from the annotation risk + learned failure rate, and records an `approval` recommendation. |
+| `@adaptivemcp/thin-client` | `ThinClient` runs the client-side loop: consults the approval gate, then executes with the SSOT-derived retry policy. |
 
-> `routing`, `orchestration`, `approval`, and `thin-client` are intentional stubs
-> in this first implementation and are not exercised by the examples yet.
+> The four packages above are exercised by `dist/scenarios/adaptive.js`.

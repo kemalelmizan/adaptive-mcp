@@ -1,0 +1,35 @@
+version: 0.1.0
+generated_at: '2026-07-18T16:54:04.058Z'
+tools:
+  - name: search_customer
+    server: demo-server
+    annotation: {}
+    insights:
+      observed_failure_rate:
+        value: 0.23
+        confidence: 0.95
+        source: evaluation
+      avg_duration_ms:
+        value: 171
+        confidence: 0.95
+        source: telemetry
+    recommendations:
+      - type: model
+        payload:
+          model: gpt-5-mini
+        rationale: Cheapest model meeting observed latency (avg 171ms) and failure rate (0.23).
+      - type: workflow
+        payload:
+          retry:
+            maxAttempts: 4
+            baseDelayMs: 200
+            enabled: true
+        rationale: Observed failure rate 0.23 >= 0.1; apply retry with backoff.
+    stats:
+      invocations: 100
+      failures: 23
+      failure_rate: 0.23
+      avg_duration_ms: 171.21
+      total_cost: 0.030000000000000075
+      last_observed_at: '2026-07-18T16:54:04.057Z'
+    updated_at: '2026-07-18T16:54:04.058Z'

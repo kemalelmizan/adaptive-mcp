@@ -11,7 +11,8 @@
     "scenario": "node --experimental-sqlite dist/scenario.js",
     "scenario:ssot": "node --experimental-sqlite dist/scenarios/ssot.js",
     "scenario:insights": "node --experimental-sqlite dist/scenarios/insights.js",
-    "scenario:annotation": "node --experimental-sqlite dist/scenarios/annotation.js"
+    "scenario:annotation": "node --experimental-sqlite dist/scenarios/annotation.js",
+    "scenario:adaptive": "node --experimental-sqlite dist/scenarios/adaptive.js"
   },
   "dependencies": {
     "@adaptivemcp/spec": "workspace:*",
@@ -19,6 +20,10 @@
     "@adaptivemcp/telemetry": "workspace:*",
     "@adaptivemcp/evaluation": "workspace:*",
     "@adaptivemcp/extension": "workspace:*",
+    "@adaptivemcp/routing": "workspace:*",
+    "@adaptivemcp/orchestration": "workspace:*",
+    "@adaptivemcp/approval": "workspace:*",
+    "@adaptivemcp/thin-client": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^4.0.0"
   },

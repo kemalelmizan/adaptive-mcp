@@ -39,6 +39,9 @@ importers:
 
   examples:
     dependencies:
+      '@adaptivemcp/approval':
+        specifier: workspace:*
+        version: link:../packages/approval
       '@adaptivemcp/evaluation':
         specifier: workspace:*
         version: link:../packages/evaluation
@@ -48,12 +51,21 @@ importers:
       '@adaptivemcp/memory':
         specifier: workspace:*
         version: link:../packages/memory
+      '@adaptivemcp/orchestration':
+        specifier: workspace:*
+        version: link:../packages/orchestration
+      '@adaptivemcp/routing':
+        specifier: workspace:*
+        version: link:../packages/routing
       '@adaptivemcp/spec':
         specifier: workspace:*
         version: link:../packages/spec
       '@adaptivemcp/telemetry':
         specifier: workspace:*
         version: link:../packages/telemetry
+      '@adaptivemcp/thin-client':
+        specifier: workspace:*
+        version: link:../packages/thin-client
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.29.0(zod@4.4.3)
@@ -70,6 +82,9 @@ importers:
 
   packages/approval:
     dependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@adaptivemcp/spec':
         specifier: workspace:*
         version: link:../spec
@@ -140,6 +155,9 @@ importers:
 
   packages/orchestration:
     dependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@adaptivemcp/spec':
         specifier: workspace:*
         version: link:../spec
@@ -153,6 +171,9 @@ importers:
 
   packages/routing:
     dependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@adaptivemcp/spec':
         specifier: workspace:*
         version: link:../spec
@@ -191,6 +212,15 @@ importers:
 
   packages/thin-client:
     dependencies:
+      '@adaptivemcp/approval':
+        specifier: workspace:*
+        version: link:../approval
+      '@adaptivemcp/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@adaptivemcp/orchestration':
+        specifier: workspace:*
+        version: link:../orchestration
       '@adaptivemcp/spec':
         specifier: workspace:*
         version: link:../spec

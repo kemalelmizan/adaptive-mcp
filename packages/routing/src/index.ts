@@ -1,7 +1,9 @@
 /**
- * @adaptivemcp/routing (stub)
+ * @adaptivemcp/routing
  *
- * Planned: model selection and cost optimization driven by learned insights.
- * Not yet implemented in the first vertical slice.
+ * Model selection and cost optimization driven by learned insights. Consumes
+ * the SSOT stats/insights and writes `model` + `routing` recommendations back
+ * into the store, where the YAML view surfaces them.
  */
-export const ROUTING_STATUS = "stub" as const;
+export { Router } from "./router.js";
+export type { ModelOption, BudgetPolicy, RoutingOptions } from "./router.js";

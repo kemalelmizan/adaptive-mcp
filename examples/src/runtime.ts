@@ -5,6 +5,9 @@ import {
 } from "@adaptivemcp/telemetry";
 import { Evaluator } from "@adaptivemcp/evaluation";
 import { ExtensionController } from "@adaptivemcp/extension";
+import { Router } from "@adaptivemcp/routing";
+import { Orchestrator } from "@adaptivemcp/orchestration";
+import { ApprovalGate, type ApprovalDecision } from "@adaptivemcp/approval";
 
 export interface AdaptiveRuntimeOptions {
   /** SQLite path for the SSOT. Defaults to an in-memory database. */
@@ -17,6 +20,9 @@ export interface AdaptiveRuntimeOptions {
  * Wires the Adaptive MCP packages into a single runtime:
  *
  *   tool call -> telemetry -> MemoryStore (SSOT) -> evaluation -> insights
+ *                                                          -> routing      -> recommendations
+ *                                                          -> orchestration-> recommendations
+ *                                                          -> approval     -> gate + recommendation
  *                                                          -> ExtensionController -> YAML view
  *
  * This is the operational machinery; it is intentionally transport-agnostic.
@@ -26,6 +32,9 @@ export class AdaptiveRuntime {
   readonly telemetry: TelemetryRecorder;
   readonly evaluator: Evaluator;
   readonly extension: ExtensionController;
+  readonly router: Router;
+  readonly orchestrator: Orchestrator;
+  readonly approval: ApprovalGate;
 
   constructor(options: AdaptiveRuntimeOptions = {}) {
     this.memory = new MemoryStore({ path: options.dbPath ?? ":memory:" });
@@ -37,6 +46,9 @@ export class AdaptiveRuntime {
       memory: this.memory,
       yamlPath: options.yamlPath,
     });
+    this.router = new Router({ memory: this.memory });
+    this.orchestrator = new Orchestrator({ memory: this.memory });
+    this.approval = new ApprovalGate({ memory: this.memory });
   }
 
   /** Record a completed tool call, then re-evaluate and re-sync the YAML view. */
@@ -59,7 +71,14 @@ export class AdaptiveRuntime {
       { status: input.status, error: input.error },
     );
     this.evaluator.evaluateAll();
+    this.router.routeAll();
+    this.orchestrator.planAll();
     this.extension.sync();
+  }
+
+  /** Enforcement hook: decide whether a planned tool call may proceed. */
+  gate(toolName: string): ApprovalDecision {
+    return this.approval.gate(toolName);
   }
 
   close(): void {
