@@ -1,6 +1,6 @@
 import type { ToolExecutionEvent, ToolStatus } from "./types.js";
 
-export const TOOL_EXECUTION_EVENT = "adaptive://telemetry/tool.execution" as const;
+export const TOOL_EXECUTION_EVENT = "dev.adaptivemcp/telemetry/tool.execution" as const;
 
 export interface ToolEventContext {
   toolName: string;
@@ -30,11 +30,4 @@ export function createToolEvent(
     status,
     ...extra,
   };
-}
-
-/**
- * Validate that an insight's confidence is within the allowed [0, 1] range.
- */
-export function isConfidenceValid(confidence: number): boolean {
-  return typeof confidence === "number" && confidence >= 0 && confidence <= 1;
 }

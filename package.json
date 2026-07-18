@@ -9,13 +9,17 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"./packages/*\" run build",
+    "build:publishable": "node scripts/build.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
     "format": "prettier --write .",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "pnpm build && changeset publish"
+    "release": "node scripts/release.ts",
+    "release:dry": "node scripts/release.ts --dry-run",
+    "maintenance": "node scripts/maintenance.ts",
+    "maintenance:check": "node scripts/maintenance.ts check"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",

@@ -52,15 +52,8 @@ function main(): void {
     durationBase: 950,
     cost: 0.0021,
   });
-  // A suggested adaptation, written into the SSOT (e.g. by a future routing pkg).
-  runtime.memory.addRecommendation({
-    toolName: "deploy_service",
-    type: "approval",
-    payload: { requireConfirmation: true },
-    rationale: "High-risk deploy with observed flakiness; require human confirmation.",
-    confidence: 0.8,
-    generatedAt: new Date().toISOString(),
-  });
+  // A suggested adaptation, derived from the wired ApprovalGate (not hand-written).
+  runtime.gate("deploy_service");
   runtime.extension.sync();
   console.log(runtime.extension.resourceText());
 

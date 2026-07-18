@@ -20,7 +20,7 @@ export interface ExtensionControllerOptions {
  * Responsibilities:
  *  - derive the YAML tools-metadata view from the SQLite SSOT;
  *  - write it to disk (so out-of-band MCP clients can read it);
- *  - expose it as an MCP resource (`adaptive://tools-metadata.yaml`).
+ *  - expose it as an MCP resource (`dev.adaptivemcp/tools-metadata`).
  *
  * The controller never treats the YAML as the source of truth. Any change to
  * tool metadata flows: event -> MemoryStore (SSOT) -> YAML view.
@@ -49,9 +49,9 @@ export class ExtensionController {
     return renderToolsMetadata(this.memory.allTools(), SPEC_VERSION);
   }
 
-  /** MCP resource body for `adaptive://tools-metadata.yaml`. */
+  /** MCP resource URI for the derived tools-metadata view (`dev.adaptivemcp/tools-metadata`). */
   resourceUri(): string {
-    return "adaptive://tools-metadata.yaml";
+    return "dev.adaptivemcp/tools-metadata";
   }
 
   resourceText(): string {

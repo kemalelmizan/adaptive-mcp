@@ -95,9 +95,10 @@ export class Router {
     // Fast tools (<500ms) can use the cheapest model; slower tools may need a
     // more capable (lower-latency) one. This is a simple, explainable heuristic.
     const allowExpensive = avg >= 500;
-    const candidates = this.models
-      .filter((m) => allowExpensive || m.costWeight <= 1)
-      .sort((a, b) => a.costWeight - b.costWeight);
+    const candidates = this.models.filter((m) => allowExpensive || m.costWeight <= 1);
+    candidates.sort((a, b) =>
+      allowExpensive ? a.latencyWeight - b.latencyWeight : a.costWeight - b.costWeight,
+    );
     return candidates[0];
   }
 

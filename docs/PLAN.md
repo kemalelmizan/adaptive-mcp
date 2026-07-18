@@ -5,8 +5,9 @@ plan: each phase is validated by runnable examples before the next begins.
 
 ## Guiding constraints
 
-- **Node 26 only.** No LTS, no other `fnm` versions. All run scripts use
-  `node --experimental-sqlite` (the built-in `node:sqlite` module is the SSOT).
+- **Node 26 only.** No LTS, no other `fnm` versions. The built-in `node:sqlite`
+  module is stable in Node 26 (the `--experimental-sqlite` flag is accepted but
+  no longer required). All run scripts keep the flag for forward-compatibility.
 - **pnpm 11.14.0** (latest available in this registry; `pnpm@12` does not exist).
 - **SQLite is the single source of truth (SSOT).** The `tools-metadata.yaml`
   file is a *derived view* of the SQLite store, never edited directly.
@@ -30,7 +31,7 @@ Telemetry  ──records event──▶  MemoryStore (SQLite SSOT)
 ExtensionController  ◀──  reads SSOT  ──▶  tools-metadata.yaml (view)
         │
         ▼
-MCP resource: adaptive://tools-metadata.yaml
+MCP resource: dev.adaptivemcp/tools-metadata
 ```
 
 | Package | Responsibility | Status |
@@ -40,10 +41,10 @@ MCP resource: adaptive://tools-metadata.yaml
 | `@adaptivemcp/telemetry` | Recorder + memory-backed store + queries | ✅ done |
 | `@adaptivemcp/evaluation` | Insight generation from observed stats | ✅ done |
 | `@adaptivemcp/extension` | Derives + writes `tools-metadata.yaml` view | ✅ done |
-| `@adaptivemcp/routing` | Model selection / budget optimization | ⬜ stub |
-| `@adaptivemcp/orchestration` | Execution composition / retries | ⬜ stub |
-| `@adaptivemcp/approval` | Intent → plan → tool approval research | ⬜ stub |
-| `@adaptivemcp/thin-client` | Transport + middleware hooks | ⬜ stub |
+| `@adaptivemcp/routing` | Model selection / budget optimization | ✅ done |
+| `@adaptivemcp/orchestration` | Execution composition / retries | ✅ done |
+| `@adaptivemcp/approval` | Intent → plan → tool approval gate | ✅ done |
+| `@adaptivemcp/thin-client` | Client-side execution loop + middleware hooks | ✅ done |
 | `examples` | Runnable server + client + scenarios | ✅ done |
 
 ## Phase 0 — Foundation (complete)
@@ -51,7 +52,7 @@ MCP resource: adaptive://tools-metadata.yaml
 - Monorepo: pnpm workspaces, TypeScript strict, ESLint 9, Prettier, Vitest,
   Changesets.
 - `@adaptivemcp/spec`: `ToolRecord`, `ToolStats`, `Insight`, `Recommendation`,
-  `Annotation`, event schema, extension namespace `adaptive://`.
+  `Annotation`, event schema, extension namespace `dev.adaptivemcp/` (SEP-2133\n  reversed-domain identifiers).
 - `@adaptivemcp/memory`: `MemoryStore` over `node:sqlite` with `tools` table.
 
 ## Phase 1 — Observation → SSOT → View (complete)
@@ -61,40 +62,43 @@ MCP resource: adaptive://tools-metadata.yaml
 - `@adaptivemcp/evaluation`: `Evaluator` emits `observed_failure_rate` and
   `avg_duration_ms` insights once a confidence threshold is met.
 - `@adaptivemcp/extension`: `ExtensionController` renders the SSOT to
-  `tools-metadata.yaml` and exposes it as the `adaptive://tools-metadata.yaml`
+  `tools-metadata.yaml` and exposes it as the `dev.adaptivemcp/tools-metadata`
   MCP resource.
 
 **Validated by:** `examples` scenario (healthy → flaky → fixed) and the
 stdio server/client example. The YAML view evolves automatically; the human
 `annotation.risk` field stays static.
 
-## Phase 2 — Recommendations & routing (next)
+## Phase 2 — Recommendations & routing (complete)
 
 - `@adaptivemcp/evaluation` emits `Recommendation`s (e.g. "add retry",
   "flag high-risk") into the SSOT.
 - `@adaptivemcp/routing` consumes stats + insights to suggest model/budget
   choices; surfaces them in the YAML `recommendations` list.
-- Extend the YAML view schema with a richer `recommendations` section.
+- `@adaptivemcp/orchestration` derives retry policies from observed failure
+  rates and writes `workflow` recommendations.
+- `@adaptivemcp/approval` enforces intent → plan → tool boundaries via the
+  `ApprovalGate` (allow / deny / require_confirmation) and writes `approval`
+  recommendations.
 
-## Phase 3 — Orchestration & approval (research)
+## Phase 3 — Thin client & production hardening (complete)
 
-- `@adaptivemcp/orchestration`: retries / planning experiments driven by
-  insights.
-- `@adaptivemcp/approval`: explore intent → plan → tool boundaries; decide what
-  humans approve and whether approval can adapt.
+- `@adaptivemcp/thin-client`: client-side execution loop with approval gate +
+  SSOT-derived retry policy; transport stays with the official MCP SDK.
+- Persistence: file-backed SQLite by default (`:memory:` for tests).
+- Observability: the SSOT is exposed as the `dev.adaptivemcp/tools-metadata` MCP
+  resource and as a derived YAML file.
 
-## Phase 4 — Thin client & production hardening
+## Phase 4 — Extension spec alignment (complete)
 
-- `@adaptivemcp/thin-client`: transport + capability negotiation + middleware
-  hooks so the adaptation loop runs on the client side.
-- Persistence: file-backed SQLite by default; migrations; retention policy for
-  telemetry.
-- Observability: expose the SSOT as additional MCP resources/prompts.
+- Extension identifiers follow SEP-2133 (`dev.adaptivemcp/<name>`). The derived
+  YAML view is advertised as the `dev.adaptivemcp/tools-metadata` resource.
+- See the main README for how to advertise the extension in `initialize`
+  capabilities once the MCP SDK supports the `extensions` capability map.
 
 ## How to run
 
 ```bash
-eval "$(fnm env)" && fnm use 26
 pnpm install
 pnpm -r run build
 

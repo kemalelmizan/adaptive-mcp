@@ -28,7 +28,7 @@ export async function runClient(): Promise<void> {
   }
   await client.callTool({ name: "deploy_service", arguments: { environment: "prod", version: "1.0.0" } });
 
-  const res = await client.readResource({ uri: "adaptive://tools-metadata.yaml" });
+  const res = await client.readResource({ uri: "dev.adaptivemcp/tools-metadata" });
   const text = (res.contents[0] as { text: string }).text;
   console.log("\n--- tools-metadata.yaml (from server resource) ---\n");
   console.log(text);

@@ -28,7 +28,7 @@ tools:
     recommendations:
       - type: approval
         payload:
-          requireConfirmation: true
+          decision: require_confirmation
         rationale: High-risk deploy with observed flakiness; require human confirmation.
     stats:
       invocations: 120

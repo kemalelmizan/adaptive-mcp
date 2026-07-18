@@ -20,7 +20,7 @@ SQLite single source of truth (SSOT).
 > ExtensionController  ◀──  reads SSOT  ──▶  tools-metadata.yaml (view)
 >         │
 >         ▼
-> MCP resource: adaptive://tools-metadata.yaml
+> MCP resource: dev.adaptivemcp/tools-metadata
 > ```
 >
 > The YAML is a **derived projection** of the SQLite store. Nobody edits it by
@@ -33,7 +33,6 @@ SQLite single source of truth (SSOT).
 - **pnpm 11.14.0** (latest in this registry).
 
 ```bash
-eval "$(fnm env)" && fnm use 26
 pnpm install
 pnpm -r run build
 ```
@@ -49,7 +48,7 @@ cd examples
 ## Walkthrough 1 — A minimal MCP server with the Adaptive extension
 
 The server below exposes two application tools (`deploy_service`,
-`search_customer`) and one Adaptive MCP **resource** (`adaptive://tools-metadata.yaml`).
+`search_customer`) and one Adaptive MCP **resource** (`dev.adaptivemcp/tools-metadata`).
 The server stays stateless and lightweight; all adaptive behavior lives in the
 `AdaptiveRuntime` middleware.
 
@@ -97,7 +96,7 @@ export async function startServer(dbPath?: string, yamlPath?: string) {
   // The Adaptive MCP resource: a derived YAML view of the SSOT.
   server.registerResource(
     "tools-metadata",
-    "adaptive://tools-metadata.yaml",
+    "dev.adaptivemcp/tools-metadata",
     { title: "Adaptive MCP Tools Metadata", mimeType: "application/yaml" },
     async (uri) => ({
       contents: [{ uri: uri.href, mimeType: "application/yaml", text: runtime.extension.resourceText() }],
@@ -118,15 +117,15 @@ ADAPTIVE_YAML=tools-metadata.yaml node --experimental-sqlite dist/server.js
 **What this highlights**
 
 - `@adaptivemcp/extension` — `ExtensionController.resourceText()` renders the YAML
-  view; `resourceUri()` returns the stable `adaptive://tools-metadata.yaml` URI.
-- `@adaptivemcp/spec` — the `adaptive://` extension namespace (`EXTENSIONS.toolsMetadata`).
+  view; `resourceUri()` returns the stable `dev.adaptivemcp/tools-metadata` URI.
+- `@adaptivemcp/spec` — the `dev.adaptivemcp/` extension namespace (`EXTENSIONS.toolsMetadata`).
 
 ---
 
 ## Walkthrough 2 — An MCP client that reads the derived view
 
 The client connects over stdio, calls the tools, and reads the
-`adaptive://tools-metadata.yaml` resource. The YAML it receives is computed from
+`dev.adaptivemcp/tools-metadata` resource. The YAML it receives is computed from
 the server's SQLite SSOT — the client never writes metadata.
 
 ```ts
@@ -152,7 +151,7 @@ export async function runClient() {
   }
   await client.callTool({ name: "deploy_service", arguments: { environment: "prod", version: "1.0.0" } });
 
-  const res = await client.readResource({ uri: "adaptive://tools-metadata.yaml" });
+  const res = await client.readResource({ uri: "dev.adaptivemcp/tools-metadata" });
   const text = (res.contents[0] as { text: string }).text;
   console.log("\n--- tools-metadata.yaml (from server resource) ---\n");
   console.log(text);
@@ -240,7 +239,7 @@ These mirror what the scenarios print. Use them to see the schema at a glance.
 
 | Package | Role in the examples |
 | --- | --- |
-| `@adaptivemcp/spec` | Shared types (`ToolRecord`, `Annotation`, `Insight`, `Recommendation`, `ToolStats`) and the `adaptive://` extension namespace. |
+| `@adaptivemcp/spec` | Shared types (`ToolRecord`, `Annotation`, `Insight`, `Recommendation`, `ToolStats`) and the `dev.adaptivemcp/` extension namespace. |
 | `@adaptivemcp/memory` | `MemoryStore` over `node:sqlite` — the SSOT. `setAnnotation` / `addInsight` / `addRecommendation` / `recordExecution`. |
 | `@adaptivemcp/telemetry` | `TelemetryRecorder` + `MemoryBackedTelemetryStore` fold every execution event into the SSOT. |
 | `@adaptivemcp/evaluation` | `Evaluator` reads SSOT stats and writes derived `Insight`s once a confidence threshold is met. |

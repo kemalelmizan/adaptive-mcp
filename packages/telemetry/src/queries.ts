@@ -1,4 +1,3 @@
-import type { ToolExecutionEvent } from "@adaptivemcp/spec";
 import type { TelemetryStore } from "./store.js";
 
 export interface ToolStats {
@@ -43,11 +42,4 @@ export function computeToolStats(
     avgDurationMs,
     totalCost,
   };
-}
-
-export function recentEvents(
-  store: TelemetryStore,
-  limit = 50,
-): ToolExecutionEvent[] {
-  return store.all().slice(-limit);
 }

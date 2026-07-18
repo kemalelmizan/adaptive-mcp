@@ -22,7 +22,6 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     async ({ environment, version }) => {
-      const start = Date.now();
       // Simulate occasional failure.
       const failed = Math.random() < 0.15;
       const durationMs = 800 + Math.floor(Math.random() * 1200);
@@ -35,7 +34,6 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
         cost: { amount: 0.0021, currency: "USD" },
         error: failed ? { message: "rollout timed out" } : undefined,
       });
-      void start;
       return {
         content: failed
           ? [{ type: "text", text: "deploy failed: rollout timed out" }]
@@ -71,7 +69,7 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
   // Adaptive MCP resource: the derived YAML tools-metadata view.
   server.registerResource(
     "tools-metadata",
-    "adaptive://tools-metadata.yaml",
+    "dev.adaptivemcp/tools-metadata",
     {
       title: "Adaptive MCP Tools Metadata",
       description:

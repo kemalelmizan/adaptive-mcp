@@ -11,7 +11,7 @@ import { runTool, section } from "./shared.js";
  *   - approval:       enforcement gate for high-risk tools
  *   - thin-client:    client-side loop that consults the gate + retry policy
  *
- * The YAML view (adaptive://tools-metadata.yaml) reflects all recommendations.
+ * The YAML view (dev.adaptivemcp/tools-metadata) reflects all recommendations.
  */
 async function main(): Promise<void> {
   const runtime = new AdaptiveRuntime({ yamlPath: "examples/yaml/adaptive.yaml" });
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   }
   console.log(`deploy_service executed ${approvedRuns}x, blocked ${blockedRuns}x`);
 
-  section("Derived YAML view (adaptive://tools-metadata.yaml)");
+  section("Derived YAML view (dev.adaptivemcp/tools-metadata)");
   console.log(runtime.extension.resourceText());
 
   runtime.close();

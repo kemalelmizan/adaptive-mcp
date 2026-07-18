@@ -1,56 +1,56 @@
 version: 0.1.0
-generated_at: '2026-07-18T16:53:33.592Z'
+generated_at: '2026-07-18T23:38:22.902Z'
 tools:
   - name: deploy_service
     server: platform
     annotation: {}
     insights:
       observed_failure_rate:
-        value: 0.2
+        value: 0.125
         confidence: 0.7
         source: evaluation
       avg_duration_ms:
-        value: 486
+        value: 496
         confidence: 0.7
         source: telemetry
     recommendations:
       - type: model
         payload:
           model: gpt-5-mini
-        rationale: Cheapest model meeting observed latency (avg 486ms) and failure rate (0.20).
+        rationale: Cheapest model meeting observed latency (avg 496ms) and failure rate (0.13).
       - type: workflow
         payload:
           retry:
             maxAttempts: 4
             baseDelayMs: 200
             enabled: true
-        rationale: Observed failure rate 0.20 >= 0.1; apply retry with backoff.
+        rationale: Observed failure rate 0.13 >= 0.1; apply retry with backoff.
     stats:
       invocations: 40
-      failures: 8
-      failure_rate: 0.2
-      avg_duration_ms: 486.2
+      failures: 5
+      failure_rate: 0.125
+      avg_duration_ms: 495.825
       total_cost: 0.08400000000000002
-      last_observed_at: '2026-07-18T16:53:33.591Z'
-    updated_at: '2026-07-18T16:53:33.592Z'
+      last_observed_at: '2026-07-18T23:38:22.899Z'
+    updated_at: '2026-07-18T23:38:22.902Z'
   - name: search_customer
     server: crm
     annotation: {}
     insights:
       avg_duration_ms:
-        value: 220
+        value: 224
         confidence: 0.7
         source: telemetry
     recommendations:
       - type: model
         payload:
           model: gpt-5-mini
-        rationale: Cheapest model meeting observed latency (avg 220ms) and failure rate (0.00).
+        rationale: Cheapest model meeting observed latency (avg 224ms) and failure rate (0.00).
     stats:
       invocations: 40
       failures: 0
       failure_rate: 0
-      avg_duration_ms: 220.05
+      avg_duration_ms: 224.3
       total_cost: 0.011999999999999999
-      last_observed_at: '2026-07-18T16:53:33.524Z'
-    updated_at: '2026-07-18T16:53:33.592Z'
+      last_observed_at: '2026-07-18T23:38:22.837Z'
+    updated_at: '2026-07-18T23:38:22.902Z'
