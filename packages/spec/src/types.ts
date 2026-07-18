@@ -84,3 +84,26 @@ export interface Recommendation {
   confidence: number;
   generatedAt: string;
 }
+
+/**
+ * The single source of truth (SSOT) record for a tool, persisted in SQLite.
+ * The YAML tools-metadata view is derived from this record.
+ */
+export interface ToolRecord {
+  toolName: string;
+  serverName?: string;
+  annotation: Annotation;
+  insights: Insight[];
+  recommendations: Recommendation[];
+  stats: ToolStats;
+  updatedAt: string;
+}
+
+export interface ToolStats {
+  invocations: number;
+  failures: number;
+  failureRate: number;
+  avgDurationMs: number | null;
+  totalCost: number;
+  lastObservedAt: string | null;
+}

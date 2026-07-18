@@ -1,0 +1,66 @@
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { SPEC_VERSION } from "@adaptivemcp/spec";
+import type { MemoryStore } from "@adaptivemcp/memory";
+import {
+  renderToolsMetadata,
+  toYaml,
+  type ToolsMetadataDocument,
+} from "./view.js";
+
+export interface ExtensionControllerOptions {
+  memory: MemoryStore;
+  /** Where to write the derived YAML view. If omitted, only the in-memory doc is produced. */
+  yamlPath?: string;
+}
+
+/**
+ * The Adaptive MCP extension controller.
+ *
+ * Responsibilities:
+ *  - derive the YAML tools-metadata view from the SQLite SSOT;
+ *  - write it to disk (so out-of-band MCP clients can read it);
+ *  - expose it as an MCP resource (`adaptive://tools-metadata.yaml`).
+ *
+ * The controller never treats the YAML as the source of truth. Any change to
+ * tool metadata flows: event -> MemoryStore (SSOT) -> YAML view.
+ */
+export class ExtensionController {
+  private memory: MemoryStore;
+  private yamlPath?: string;
+
+  constructor(options: ExtensionControllerOptions) {
+    this.memory = options.memory;
+    this.yamlPath = options.yamlPath;
+  }
+
+  /** Recompute the YAML view from the SSOT and (optionally) persist it. */
+  sync(): ToolsMetadataDocument {
+    const doc = renderToolsMetadata(this.memory.allTools(), SPEC_VERSION);
+    if (this.yamlPath) {
+      mkdirSync(dirname(this.yamlPath), { recursive: true });
+      writeFileSync(this.yamlPath, toYaml(doc), "utf8");
+    }
+    return doc;
+  }
+
+  /** Read the current view without writing to disk. */
+  view(): ToolsMetadataDocument {
+    return renderToolsMetadata(this.memory.allTools(), SPEC_VERSION);
+  }
+
+  /** MCP resource body for `adaptive://tools-metadata.yaml`. */
+  resourceUri(): string {
+    return "adaptive://tools-metadata.yaml";
+  }
+
+  resourceText(): string {
+    return toYaml(this.view());
+  }
+
+  /** Apply a human annotation and re-sync the view. */
+  annotate(toolName: string, annotation: Parameters<MemoryStore["setAnnotation"]>[0]): ToolsMetadataDocument {
+    this.memory.setAnnotation(annotation);
+    return this.sync();
+  }
+}

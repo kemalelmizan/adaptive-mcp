@@ -1,7 +1,7 @@
 {
-  "name": "@adaptivemcp/telemetry",
-  "version": "0.0.1",
-  "description": "Tool execution events and observability for Adaptive MCP.",
+  "name": "@adaptivemcp/extension",
+  "version": "0.1.0",
+  "description": "Adaptive MCP extension: derives the YAML tools-metadata view from the SQLite SSOT and serves it to MCP clients.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -21,9 +21,12 @@
   },
   "dependencies": {
     "@adaptivemcp/spec": "workspace:*",
-    "@adaptivemcp/memory": "workspace:*"
+    "@adaptivemcp/memory": "workspace:*",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

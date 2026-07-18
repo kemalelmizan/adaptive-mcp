@@ -1,7 +1,7 @@
 {
-  "name": "@adaptivemcp/sdk",
-  "version": "0.0.1",
-  "description": "Middleware APIs and developer experience for Adaptive MCP.",
+  "name": "@adaptivemcp/evaluation",
+  "version": "0.1.0",
+  "description": "Outcome scoring and feedback loops for Adaptive MCP.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -12,14 +12,16 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
     "@adaptivemcp/spec": "workspace:*",
-    "@adaptivemcp/telemetry": "workspace:*"
+    "@adaptivemcp/memory": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

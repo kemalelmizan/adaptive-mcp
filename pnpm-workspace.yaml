@@ -1,9 +1,12 @@
 packages:
   - "packages/*"
   - "apps/*"
+  - "examples"
   - "examples/*"
 
 onlyBuiltDependencies:
   - esbuild
+  - "@modelcontextprotocol/sdk"
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true
+  "@modelcontextprotocol/sdk": true

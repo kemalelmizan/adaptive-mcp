@@ -1,0 +1,26 @@
+{
+  "name": "@adaptivemcp/examples",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runnable MCP server + client examples with the Adaptive MCP extension, plus improvement-over-time scenarios.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "server": "node --experimental-sqlite dist/server.js",
+    "client": "node --experimental-sqlite dist/client.js",
+    "scenario": "node --experimental-sqlite dist/scenario.js"
+  },
+  "dependencies": {
+    "@adaptivemcp/spec": "workspace:*",
+    "@adaptivemcp/memory": "workspace:*",
+    "@adaptivemcp/telemetry": "workspace:*",
+    "@adaptivemcp/evaluation": "workspace:*",
+    "@adaptivemcp/extension": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

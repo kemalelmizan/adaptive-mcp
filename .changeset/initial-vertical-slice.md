@@ -1,9 +1,13 @@
 ---
 "@adaptivemcp/spec": minor
+"@adaptivemcp/memory": minor
 "@adaptivemcp/telemetry": minor
-"@adaptivemcp/sdk": minor
+"@adaptivemcp/evaluation": minor
+"@adaptivemcp/extension": minor
 ---
 
-Initial vertical slice: spec foundation (extension identifiers, event schemas,
-shared types), telemetry (recorder + store + queries), and SDK (middleware
-pipeline wiring spec + telemetry into the adaptation loop).
+Initial adaptive implementation: spec foundation (extension identifiers, event
+schemas, shared types), SQLite-backed memory store (SSOT), telemetry
+(recorder + memory-backed store + queries), evaluation (insight generation from
+observed stats), and the extension controller that derives the
+`tools-metadata.yaml` view from the SQLite SSOT.

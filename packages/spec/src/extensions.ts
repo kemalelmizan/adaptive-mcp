@@ -16,6 +16,7 @@ export const EXTENSIONS = {
   routing: "adaptive://routing",
   orchestration: "adaptive://orchestration",
   approval: "adaptive://approval",
+  toolsMetadata: "adaptive://tools-metadata.yaml",
 } as const;
 
 export type ExtensionName = keyof typeof EXTENSIONS;
