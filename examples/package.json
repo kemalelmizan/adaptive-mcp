@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/examples",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "type": "module",
   "description": "Runnable MCP server + client examples with the Adaptive MCP extension, plus improvement-over-time scenarios.",

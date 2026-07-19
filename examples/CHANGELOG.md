@@ -1,5 +1,21 @@
 # @adaptivemcp/examples
 
+## 0.0.7
+
+### Patch Changes
+
+- Updated dependencies [00b51e6]
+  - @adaptivemcp/spec@0.2.1
+  - @adaptivemcp/extension@0.2.5
+  - @adaptivemcp/routing@0.2.2
+  - @adaptivemcp/runtime@0.2.0
+  - @adaptivemcp/approval@0.2.2
+  - @adaptivemcp/evaluation@0.2.5
+  - @adaptivemcp/memory@0.2.5
+  - @adaptivemcp/orchestration@0.2.2
+  - @adaptivemcp/telemetry@0.1.5
+  - @adaptivemcp/thin-client@0.2.2
+
 ## 0.0.6
 
 ### Patch Changes

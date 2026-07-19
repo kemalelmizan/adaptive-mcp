@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/approval",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Intent, plan, and tool approval boundaries for Adaptive MCP.",
   "license": "MIT",
   "type": "module",

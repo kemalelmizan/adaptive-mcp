@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/routing",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Model selection and cost optimization for Adaptive MCP.",
   "license": "MIT",
   "type": "module",
