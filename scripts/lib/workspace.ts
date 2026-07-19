@@ -96,7 +96,10 @@ export function dirtyFiles(): string[] {
     if (!out) return [];
     return out
       .split("\n")
-      .map((line) => line.slice(3).trim()) // drop the "XY " status prefix
+      // Porcelain format is "XY path" (2 status chars + 1 space + path).
+      // Skip the 2 status chars, then trim the single separator space so
+      // paths beginning with "." (e.g. ".changeset/") are preserved.
+      .map((line) => line.slice(2).trim())
       .filter(Boolean);
   } catch {
     return [];
