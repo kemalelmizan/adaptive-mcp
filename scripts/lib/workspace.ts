@@ -89,6 +89,20 @@ export function isDirty(): boolean {
   }
 }
 
+/** List of uncommitted/untracked files, relative to the repo root. */
+export function dirtyFiles(): string[] {
+  try {
+    const out = run("git", ["status", "--porcelain"], { silent: true }).trim();
+    if (!out) return [];
+    return out
+      .split("\n")
+      .map((line) => line.slice(3).trim()) // drop the "XY " status prefix
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 /** Read the current npm registry (respects .npmrc / env). */
 export function npmRegistry(): string {
   try {

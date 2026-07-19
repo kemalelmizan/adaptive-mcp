@@ -23,6 +23,7 @@ import {
   REPO_ROOT,
   run,
   isDirty,
+  dirtyFiles,
   gitSha,
 } from "./lib/workspace.ts";
 import { readFileSync } from "node:fs";
@@ -30,6 +31,25 @@ import { join } from "node:path";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const NO_PUSH = process.argv.includes("--no-push");
+
+/**
+ * `release.ts` starts on a clean tree and the only thing that dirties it is
+ * `changeset version`, which only ever modifies `package.json`, `CHANGELOG.md`,
+ * and consumes `.changeset/*.md` files (across every package in the changeset,
+ * including private ones). Any dirty file outside that set means there is
+ * unrelated WIP and we must refuse to commit.
+ */
+function isExpectedBumpFile(file: string): boolean {
+  if (file === "package.json" || file === "CHANGELOG.md") return true;
+  if (file.endsWith("/package.json") || file.endsWith("/CHANGELOG.md")) return true;
+  if (file.startsWith(".changeset/")) return true;
+  return false;
+}
+
+/** True when every dirty file is part of the expected version bump. */
+function onlyBumpIsDirty(): boolean {
+  return dirtyFiles().every(isExpectedBumpFile);
+}
 
 /** Read the current version of a package from its package.json. */
 function packageVersion(pkg: string): string {
@@ -45,12 +65,16 @@ function releaseVersion(): string {
 }
 
 function main(): void {
-  if (isDirty()) {
+  if (isDirty() && !onlyBumpIsDirty()) {
     console.error(
-      "[version-release] working tree is dirty. Run this only after `release.ts` " +
-        "has bumped versions and you have reviewed the changes.",
+      "[version-release] working tree is dirty with unexpected changes. " +
+        "Only the version bump (package.json/CHANGELOG.md under packages/* and " +
+        "consumed .changeset files) is allowed. Stash or commit other changes first.",
     );
     process.exit(1);
+  }
+  if (isDirty()) {
+    console.log("[version-release] working tree has the expected version bump; proceeding to commit it.");
   }
 
   const version = releaseVersion();
