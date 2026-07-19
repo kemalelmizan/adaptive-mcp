@@ -307,6 +307,37 @@ order.)
 Ad-hoc `npm publish` skips the version bump, the clean-tree guard, and the
 ordering. Always go through `release.ts`.
 
+### 8. Manual targeted publish (`--packages`)
+
+Sometimes you want to publish **only one or two packages** without a changeset
+and without bumping or republishing everything. The `--packages` flag takes a
+comma-separated list (bare name or `@adaptivemcp/...`) and publishes **only
+those**, using their current `package.json` versions. It skips the changeset
+version step, so the named packages must already have their desired version
+bumped (e.g. by a prior `changeset version`, or a manual edit).
+
+```bash
+# Publish ONLY extension + runtime (their current versions), nothing else:
+node scripts/release.ts --packages extension,runtime --otp <CODE>
+
+# Fully-qualified names also work:
+node scripts/release.ts --packages @adaptivemcp/extension --otp <CODE>
+
+# Combine with --tag to also commit + push the bump for just those packages:
+node scripts/release.ts --packages extension --tag --otp <CODE>
+```
+
+Notes:
+- Unknown package names are rejected up front with a list of valid packages.
+- Already-published versions are skipped (resume-safe), so re-running after an
+  expired OTP only publishes what's left.
+- `--packages` is independent of `--no-version`: `--no-version` publishes *all*
+  publishable packages, while `--packages` publishes *only* the named ones.
+  Don't use both.
+- Because it skips `changeset version`, there is no version bump — only publish.
+  Use this for re-releasing a specific package whose `dist/` you've rebuilt, or
+  for finishing a release that died after the bump was committed.
+
 ---
 
 ## Quick reference
@@ -340,6 +371,9 @@ git tag -l 'v*'
 # If a run died after consuming the changeset:
 git add -A && git commit -m "release: @adaptivemcp/* vX.Y.Z (pre-publish)"
 node scripts/release.ts --tag --otp <CODE>   # re-run; already-published pkgs skip
+
+# Manual targeted publish (only the named packages, current versions):
+node scripts/release.ts --packages extension,runtime --otp <CODE>
 ```
 
 ## Flags
@@ -348,6 +382,7 @@ node scripts/release.ts --tag --otp <CODE>   # re-run; already-published pkgs sk
 | --- | --- | --- |
 | `--dry-run` | `release.ts` | `changeset status` preview only; no build, no version bump, no publish, tree unchanged. |
 | `--no-version` | `release.ts` | Skip `changeset version`; publish ALL publishable packages as-is (republish). |
+| `--packages a,b` | `release.ts` | Manual override: publish ONLY the named packages (bare `extension` or `@adaptivemcp/extension`), using their current versions. Skips the changeset version step. |
 | `--tag` | `release.ts` | After publish, commit bump + tag + push (via `version-release.ts --packages …`). |
 | `--otp <CODE>` | `release.ts` | Pass npm 2FA one-time password to `npm publish`. |
 | `NPM_OTP` | `release.ts` | Env-var alternative to `--otp`. |

@@ -25,6 +25,7 @@
  *   node scripts/release.ts           # version + publish only the changed packages
  *   node scripts/release.ts --dry-run # preview pending changesets; no build, no publish
  *   node scripts/release.ts --no-version # skip changeset version; publish ALL publishable pkgs
+ *   node scripts/release.ts --packages extension,runtime --otp <CODE> # publish ONLY these (manual)
  *   node scripts/release.ts --tag     # also commit the bump + push tag (via version-release.ts)
  *
  * Requires: `NPM_TOKEN` in the environment (or a logged-in npm session) and
@@ -52,6 +53,8 @@ const SKIP_VERSION = process.argv.includes("--no-version");
 const TAG = process.argv.includes("--tag");
 const OTP_INDEX = process.argv.indexOf("--otp");
 const OTP = OTP_INDEX >= 0 ? process.argv[OTP_INDEX + 1] : undefined;
+const PKG_INDEX = process.argv.indexOf("--packages");
+const PACKAGES_ARG = PKG_INDEX >= 0 ? process.argv[PKG_INDEX + 1] : undefined;
 
 /** True when `pkg@version` already exists on the registry (resume-safe skip). */
 function isPublished(pkg: string, version: string): boolean {
@@ -85,6 +88,28 @@ function changedPackages(): string[] {
   return [...names].filter((p) => (PUBLISHABLE_PACKAGES as readonly string[]).includes(p));
 }
 
+/**
+ * Parse + validate a `--packages a,b` argument into a publish set. Accepts
+ * bare names (`extension`) or fully-qualified (`@adaptivemcp/extension`).
+ * Exits with a clear error if any named package is not in PUBLISHABLE_PACKAGES.
+ */
+function parsePackagesArg(raw: string): string[] {
+  const wanted = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => (s.startsWith("@adaptivemcp/") ? s : `@adaptivemcp/${s}`));
+  const invalid = wanted.filter((p) => !(PUBLISHABLE_PACKAGES as readonly string[]).includes(p));
+  if (invalid.length > 0) {
+    console.error(
+      `[release] --packages contains unknown package(s): ${invalid.join(", ")}.\n` +
+        `[release] valid packages: ${PUBLISHABLE_PACKAGES.join(", ")}`,
+    );
+    process.exit(1);
+  }
+  return wanted;
+}
+
 function main(): void {
   console.log(`[release] registry: ${npmRegistry()}`);
   console.log(`[release] packages: ${PUBLISHABLE_PACKAGES.join(", ")}`);
@@ -115,9 +140,17 @@ function main(): void {
   //    in pending changesets — not every publishable package. `--no-version` is
   //    the escape hatch for republishing: it skips the changeset step and
   //    publishes ALL publishable packages (already-published versions skip).
-  const toPublish = SKIP_VERSION ? [...PUBLISHABLE_PACKAGES] : changedPackages();
+  //    `--packages a,b` is a manual override: publish ONLY the named packages
+  //    (their current, already-bumped versions) and skip the changeset version
+  //    step, so you can target one or two packages without bumping the rest.
+  const packagesArg = PACKAGES_ARG ? parsePackagesArg(PACKAGES_ARG) : undefined;
+  const toPublish = packagesArg
+    ? packagesArg
+    : SKIP_VERSION
+      ? [...PUBLISHABLE_PACKAGES]
+      : changedPackages();
 
-  if (!SKIP_VERSION && toPublish.length === 0) {
+  if (!SKIP_VERSION && !packagesArg && toPublish.length === 0) {
     console.log(
       "[release] no pending changesets; nothing to publish. " +
         "Author a changeset, or pass --no-version to republish all publishable packages.",
@@ -125,10 +158,17 @@ function main(): void {
     return;
   }
 
-  console.log(`[release] publishing (changed-only): ${toPublish.join(", ")}`);
+  const setLabel = packagesArg
+    ? "manual --packages"
+    : SKIP_VERSION
+      ? "all publishable"
+      : "changed-only";
+  console.log(`[release] publishing (${setLabel}): ${toPublish.join(", ")}`);
 
-  // 2. Apply pending changesets (bumps versions, updates CHANGELOG).
-  if (!SKIP_VERSION) {
+  // 2. Apply pending changesets (bumps versions, updates CHANGELOG). Skipped
+  //    when `--no-version` (republish) or `--packages` (manual targeted publish
+  //    of already-bumped versions) is given.
+  if (!SKIP_VERSION && !packagesArg) {
     pnpm(["changeset", "version"]);
   }
 
