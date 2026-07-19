@@ -1,5 +1,11 @@
 # @adaptivemcp/spec
 
+## 0.1.3
+
+### Patch Changes
+
+- 507cfad: update ssot to store
+
 ## 0.1.2
 
 ### Patch Changes

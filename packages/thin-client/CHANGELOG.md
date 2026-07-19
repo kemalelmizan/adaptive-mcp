@@ -1,5 +1,16 @@
 # @adaptivemcp/thin-client
 
+## 0.0.4
+
+### Patch Changes
+
+- 507cfad: update ssot to store
+- Updated dependencies [507cfad]
+  - @adaptivemcp/approval@0.0.4
+  - @adaptivemcp/memory@0.2.3
+  - @adaptivemcp/orchestration@0.0.4
+  - @adaptivemcp/spec@0.1.3
+
 ## 0.0.3
 
 ### Patch Changes
