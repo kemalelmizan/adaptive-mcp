@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/memory",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Persistent operational knowledge for Adaptive MCP, backed by SQLite (node:sqlite).",
   "type": "module",
   "main": "./dist/index.js",

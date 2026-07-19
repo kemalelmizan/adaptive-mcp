@@ -28,7 +28,8 @@ SQLite single source of truth (SSOT).
 
 ## Prerequisites
 
-- **Node 26** (the built-in `node:sqlite` module is stable; no flag required).
+- **Node 26** (the built-in `node:sqlite` module is available without the
+  `--experimental-sqlite` flag).
   No LTS, no other `fnm` versions.
 - **pnpm 11.14.0** (latest in this registry).
 
@@ -225,7 +226,7 @@ node dist/scenarios/adaptive.js
 
 ### Sample YAML views
 
-Committed, hand-annotated examples of the derived view live in [`yaml/`](./yaml):
+Committed, illustrative examples of the derived view live in [`yaml/`](./yaml):
 
 - [`yaml/healthy.yaml`](./yaml/healthy.yaml) — reliable tool with a human annotation.
 - [`yaml/flaky.yaml`](./yaml/flaky.yaml) — regression detected; `observed_failure_rate` insight appears.

@@ -14,10 +14,10 @@ to `pnpm` / `npm` / `git` and never couple to a specific CI provider.
 | `scripts/release.ts` | Version (Changesets) + build + publish the core subset to npm. `--dry-run` skips publish; `--no-version` publishes as-is. |
 | `scripts/maintenance.ts` | Repo hygiene: `status`, `stale-dist`, `check` (build+lint+test), `outdated`. |
 
-## Published packages
+## Publishable packages
 
-Only the core subset is distributed to npm under the **`@adaptivemcp`**
-organization (`https://www.npmjs.com/org/adaptivemcp`). The set is defined once
+The core subset is distributed to npm under the **`@adaptivemcp`**
+organization once published (`https://www.npmjs.com/org/adaptivemcp`). The set is defined once
 in `PUBLISHABLE_PACKAGES` (`scripts/lib/workspace.ts`):
 
 - `@adaptivemcp/spec`

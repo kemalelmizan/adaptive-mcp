@@ -6,8 +6,8 @@ plan: each phase is validated by runnable examples before the next begins.
 ## Guiding constraints
 
 - **Node 26 only.** No LTS, no other `fnm` versions. The built-in `node:sqlite`
-  module is stable in Node 26 (no flag required).
-- **pnpm 11.14.0** (latest available in this registry; `pnpm@12` does not exist).
+  module is available without the `--experimental-sqlite` flag in Node 26.
+- **pnpm 11.14.0** (pinned via the repo's `packageManager` field).
 - **SQLite is the single source of truth (SSOT).** The `tools-metadata.yaml`
   file is a *derived view* of the SQLite store, never edited directly.
 - **Adaptive MCP computes and writes the YAML.** MCP clients read the YAML as a
@@ -98,7 +98,8 @@ stdio server/client example. The YAML view evolves automatically; the human
 - The client-side learning packages use internal `dev.adaptivemcp/<name>`
   identifiers for namespacing but are NOT advertised as MCP extensions.
 - See the main README for how to advertise the extension in `initialize`
-  capabilities once the MCP SDK supports the `extensions` capability map.
+  capabilities (the `@modelcontextprotocol/sdk` already includes `extensions` in
+  its `ServerCapabilities` schema).
 
 ## How to run
 
@@ -256,7 +257,9 @@ node -e "import('./dist/client.js').then(m=>m.runClient())"  # real stdio client
 ### Prerequisites
 
 - **Node 26** and **pnpm 11.14.0** (the repo's `packageManager` field pins pnpm).
-- An npm account that is a member of the **`adaptivemcp`** organization.
+- An npm account that owns or belongs to the **`@adaptivemcp`** organization
+  (create it first at `https://www.npmjs.com/org/adaptivemcp` if it does not
+  exist yet).
 - `NPM_TOKEN` with publish rights to the org, available in the environment (CI
   secret or local shell). The token is read by `npm publish` automatically.
 - A clean working tree (`git status --porcelain` empty) — the scripts refuse to

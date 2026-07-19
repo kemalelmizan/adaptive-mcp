@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/extension",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Adaptive MCP extension: derives the YAML tools-metadata view from the SQLite SSOT and serves it to MCP clients.",
   "type": "module",
   "main": "./dist/index.js",

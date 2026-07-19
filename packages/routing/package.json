@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/routing",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Model selection and cost optimization for Adaptive MCP. (stub)",
   "type": "module",

@@ -143,26 +143,28 @@ The derived YAML view is exposed as the MCP resource
 
 ### Advertising the extension in `initialize`
 
-The `@modelcontextprotocol/sdk` (v1.29) does **not** yet implement the
-`extensions` capability map, so the identifier cannot currently be advertised
-through the SDK's `initialize` capabilities. Until it does, Adaptive MCP
-degrades gracefully:
+The `@modelcontextprotocol/sdk` (v1.29) includes `extensions` in its
+`ServerCapabilities` schema, so a server can advertise the extension in
+`initialize` via `capabilities.extensions`. Adaptive MCP's example server does
+**not** rely on that negotiation, however — it exposes the metadata as a plain
+resource via `server.registerResource(...)`, which is the SEP-2133-compliant
+approach and degrades gracefully on any host that ignores unknown resources:
 
 - the resource is registered directly via `server.registerResource(...)`;
 - the `EXTENSION_NAMESPACE` / `TOOLS_METADATA_EXTENSION` constants in
   `@adaptivemcp/spec` provide the canonical identifier for any host that wants to
-  advertise it once the SDK supports `capabilities.extensions`.
+  advertise it through `capabilities.extensions`.
 
-When the SDK supports it, a server would advertise:
+When a server wants to advertise it explicitly, it can pass the capability:
 
 ```ts
-// conceptual — pending SDK support for capabilities.extensions
+// conceptual — advertise the extension in initialize
 const server = new McpServer({ name: "adaptive-example", version: "0.1.0" });
 server.registerResource("tools-metadata", "dev.adaptivemcp/tools-metadata", {
   title: "Adaptive MCP Tools Metadata",
   mimeType: "application/yaml",
 }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/yaml", text: runtime.extension.resourceText() }] }));
-// and, once supported, advertise in initialize:
+// and advertise in initialize:
 // capabilities: { extensions: { "dev.adaptivemcp/tools-metadata": {} } }
 ```
 
@@ -194,12 +196,13 @@ automatically from a SQLite single source of truth (SSOT).
     `Insight` (dynamic) side by side.
   - `scenarios/adaptive.js` — full stack: routing + orchestration + approval +
     thin-client.
-- **Sample YAML views** — committed, hand-annotated examples in
+- **Sample YAML views** — committed, illustrative examples in
   [`examples/yaml/`](./examples/yaml).
 
 ## Quick start
 
-Requires **Node 26** (the `node:sqlite` module is stable; no flag required) and
+Requires **Node 26** (the `node:sqlite` module is available without the
+`--experimental-sqlite` flag) and
 **pnpm 11.14.0**.
 
 ```bash
@@ -212,12 +215,10 @@ pnpm -r run build
 ### Watch the adaptation loop in 15 lines
 
 The whole loop — observe → evaluate → derive view — runs locally with
-`AdaptiveRuntime` (no server needed):
+`AdaptiveRuntime` (a demo helper in `examples/`, not a published package):
 
 ```ts
-import { AdaptiveRuntime } from "@adaptivemcp/extension"; // re-exports AdaptiveRuntime from examples in the demo
-
-// In the published packages, compose the pieces directly:
+// Compose the published pieces directly:
 import { MemoryStore } from "@adaptivemcp/memory";
 import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/telemetry";
 import { Evaluator } from "@adaptivemcp/evaluation";
@@ -260,8 +261,14 @@ EOF
 
 ```bash
 cd examples
-node dist/server.js   # registers deploy_service, search_customer, and the tools-metadata resource
-node dist/client.js    # local loop that reads dev.adaptivemcp/tools-metadata
+# Option A — real stdio client that spawns the server and reads the resource:
+node -e "import('./dist/client.js').then(m => m.runClient())"
+
+# Option B — start the server alone (blocks on stdio):
+node dist/server.js
+
+# Option C — local loop that derives the YAML view without spawning a server:
+node dist/client.js
 ```
 
 ### Run the scenarios
@@ -277,26 +284,29 @@ node dist/scenarios/adaptive.js   # full stack: routing + orchestration + approv
 
 ## npm packages
 
-Adaptive MCP publishes its core libraries under the **[`@adaptivemcp` npm
+Adaptive MCP will publish its core libraries under the **[`@adaptivemcp` npm
 organization](https://www.npmjs.com/org/adaptivemcp)**. The packages are
 dependency-light and follow the same boundaries as the architecture above.
 
-### Published (`@adaptivemcp/*`)
+> Note: these packages are **not yet published** to npm. The release flow is
+documented in [`docs/PLAN.md`](./docs/PLAN.md) → *Phase 6 — Publish to npm*.
 
-| Package | Description | Install |
-| --- | --- | --- |
-| [`@adaptivemcp/spec`](https://www.npmjs.com/package/@adaptivemcp/spec) | Extension identifiers (SEP-2133 `dev.adaptivemcp/` namespace), event schemas, and shared types. | `npm i @adaptivemcp/spec` |
-| [`@adaptivemcp/memory`](https://www.npmjs.com/package/@adaptivemcp/memory) | Persistent operational knowledge backed by SQLite (`node:sqlite`) — the SSOT. | `npm i @adaptivemcp/memory` |
-| [`@adaptivemcp/telemetry`](https://www.npmjs.com/package/@adaptivemcp/telemetry) | Tool execution events and observability (recorder + memory-backed store). | `npm i @adaptivemcp/telemetry` |
-| [`@adaptivemcp/evaluation`](https://www.npmjs.com/package/@adaptivemcp/evaluation) | Outcome scoring and feedback loops; emits `observed_failure_rate` / `avg_duration_ms` insights. | `npm i @adaptivemcp/evaluation` |
-| [`@adaptivemcp/extension`](https://www.npmjs.com/package/@adaptivemcp/extension) | Derives the YAML `tools-metadata` view from the SSOT and serves it as the `dev.adaptivemcp/tools-metadata` MCP resource. | `npm i @adaptivemcp/extension` |
+### Publishable (`@adaptivemcp/*)`)
 
 These five are the **publishable** set (see `PUBLISHABLE_PACKAGES` in
-[`scripts/lib/workspace.ts`](./scripts/lib/workspace.ts)). They are released with
-the [`scripts/release.ts`](./scripts/release.ts) flow (see
+[`scripts/lib/workspace.ts`](./scripts/lib/workspace.ts)). They will be released
+with the [`scripts/release.ts`](./scripts/release.ts) flow (see
 [`docs/PLAN.md`](./docs/PLAN.md) → *Phase 6 — Publish to npm*).
 
-### Private (not yet published)
+| Package | Description |
+| --- | --- |
+| `@adaptivemcp/spec` | Extension identifiers (SEP-2133 `dev.adaptivemcp/` namespace), event schemas, and shared types. |
+| `@adaptivemcp/memory` | Persistent operational knowledge backed by SQLite (`node:sqlite`) — the SSOT. |
+| `@adaptivemcp/telemetry` | Tool execution events and observability (recorder + memory-backed store). |
+| `@adaptivemcp/evaluation` | Outcome scoring and feedback loops; emits `observed_failure_rate` / `avg_duration_ms` insights. |
+| `@adaptivemcp/extension` | Derives the YAML `tools-metadata` view from the SSOT and serves it as the `dev.adaptivemcp/tools-metadata` MCP resource. |
+
+### Private (not published)
 
 `routing`, `orchestration`, `approval`, and `thin-client` are implemented but
 kept private for now — they are the client-side **executor** of the policy the
@@ -305,8 +315,8 @@ runnable demos, not libraries.
 
 ## How to build, test, and run
 
-Requires **Node 26** (the `node:sqlite` module is stable; no flag required)
-and **pnpm 11.14.0**.
+Requires **Node 26** (the `node:sqlite` module is available without the
+`--experimental-sqlite` flag) and **pnpm 11.14.0**.
 
 ```bash
 pnpm install
