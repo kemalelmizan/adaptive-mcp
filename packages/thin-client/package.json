@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/thin-client",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Minimal client-side execution loop for Adaptive MCP.",
   "license": "MIT",
   "type": "module",

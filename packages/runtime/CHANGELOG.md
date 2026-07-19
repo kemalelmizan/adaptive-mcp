@@ -1,5 +1,14 @@
 # @adaptivemcp/runtime
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [67875dd]
+  - @adaptivemcp/routing@0.2.1
+  - @adaptivemcp/orchestration@0.2.1
+  - @adaptivemcp/approval@0.2.1
+
 ## 0.1.0
 
 ### Minor Changes

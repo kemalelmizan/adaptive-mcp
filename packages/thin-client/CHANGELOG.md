@@ -1,5 +1,19 @@
 # @adaptivemcp/thin-client
 
+## 0.2.1
+
+### Patch Changes
+
+- 67875dd: docs: mark routing/orchestration/approval/thin-client as published
+
+  These four packages are already on npm; their READMEs still carried the
+  stale "private / not yet published" status line. Updated the status and added
+  usage examples. No API change.
+
+- Updated dependencies [67875dd]
+  - @adaptivemcp/orchestration@0.2.1
+  - @adaptivemcp/approval@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes
