@@ -66,9 +66,14 @@ function main(): void {
     return;
   }
 
-  // 1. Commit the version bump + CHANGELOGs.
+  // 1. Commit the version bump + CHANGELOGs (only if there is something to commit).
   run("git", ["add", "-A"], { cwd: REPO_ROOT });
-  run("git", ["commit", "-m", message], { cwd: REPO_ROOT });
+  const staged = run("git", ["diff", "--cached", "--name-only"], { cwd: REPO_ROOT, silent: true }).trim();
+  if (staged.length === 0) {
+    console.log("[version-release] nothing staged to commit; skipping commit.");
+  } else {
+    run("git", ["commit", "-m", message], { cwd: REPO_ROOT });
+  }
 
   // 2. Annotated tag.
   run("git", ["tag", "-a", tag, "-m", message], { cwd: REPO_ROOT });
