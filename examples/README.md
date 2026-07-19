@@ -28,10 +28,8 @@ SQLite single source of truth (SSOT).
 
 ## Prerequisites
 
-- **Node 26** (the built-in `node:sqlite` module is available without the
-  `--experimental-sqlite` flag).
-  No LTS, no other `fnm` versions.
-- **pnpm 11.14.0** (latest in this registry).
+- **Node 26**
+- **pnpm 11.14.0**
 
 ```bash
 pnpm install

@@ -5,8 +5,7 @@ plan: each phase is validated by runnable examples before the next begins.
 
 ## Guiding constraints
 
-- **Node 26 only.** No LTS, no other `fnm` versions. The built-in `node:sqlite`
-  module is available without the `--experimental-sqlite` flag in Node 26.
+- **Node 26**
 - **pnpm 11.14.0** (pinned via the repo's `packageManager` field).
 - **SQLite is the single source of truth (SSOT).** The `tools-metadata.yaml`
   file is a *derived view* of the SQLite store, never edited directly.
