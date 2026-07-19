@@ -28,8 +28,8 @@ SQLite single source of truth (SSOT).
 
 ## Prerequisites
 
-- **Node 26** (the built-in `node:sqlite` module is used; it requires the
-  `--experimental-sqlite` flag). No LTS, no other `fnm` versions.
+- **Node 26** (the built-in `node:sqlite` module is stable; no flag required).
+  No LTS, no other `fnm` versions.
 - **pnpm 11.14.0** (latest in this registry).
 
 ```bash
@@ -37,7 +37,7 @@ pnpm install
 pnpm -r run build
 ```
 
-All run commands below use `node --experimental-sqlite`. From the repo root:
+All run commands below use `node`. From the repo root:
 
 ```bash
 cd examples
@@ -111,7 +111,7 @@ export async function startServer(dbPath?: string, yamlPath?: string) {
 Run it (it blocks on stdio; the client in Walkthrough 2 drives it):
 
 ```bash
-ADAPTIVE_YAML=tools-metadata.yaml node --experimental-sqlite dist/server.js
+ADAPTIVE_YAML=tools-metadata.yaml node dist/server.js
 ```
 
 **What this highlights**
@@ -137,7 +137,7 @@ import { AdaptiveRuntime } from "./runtime.js";
 export async function runClient() {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ["--experimental-sqlite", new URL("./server.js", import.meta.url).pathname],
+    args: [new URL("./server.js", import.meta.url).pathname],
     env: { ...process.env, ADAPTIVE_YAML: "tools-metadata.client.yaml" },
   });
   const client = new Client({ name: "adaptive-example-client", version: "0.1.0" });
@@ -163,7 +163,7 @@ export async function runClient() {
 Run it:
 
 ```bash
-node --experimental-sqlite -e "import('./dist/client.js').then(m => m.runClient())"
+node -e "import('./dist/client.js').then(m => m.runClient())"
 ```
 
 You'll see the server's tools listed and a YAML document printed — the live,
@@ -195,7 +195,7 @@ export class AdaptiveRuntime {
 Run the local loop:
 
 ```bash
-node --experimental-sqlite dist/client.js
+node dist/client.js
 ```
 
 ---
@@ -207,20 +207,20 @@ own `tools-metadata.*.yaml` next to them so you can diff the view across phases.
 
 | Script | Packages highlighted | What it shows |
 | --- | --- | --- |
-| `node --experimental-sqlite dist/scenario.js` | spec · memory · telemetry · evaluation · extension | **Improvement over time**: a tool goes healthy → flaky → fixed; the YAML view evolves automatically. |
-| `node --experimental-sqlite dist/scenarios/ssot.js` | spec · memory · extension | The SQLite store is the SSOT; the YAML is a pure projection. Writes metadata directly to the store. |
-| `node --experimental-sqlite dist/scenarios/insights.js` | telemetry · evaluation · extension | Telemetry folds events into the SSOT; evaluation emits `observed_failure_rate` / `avg_duration_ms` insights as sample size grows. |
-| `node --experimental-sqlite dist/scenarios/annotation.js` | spec · extension | Human `Annotation` (static) vs. learned `Insight` (dynamic) live side by side; only insights move on their own. |
-| `node --experimental-sqlite dist/scenarios/adaptive.js` | routing · orchestration · approval · thin-client | **Full adaptive stack**: model selection + budget, retry policy for flaky tools, the approval gate enforcement hook, and the thin-client loop that consults both. |
+| `node dist/scenario.js` | spec · memory · telemetry · evaluation · extension | **Improvement over time**: a tool goes healthy → flaky → fixed; the YAML view evolves automatically. |
+| `node dist/scenarios/ssot.js` | spec · memory · extension | The SQLite store is the SSOT; the YAML is a pure projection. Writes metadata directly to the store. |
+| `node dist/scenarios/insights.js` | telemetry · evaluation · extension | Telemetry folds events into the SSOT; evaluation emits `observed_failure_rate` / `avg_duration_ms` insights as sample size grows. |
+| `node dist/scenarios/annotation.js` | spec · extension | Human `Annotation` (static) vs. learned `Insight` (dynamic) live side by side; only insights move on their own. |
+| `node dist/scenarios/adaptive.js` | routing · orchestration · approval · thin-client | **Full adaptive stack**: model selection + budget, retry policy for flaky tools, the approval gate enforcement hook, and the thin-client loop that consults both. |
 
 Run them all:
 
 ```bash
-node --experimental-sqlite dist/scenario.js
-node --experimental-sqlite dist/scenarios/ssot.js
-node --experimental-sqlite dist/scenarios/insights.js
-node --experimental-sqlite dist/scenarios/annotation.js
-node --experimental-sqlite dist/scenarios/adaptive.js
+node dist/scenario.js
+node dist/scenarios/ssot.js
+node dist/scenarios/insights.js
+node dist/scenarios/annotation.js
+node dist/scenarios/adaptive.js
 ```
 
 ### Sample YAML views

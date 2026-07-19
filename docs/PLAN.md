@@ -6,8 +6,7 @@ plan: each phase is validated by runnable examples before the next begins.
 ## Guiding constraints
 
 - **Node 26 only.** No LTS, no other `fnm` versions. The built-in `node:sqlite`
-  module is stable in Node 26 (the `--experimental-sqlite` flag is accepted but
-  no longer required). All run scripts keep the flag for forward-compatibility.
+  module is stable in Node 26 (no flag required).
 - **pnpm 11.14.0** (latest available in this registry; `pnpm@12` does not exist).
 - **SQLite is the single source of truth (SSOT).** The `tools-metadata.yaml`
   file is a *derived view* of the SQLite store, never edited directly.
@@ -108,9 +107,9 @@ pnpm install
 pnpm -r run build
 
 # Improvement-over-time scenario (prints YAML after each phase):
-cd examples && node --experimental-sqlite dist/scenario.js
+cd examples && node dist/scenario.js
 
 # MCP server + client over stdio:
-node --experimental-sqlite dist/client.js   # local loop
+node dist/client.js   # local loop
 node -e "import('./dist/client.js').then(m=>m.runClient())"  # real stdio client
 ```

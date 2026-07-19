@@ -168,8 +168,8 @@ server.registerResource("tools-metadata", "dev.adaptivemcp/tools-metadata", {
 
 ## How to build, test, and run
 
-Requires **Node 26** (the `node:sqlite` module is stable; the
-`--experimental-sqlite` flag is accepted but optional) and **pnpm 11.14.0**.
+Requires **Node 26** (the `node:sqlite` module is stable; no flag required)
+and **pnpm 11.14.0**.
 
 ```bash
 pnpm install
@@ -182,18 +182,18 @@ pnpm lint              # ESLint
 
 ```bash
 cd examples
-node --experimental-sqlite dist/scenario.js          # improvement over time (healthy → flaky → fixed)
-node --experimental-sqlite dist/scenarios/ssot.js     # SSOT is the source of truth; YAML is derived
-node --experimental-sqlite dist/scenarios/insights.js # telemetry → evaluation → insights
-node --experimental-sqlite dist/scenarios/annotation.js # human annotation vs. learned insight
-node --experimental-sqlite dist/scenarios/adaptive.js   # full stack: routing + orchestration + approval + thin-client
+node dist/scenario.js          # improvement over time (healthy → flaky → fixed)
+node dist/scenarios/ssot.js     # SSOT is the source of truth; YAML is derived
+node dist/scenarios/insights.js # telemetry → evaluation → insights
+node dist/scenarios/annotation.js # human annotation vs. learned insight
+node dist/scenarios/adaptive.js   # full stack: routing + orchestration + approval + thin-client
 ```
 
 ### MCP server + client
 
 ```bash
-node --experimental-sqlite dist/server.js   # registers deploy_service, search_customer, and the tools-metadata resource
-node --experimental-sqlite dist/client.js    # local loop that reads dev.adaptivemcp/tools-metadata
+node dist/server.js   # registers deploy_service, search_customer, and the tools-metadata resource
+node dist/client.js    # local loop that reads dev.adaptivemcp/tools-metadata
 ```
 
 ## Testing

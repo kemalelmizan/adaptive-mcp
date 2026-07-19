@@ -1,5 +1,5 @@
 version: 0.1.0
-generated_at: '2026-07-18T23:38:22.016Z'
+generated_at: '2026-07-19T00:10:42.835Z'
 tools:
   - name: deploy_service
     server: scenario-server
@@ -12,34 +12,34 @@ tools:
       description: Deploys a service to production.
     insights:
       observed_failure_rate:
-        value: 0.1667
+        value: 0.1167
         confidence: 0.95
         source: evaluation
       avg_duration_ms:
-        value: 1190
+        value: 1183
         confidence: 0.95
         source: telemetry
     recommendations:
       - type: model
         payload:
           model: gpt-5
-        rationale: Cheapest model meeting observed latency (avg 1190ms) and failure rate (0.17).
+        rationale: Cheapest model meeting observed latency (avg 1183ms) and failure rate (0.12).
       - type: workflow
         payload:
           retry:
             maxAttempts: 4
             baseDelayMs: 200
             enabled: true
-        rationale: Observed failure rate 0.17 >= 0.1; apply retry with backoff.
+        rationale: Observed failure rate 0.12 >= 0.1; apply retry with backoff.
       - type: approval
         payload:
           decision: require_confirmation
         rationale: High-risk or flaky tool; human confirmation required before execution.
     stats:
       invocations: 120
-      failures: 20
-      failure_rate: 0.1667
-      avg_duration_ms: 1189.6416666666667
+      failures: 14
+      failure_rate: 0.1167
+      avg_duration_ms: 1183.0166666666662
       total_cost: 0.25199999999999956
-      last_observed_at: '2026-07-18T23:38:22.015Z'
-    updated_at: '2026-07-18T23:38:22.016Z'
+      last_observed_at: '2026-07-19T00:10:42.833Z'
+    updated_at: '2026-07-19T00:10:42.835Z'

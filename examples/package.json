@@ -6,13 +6,13 @@
   "description": "Runnable MCP server + client examples with the Adaptive MCP extension, plus improvement-over-time scenarios.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "server": "node --experimental-sqlite dist/server.js",
-    "client": "node --experimental-sqlite dist/client.js",
-    "scenario": "node --experimental-sqlite dist/scenario.js",
-    "scenario:ssot": "node --experimental-sqlite dist/scenarios/ssot.js",
-    "scenario:insights": "node --experimental-sqlite dist/scenarios/insights.js",
-    "scenario:annotation": "node --experimental-sqlite dist/scenarios/annotation.js",
-    "scenario:adaptive": "node --experimental-sqlite dist/scenarios/adaptive.js"
+    "server": "node dist/server.js",
+    "client": "node dist/client.js",
+    "scenario": "node dist/scenario.js",
+    "scenario:ssot": "node dist/scenarios/ssot.js",
+    "scenario:insights": "node dist/scenarios/insights.js",
+    "scenario:annotation": "node dist/scenarios/annotation.js",
+    "scenario:adaptive": "node dist/scenarios/adaptive.js"
   },
   "dependencies": {
     "@adaptivemcp/spec": "workspace:*",

@@ -86,7 +86,7 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
   return server;
 }
 
-// Run directly: node --experimental-sqlite dist/server.js
+// Run directly: node dist/server.js
 if (import.meta.url === `file://${process.argv[1]}`) {
   const dbPath = process.env.ADAPTIVE_DB;
   const yamlPath = process.env.ADAPTIVE_YAML ?? "tools-metadata.yaml";

@@ -14,7 +14,7 @@ import { AdaptiveRuntime } from "./runtime.js";
 export async function runClient(): Promise<void> {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ["--experimental-sqlite", new URL("./server.js", import.meta.url).pathname],
+    args: [new URL("./server.js", import.meta.url).pathname],
     env: { ...process.env, ADAPTIVE_YAML: "tools-metadata.client.yaml" },
   });
   const client = new Client({ name: "adaptive-example-client", version: "0.1.0" });
