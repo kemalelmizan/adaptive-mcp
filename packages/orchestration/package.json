@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/orchestration",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "Composition and execution strategies for Adaptive MCP. (stub)",
   "license": "MIT",

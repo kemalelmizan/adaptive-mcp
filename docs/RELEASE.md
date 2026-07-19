@@ -125,15 +125,24 @@ which deletes the changeset file and bumps `package.json` + `CHANGELOG.md`).
 If you have no pending changeset, the script just republishes current versions
 (use `--no-version` to skip the version step entirely).
 
-### 2. Dry run (no publish, no commit)
+### 2. Dry run (true preview, no tree mutation)
 
 ```bash
 node scripts/release.ts --dry-run
 ```
 
-Builds, applies pending changesets, rebuilds, then stops. Inspect the version
-bumps in `package.json` / `CHANGELOG.md` and the emitted `dist/`. Nothing is
-published or committed.
+Builds the publishable packages, then runs `changeset status` to **preview** the
+pending changesets: which packages would bump and to what version. It does
+**not** consume the changeset, does **not** bump `package.json` / `CHANGELOG.md`,
+and does **not** publish. The working tree is left exactly as it was, so you can
+re-run the real release immediately afterward with no cleanup:
+
+```bash
+node scripts/release.ts --tag --otp <CODE>
+```
+
+Use the dry run to sanity-check the version bumps before committing to a publish.
+(The emitted `dist/` is gitignored, so the build step never dirties the tree.)
 
 ### 3. Publish (+ optionally tag)
 
@@ -302,7 +311,7 @@ node scripts/release.ts --tag --otp <CODE>   # re-run; already-published pkgs sk
 
 | Flag | Script | Effect |
 | --- | --- | --- |
-| `--dry-run` | `release.ts` | Build + version, skip publish. |
+| `--dry-run` | `release.ts` | Build + `changeset status` preview; no version bump, no publish, tree unchanged. |
 | `--no-version` | `release.ts` | Skip `changeset version`; publish current versions as-is. |
 | `--tag` | `release.ts` | After publish, commit bump + tag + push (via `version-release.ts`). |
 | `--otp <CODE>` | `release.ts` | Pass npm 2FA one-time password to `npm publish`. |

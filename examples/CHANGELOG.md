@@ -1,5 +1,21 @@
 # @adaptivemcp/examples
 
+## 0.0.3
+
+### Patch Changes
+
+- 2b4898f: update license
+- Updated dependencies [2b4898f]
+  - @adaptivemcp/approval@0.0.3
+  - @adaptivemcp/evaluation@0.2.2
+  - @adaptivemcp/extension@0.2.2
+  - @adaptivemcp/memory@0.2.2
+  - @adaptivemcp/orchestration@0.0.3
+  - @adaptivemcp/routing@0.0.3
+  - @adaptivemcp/spec@0.1.2
+  - @adaptivemcp/telemetry@0.1.2
+  - @adaptivemcp/thin-client@0.0.3
+
 ## 0.0.2
 
 ### Patch Changes

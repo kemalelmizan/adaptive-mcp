@@ -15,7 +15,7 @@
  *
  * Usage:
  *   node scripts/release.ts            # full version + build + publish
- *   node scripts/release.ts --dry-run  # build + version, but do not publish
+ *   node scripts/release.ts --dry-run  # build + preview pending changesets; no version bump, no publish
  *   node scripts/release.ts --no-version # skip changeset version (publish as-is)
  *   node scripts/release.ts --tag      # also commit the bump + push tag (via version-release.ts)
  *
@@ -55,6 +55,17 @@ function main(): void {
   // 1. Build publishable packages.
   pnpm(["-r", ...PUBLISHABLE_PACKAGES.flatMap((p) => ["--filter", p]), "run", "build"]);
 
+  if (DRY_RUN) {
+    // True dry run: preview the pending changesets WITHOUT consuming them or
+    // bumping versions. `changeset status` reads the changeset files and prints
+    // the packages/versions that *would* change, leaving the working tree
+    // untouched (no version bump, no CHANGELOG edit, no publish).
+    console.log("[release] --dry-run: previewing pending changesets (no publish, no version bump)");
+    pnpm(["changeset", "status"]);
+    console.log("[release] --dry-run: done. Working tree is unchanged; re-run without --dry-run to publish.");
+    return;
+  }
+
   // 2. Apply pending changesets (bumps versions, updates CHANGELOG).
   if (!SKIP_VERSION) {
     pnpm(["changeset", "version"]);
@@ -62,11 +73,6 @@ function main(): void {
 
   // 3. Rebuild after version bump.
   pnpm(["-r", ...PUBLISHABLE_PACKAGES.flatMap((p) => ["--filter", p]), "run", "build"]);
-
-  if (DRY_RUN) {
-    console.log("[release] --dry-run: skipping publish.");
-    return;
-  }
 
   // 4. Publish each package in declared order.
   for (const pkg of PUBLISHABLE_PACKAGES) {

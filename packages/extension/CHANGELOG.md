@@ -1,5 +1,14 @@
 # @adaptivemcp/extension
 
+## 0.2.2
+
+### Patch Changes
+
+- 2b4898f: update license
+- Updated dependencies [2b4898f]
+  - @adaptivemcp/memory@0.2.2
+  - @adaptivemcp/spec@0.1.2
+
 ## 0.2.1
 
 ### Patch Changes

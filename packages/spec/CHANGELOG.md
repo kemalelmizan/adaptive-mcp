@@ -1,5 +1,11 @@
 # @adaptivemcp/spec
 
+## 0.1.2
+
+### Patch Changes
+
+- 2b4898f: update license
+
 ## 0.1.1
 
 ### Patch Changes
