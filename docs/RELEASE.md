@@ -35,8 +35,9 @@ know about each other.
   resolve `latest`. You can have other tags (`next`, `beta`) but we only use
   `latest`.
 - Because versions are immutable, a **partially failed publish is safe to
-  resume**: packages that already published are simply skipped on re-run
-  (`npm error cannot publish over the previously published version …`).
+  resume**: `release.ts` checks the registry and **skips any package whose
+  version is already published**, so re-running after a mid-publish failure
+  (e.g. an expired OTP) only publishes the packages that didn't make it.
 
 ### GitHub (the repo)
 
@@ -158,11 +159,14 @@ node scripts/version-release.ts
 What `release.ts` does, in order:
 
 1. Refuses if the tree is dirty.
-2. Builds `PUBLISHABLE_PACKAGES` (`pnpm -r --filter … run build`).
-3. Applies pending changesets (`pnpm changeset version`).
-4. Rebuilds (the version bump may change emitted code).
-5. `npm publish --access public --ignore-scripts` each package in dependency
-   order: `spec → memory → telemetry → evaluation → extension`.
+2. Applies pending changesets (`pnpm changeset version`).
+3. Builds `PUBLISHABLE_PACKAGES` ONCE (`pnpm -r --filter … run build`), *after*
+   the version bump. Building here — not before *and* after — keeps the 2FA OTP
+   fresh for the publish step, since the OTP is time-limited.
+4. `npm publish --access public --ignore-scripts` each package in dependency
+   order: `spec → memory → telemetry → evaluation → extension`. Versions that
+   are already on the registry are skipped (resume-safe), so a re-run after a
+   mid-publish failure only publishes what's left.
 
 `--ignore-scripts` keeps the publish hermetic (no lifecycle scripts run inside
 the published tarball).
@@ -252,10 +256,13 @@ publish hit 2FA, we committed the bump, then re-ran with `--otp`.)
 interrupted after that step, the bump is applied but uncommitted (see #2). There
 is no "undo". Just commit and continue.
 
-### 4. Build runs twice
+### 4. Build runs once (after the bump)
 
-The script builds before *and* after the version bump (the bump can change
-emitted code). Don't be surprised by the double build; it's intentional.
+The script builds a single time, *after* `changeset version` applies the bump.
+This is deliberate: the 2FA OTP is time-limited, so we want the build to finish
+as close as possible to the `npm publish` calls. The post-bump build overwrites
+any stale `dist/` from a previous run. Don't add a second pre-bump build back in
+— it only burns OTP time before the publish.
 
 ### 5. README must ship in the tarball
 
@@ -325,7 +332,7 @@ node scripts/release.ts --tag --otp <CODE>   # re-run; already-published pkgs sk
 | --- | --- | --- |
 | `[release] working tree is dirty` | Uncommitted changes (often a prior bump) | Commit or stash, then re-run. |
 | `npm error code EOTP` | 2FA required, no OTP supplied | Re-run with `--otp <CODE>` (fresh code). |
-| `cannot publish over the previously published version` | Re-running after partial publish | Expected. Already-published pkgs skip; supply OTP for the rest. |
+| `cannot publish over the previously published version` | Should no longer occur | `release.ts` now skips already-published versions automatically. If you still see it, check `NPM_TOKEN`/registry and the package name. |
 | npm page shows no README | `README.md` missing from `files` | Add `"README.md"` to the package's `files` allowlist, rebuild, republish. |
 | Tag exists but version missing on npm | Pushed before publish finished | Publish succeeded? If not, publish then re-tag (delete + recreate tag). |
 | `pnpm: command not found` / wrong version | pnpm not pinned | `eval "$(fnm env)" && fnm use 26`; use the pinned pnpm 11.14.0. |

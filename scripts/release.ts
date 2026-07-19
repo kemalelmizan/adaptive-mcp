@@ -3,10 +3,11 @@
  *
  * Flow:
  *   1. ensure a clean working tree (no accidental publishes of half-built state);
- *   2. build the publishable packages;
- *   3. run `changeset version` to apply pending changesets and bump versions;
- *   4. build again (version bump may change emitted code);
- *   5. `npm publish` each publishable package in dependency order.
+ *   2. run `changeset version` to apply pending changesets and bump versions;
+ *   3. build the publishable packages ONCE (after the bump, so the 2FA OTP
+ *      stays fresh for the publish step — the OTP is time-limited);
+ *   4. `npm publish` each publishable package in dependency order, skipping
+ *      any version that is already on the registry (resume-safe).
  *
  * Only the core subset is published (see PUBLISHABLE_PACKAGES in lib/workspace):
  *   spec · memory · telemetry · evaluation · extension
@@ -33,6 +34,7 @@ import {
   isDirty,
   npmRegistry,
 } from "./lib/workspace.ts";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -40,6 +42,16 @@ const SKIP_VERSION = process.argv.includes("--no-version");
 const TAG = process.argv.includes("--tag");
 const OTP_INDEX = process.argv.indexOf("--otp");
 const OTP = OTP_INDEX >= 0 ? process.argv[OTP_INDEX + 1] : undefined;
+
+/** True when `pkg@version` already exists on the registry (resume-safe skip). */
+function isPublished(pkg: string, version: string): boolean {
+  try {
+    const out = run("npm", ["view", `${pkg}@${version}`, "version"], { silent: true }).trim();
+    return out === version;
+  } catch {
+    return false; // 404 / network error → treat as not published
+  }
+}
 
 function main(): void {
   console.log(`[release] registry: ${npmRegistry()}`);
@@ -52,32 +64,40 @@ function main(): void {
     process.exit(1);
   }
 
-  // 1. Build publishable packages.
-  pnpm(["-r", ...PUBLISHABLE_PACKAGES.flatMap((p) => ["--filter", p]), "run", "build"]);
-
   if (DRY_RUN) {
-    // True dry run: preview the pending changesets WITHOUT consuming them or
-    // bumping versions. `changeset status` reads the changeset files and prints
-    // the packages/versions that *would* change, leaving the working tree
-    // untouched (no version bump, no CHANGELOG edit, no publish).
-    console.log("[release] --dry-run: previewing pending changesets (no publish, no version bump)");
+    // True dry run: build + preview the pending changesets WITHOUT consuming
+    // them or bumping versions. `changeset status` reads the changeset files
+    // and prints the packages/versions that *would* change, leaving the working
+    // tree untouched (no version bump, no CHANGELOG edit, no publish).
+    console.log("[release] --dry-run: building + previewing pending changesets (no publish, no version bump)");
+    pnpm(["-r", ...PUBLISHABLE_PACKAGES.flatMap((p) => ["--filter", p]), "run", "build"]);
     pnpm(["changeset", "status"]);
     console.log("[release] --dry-run: done. Working tree is unchanged; re-run without --dry-run to publish.");
     return;
   }
 
-  // 2. Apply pending changesets (bumps versions, updates CHANGELOG).
+  // 1. Apply pending changesets (bumps versions, updates CHANGELOG).
   if (!SKIP_VERSION) {
     pnpm(["changeset", "version"]);
   }
 
-  // 3. Rebuild after version bump.
+  // 2. Build ONCE, after the version bump. The bump can change emitted code,
+  //    and building here (rather than before *and* after) keeps the 2FA OTP
+  //    fresh for the publish step below — the OTP is time-limited and the
+  //    publish must happen promptly after the build finishes.
   pnpm(["-r", ...PUBLISHABLE_PACKAGES.flatMap((p) => ["--filter", p]), "run", "build"]);
 
-  // 4. Publish each package in declared order.
+  // 3. Publish each package in declared order. Already-published versions are
+  //    skipped (resume-safe): if a prior run died mid-publish, re-running will
+  //    not fail on the packages that already made it to the registry.
   for (const pkg of PUBLISHABLE_PACKAGES) {
     const cwd = join(REPO_ROOT, "packages", pkg.replace("@adaptivemcp/", ""));
-    console.log(`[release] publishing ${pkg}`);
+    const version = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")).version;
+    if (isPublished(pkg, version)) {
+      console.log(`[release] ${pkg}@${version} already published; skipping.`);
+      continue;
+    }
+    console.log(`[release] publishing ${pkg}@${version}`);
     const args = ["publish", "--access", "public", "--ignore-scripts"];
     if (OTP) args.push("--otp", OTP);
     run("npm", args, { cwd });
@@ -85,7 +105,7 @@ function main(): void {
 
   console.log("[release] done. Remember to push the version commit + tags.");
 
-  // 5. Optionally commit the version bump and push the tag.
+  // 4. Optionally commit the version bump and push the tag.
   if (TAG) {
     console.log("[release] --tag: committing version bump + pushing tag");
     run("node", [join(REPO_ROOT, "scripts", "version-release.ts")], { cwd: REPO_ROOT });

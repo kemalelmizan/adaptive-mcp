@@ -99,8 +99,14 @@ function main(): void {
     run("git", ["commit", "-m", message], { cwd: REPO_ROOT });
   }
 
-  // 2. Annotated tag.
-  run("git", ["tag", "-a", tag, "-m", message], { cwd: REPO_ROOT });
+  // 2. Annotated tag (skip if it already exists — e.g. a re-run with no new
+  //    version bump, or a re-tag after an interrupted push).
+  const tagExists = run("git", ["tag", "-l", tag], { silent: true }).trim() === tag;
+  if (tagExists) {
+    console.log(`[version-release] tag ${tag} already exists; skipping tag creation.`);
+  } else {
+    run("git", ["tag", "-a", tag, "-m", message], { cwd: REPO_ROOT });
+  }
 
   // 3. Push commit + tags.
   if (NO_PUSH) {
