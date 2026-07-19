@@ -6,80 +6,9 @@ redefine tools, or introduce new protocol abstractions. Instead it observes tool
 usage, attaches learned metadata to existing MCP primitives, and lets clients
 govern themselves from real signal.
 
-> **Unofficial project.** Adaptive MCP is an independent, community experiment.
-> It is **not** affiliated with, endorsed by, or maintained by the Model Context
-> Protocol project, its stewards, or any vendor. The `dev.adaptivemcp/` extension
-> namespace is a reversed-domain identifier we own (`adaptivemcp.dev`) and is
-> used in the spirit of, but not as part of, any official MCP extension. See
-> [Relationship to MCP](#relationship-to-mcp) below.
 > **Talk — MCP Dev Summit Seoul 2026:** Kemal Elmizan introduces Adaptive MCP in
 > *"Self-Improving MCP Agents"* at the MCP Dev Summit in Seoul (2026).
 > [Session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
-## Relationship to MCP
-
-The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open
-standard that lets applications provide context and capabilities (tools,
-resources, prompts) to language models in a uniform way. MCP answers *"what can
-the model do?"* — it standardizes the **capabilities** a server exposes.
-
-Adaptive MCP sits **on top of** MCP rather than beside or beneath it. It does
-not fork, extend, or replace the protocol; it observes how MCP tools are actually
-used and attaches learned metadata (annotations, insights, recommendations) to
-the **existing** MCP primitives. Concretely:
-
-- MCP servers stay standard and stateless; Adaptive MCP adds a client-side
-  learning loop and a single derived resource (`dev.adaptivemcp/tools-metadata`)
-  that a server *may* publish to **govern** tool adaptation.
-- The approach follows the **Extensions Track** pattern described in
-  [SEP-2133](./docs/sep-2133-tools-metadata.md): a server-governed resource that
-  clients read and report against, degrading gracefully on any host that ignores
-  it.
-- Because the `dev.adaptivemcp/` prefix is our own reversed domain, this is an
-  **unofficial** extension. It requires no changes to MCP itself and works with
-  any compliant MCP server/client.
-
-## Design constraints
-
-- **MCP sets the contract; Adaptive MCP learns the behavior.** MCP answers *"what
-  can the model do?"*; Adaptive MCP answers *"what have we learned about how those
-  capabilities are actually used?"* — and turns that into metadata, not new
-  primitives.
-- **Enrich, don't replace.** No first-class `adaptiveTool`, `adaptiveSkill`,
-  `adaptiveIntent`, or `adaptiveWorkflow` concepts. Adaptive MCP operates on MCP
-  primitives (tools, resources) as intentional boundaries.
-- **Avoid coupling to implementation details.** Packages must not depend on
-  shell, filesystem paths, processes, sockets, or HTTP as first-class concepts.
-  Those remain implementation details of the host.
-- **Middleware is operational machinery.** Telemetry, evaluation, memory,
-  routing, and approval exist to observe, evaluate, remember, route, and
-  recommend. Business logic belongs in middleware packages; the client stays
-  thin.
-- **Stateless servers, accumulating clients.** MCP servers are lightweight and
-  replaceable. Clients accumulate knowledge in a local source of truth.
-
-## Architecture
-
-The adaptation loop runs entirely on the client/runtime side:
-
-```text
-Tool execution (MCP server)
-        │
-        ▼
-Telemetry  ──records event──▶  MemoryStore (SQLite SSOT)
-        │                            │
-        │                            ▼
-        │                     Evaluation  ──insights──▶  MemoryStore
-        │                            │
-        ▼                            ▼
-ExtensionController  ◀──  reads SSOT  ──▶  tools-metadata.yaml (derived view)
-        │
-        ▼
-MCP resource: dev.adaptivemcp/tools-metadata
-```
-
-Data always flows in one direction: **event → MemoryStore (SSOT) → derived
-YAML view**. The YAML is never edited directly; it is recomputed from the SSOT
-whenever metadata changes.
 
 ## Quick start
 
@@ -143,6 +72,79 @@ pnpm scenario:ssot       # SSOT is the source of truth; YAML is derived
 pnpm scenario:insights   # telemetry → evaluation → insights
 pnpm scenario:annotation # human annotation vs. learned insight
 pnpm scenario:adaptive   # full stack: routing + orchestration + approval + thin-client
+```
+
+## Architecture
+
+The adaptation loop runs entirely on the client/runtime side:
+
+```text
+Tool execution (MCP server)
+        │
+        ▼
+Telemetry  ──records event──▶  MemoryStore (SQLite SSOT)
+        │                            │
+        │                            ▼
+        │                     Evaluation  ──insights──▶  MemoryStore
+        │                            │
+        ▼                            ▼
+ExtensionController  ◀──  reads SSOT  ──▶  tools-metadata.yaml (derived view)
+        │
+        ▼
+MCP resource: dev.adaptivemcp/tools-metadata
+```
+
+Data always flows in one direction: **event → MemoryStore (SSOT) → derived
+YAML view**. The YAML is never edited directly; it is recomputed from the SSOT
+whenever metadata changes.
+
+## Design constraints
+
+- **MCP sets the contract; Adaptive MCP learns the behavior.** MCP answers *"what
+  can the model do?"*; Adaptive MCP answers *"what have we learned about how those
+  capabilities are actually used?"* — and turns that into metadata, not new
+  primitives.
+- **Enrich, don't replace.** No first-class `adaptiveTool`, `adaptiveSkill`,
+  `adaptiveIntent`, or `adaptiveWorkflow` concepts. Adaptive MCP operates on MCP
+  primitives (tools, resources) as intentional boundaries.
+- **Avoid coupling to implementation details.** Packages must not depend on
+  shell, filesystem paths, processes, sockets, or HTTP as first-class concepts.
+  Those remain implementation details of the host.
+- **Middleware is operational machinery.** Telemetry, evaluation, memory,
+  routing, and approval exist to observe, evaluate, remember, route, and
+  recommend. Business logic belongs in middleware packages; the client stays
+  thin.
+- **Stateless servers, accumulating clients.** MCP servers are lightweight and
+  replaceable. Clients accumulate knowledge in a local source of truth.
+
+## Relationship to MCP
+
+> **Unofficial project.** Adaptive MCP is an independent, community experiment.
+> It is **not** affiliated with, endorsed by, or maintained by the Model Context
+> Protocol project, its stewards, or any vendor. The `dev.adaptivemcp/` extension
+> namespace is a reversed-domain identifier we own (`adaptivemcp.dev`) and is
+> used in the spirit of, but not as part of, any official MCP extension.
+
+The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open
+standard that lets applications provide context and capabilities (tools,
+resources, prompts) to language models in a uniform way. MCP answers *"what can
+the model do?"* — it standardizes the **capabilities** a server exposes.
+
+Adaptive MCP sits **on top of** MCP rather than beside or beneath it. It does
+not fork, extend, or replace the protocol; it observes how MCP tools are actually
+used and attaches learned metadata (annotations, insights, recommendations) to
+the **existing** MCP primitives. Concretely:
+
+- MCP servers stay standard and stateless; Adaptive MCP adds a client-side
+  learning loop and a single derived resource (`dev.adaptivemcp/tools-metadata`)
+  that a server *may* publish to **govern** tool adaptation.
+- The approach follows the **Extensions Track** pattern described in
+  [SEP-2133](./docs/sep-2133-tools-metadata.md): a server-governed resource that
+  clients read and report against, degrading gracefully on any host that ignores
+  it.
+- Because the `dev.adaptivemcp/` prefix is our own reversed domain, this is an
+  **unofficial** extension. It requires no changes to MCP itself and works with
+  any compliant MCP server/client.
 ```
 
 ## Data model
