@@ -63,8 +63,29 @@ const telemetry = new TelemetryRecorder({ store: new MemoryBackedTelemetryStore(
 const evaluator = new Evaluator({ memory });
 const extension = new ExtensionController({ memory, yamlPath: "tools-metadata.yaml" });
 
-for (let i = 0; i < 20; i++) {
-  telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 900 });
+// Observe a realistic stream of calls. The point of the telemetry layer is
+// that it learns from *varied* signal — different tools, latency jitter, and
+// the occasional failure. A loop that replays the same event 20× teaches the
+// evaluator nothing (flat 0% failure rate, flat latency). Here we mix a healthy
+// tool, a heavier one, and a deploy that hits a flaky window so the evaluator
+// actually has something to learn.
+for (let i = 0; i < 40; i++) {
+  telemetry.complete({ toolName: "search_customer", serverName: "crm" }, { durationMs: 120 + Math.round(Math.random() * 40) });
+}
+for (let i = 0; i < 15; i++) {
+  telemetry.complete({ toolName: "generate_report", serverName: "analytics" }, { durationMs: 1800 + Math.round(Math.random() * 300), cost: { amount: 0.012, currency: "USD" } });
+}
+for (let i = 0; i < 25; i++) {
+  telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 900 + Math.round(Math.random() * 150) });
+}
+// A flaky deploy window: ~40% of these blow up, so the evaluator flags
+// deploy_service as flaky and the approval gate will ask for confirmation.
+for (let i = 0; i < 15; i++) {
+  if (Math.random() < 0.4) {
+    telemetry.fail({ toolName: "deploy_service", serverName: "demo" }, { message: "upstream timeout", code: "ETIMEDOUT" }, { durationMs: 1100 });
+  } else {
+    telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 1100 });
+  }
 }
 evaluator.evaluateAll();   // store stats → insights → store
 extension.sync();          // store → tools-metadata.yaml (and the MCP resource text)

@@ -1,20 +1,58 @@
 version: 0.1.0
-generated_at: '2026-07-19T01:45:53.585Z'
+generated_at: '2026-07-19T10:05:37.038Z'
 tools:
   - name: deploy_service
     server: demo
     annotation: {}
     insights:
+      observed_failure_rate:
+        value: 0.175
+        confidence: 0.7
+        source: evaluation
       avg_duration_ms:
-        value: 900
-        confidence: 0.6
+        value: 961
+        confidence: 0.7
         source: telemetry
     recommendations: []
     stats:
-      invocations: 20
+      invocations: 40
+      failures: 7
+      failure_rate: 0.175
+      avg_duration_ms: 960.525
+      total_cost: 0.08000000000000006
+      last_observed_at: '2026-07-19T10:05:37.037Z'
+    updated_at: '2026-07-19T10:05:37.038Z'
+  - name: generate_report
+    server: analytics
+    annotation: {}
+    insights:
+      avg_duration_ms:
+        value: 1828
+        confidence: 0.57
+        source: telemetry
+    recommendations: []
+    stats:
+      invocations: 15
       failures: 0
       failure_rate: 0
-      avg_duration_ms: 900
-      total_cost: 0.04000000000000002
-      last_observed_at: '2026-07-19T01:45:53.584Z'
-    updated_at: '2026-07-19T01:45:53.585Z'
+      avg_duration_ms: 1827.6666666666667
+      total_cost: 0.18000000000000002
+      last_observed_at: '2026-07-19T10:05:37.033Z'
+    updated_at: '2026-07-19T10:05:37.038Z'
+  - name: search_customer
+    server: crm
+    annotation: {}
+    insights:
+      avg_duration_ms:
+        value: 124
+        confidence: 0.7
+        source: telemetry
+    recommendations: []
+    stats:
+      invocations: 40
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 124.125
+      total_cost: 0.01599999999999999
+      last_observed_at: '2026-07-19T10:05:37.032Z'
+    updated_at: '2026-07-19T10:05:37.038Z'
