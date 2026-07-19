@@ -45,11 +45,11 @@ function publishedTable(pkgs: Pkg[]): string {
   const rows = pkgs.map((p) => {
     const name = p.name;
     const desc = p.description ?? "";
-    return `| \`${name}\` | ${badge(name)} | \`npm i ${name}\` | ${desc} |`;
+    return `| \`${name}\` | ${badge(name)} | ${desc} |`;
   });
   return [
-    "| Package | Version | Install | Description |",
-    "| --- | --- | --- | --- |",
+    "| Package | Version | Description |",
+    "| --- | --- | --- |",
     ...rows,
   ].join("\n");
 }
