@@ -11,9 +11,9 @@ govern themselves from real signal.
 > **Status:** experimental. The packages are published, but the API may shift
 > before 1.0.
 
-> **Talk: MCP Dev Summit Seoul 2026.** I introduced this project in the talk
-> *"Self-Improving MCP Agents"* at the MCP Dev Summit in Seoul (2026).
-> [Session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
+> I introduced this project in the talk session
+> *"Self-Improving MCP Agents"* at the [MCP Dev Summit in Seoul (2026)](https://events.linuxfoundation.org/mcp-dev-summit-seoul/).
+> [Check session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
 
 **What it is**
 
@@ -94,20 +94,17 @@ pnpm scenario:adaptive   # full stack: routing + orchestration + approval + thin
 
 The adaptation loop runs entirely on the client/runtime side:
 
-```text
-Tool execution (MCP server)
-        │
-        ▼
-Telemetry  ──records event──▶  MemoryStore (SQLite SSOT)
-        │                            │
-        │                            ▼
-        │                     Evaluation  ──insights──▶  MemoryStore
-        │                            │
-        ▼                            ▼
-ExtensionController  ◀──  reads SSOT  ──▶  tools-metadata.yaml (derived view)
-        │
-        ▼
-MCP resource: dev.adaptivemcp/tools-metadata
+```mermaid
+flowchart TD
+    ToolExec["Tool execution (MCP server)"] --> Telemetry
+    Telemetry -->|records event| Memory["MemoryStore (SQLite SSOT)"]
+    Memory --> Eval["Evaluation"]
+    Eval -->|insights| Memory
+    Telemetry --> Ext["ExtensionController"]
+    Memory --> Ext
+    Eval --> Ext
+    Ext -->|reads SSOT| YAML["tools-metadata.yaml (derived view)"]
+    Ext --> Resource["MCP resource: dev.adaptivemcp/tools-metadata"]
 ```
 
 Data always flows in one direction: **event → MemoryStore (SSOT) → derived

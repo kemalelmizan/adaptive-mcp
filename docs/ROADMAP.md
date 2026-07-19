@@ -33,24 +33,6 @@ pnpm --filter @adaptivemcp/examples server
 pnpm --filter @adaptivemcp/examples client
 ```
 
-## Architecture
-
-```text
-Tool execution (MCP server)
-        │
-        ▼
-Telemetry  ──records event──▶  MemoryStore (SQLite SSOT)
-        │                            │
-        │                            ▼
-        │                     Evaluation  ──insights──▶  MemoryStore
-        │                            │
-        ▼                            ▼
-ExtensionController  ◀──  reads SSOT  ──▶  tools-metadata.yaml (view)
-        │
-        ▼
-MCP resource: dev.adaptivemcp/tools-metadata
-```
-
 | Package | Responsibility | Status |
 | --- | --- | --- |
 | `@adaptivemcp/spec` | Extension identifiers, event schemas, shared types | ✅ done |
