@@ -82,6 +82,38 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
     }),
   );
 
+  // Adaptive MCP report channel: clients report tool observations back to the
+  // server via the `report_observation` tool (the spec-legal client→server
+  // mechanism). The server folds the report into the store and re-syncs the
+  // view. A stateless server MAY ignore reports; this example persists them.
+  const reportTool = runtime.extension.reportObservationTool();
+  server.registerTool(
+    reportTool.name,
+    {
+      title: "Report Observation",
+      description: reportTool.description,
+      inputSchema: {
+        tool: z.string(),
+        status: z.enum(["success", "failure", "error"]),
+        duration_ms: z.number().optional(),
+        cost: z.number().optional(),
+        timestamp: z.string(),
+      },
+    },
+    async ({ tool, status, duration_ms, cost, timestamp }) => {
+      runtime.observeCompleted({
+        toolName: tool,
+        serverName: "adaptive-example-server",
+        durationMs: duration_ms ?? 0,
+        status: status === "success" ? "completed" : "failed",
+        cost: cost !== undefined ? { amount: cost, currency: "USD" } : undefined,
+      });
+      return {
+        content: [{ type: "text", text: `observation for ${tool} recorded at ${timestamp}` }],
+      };
+    },
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   return server;

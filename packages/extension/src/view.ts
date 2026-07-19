@@ -1,4 +1,5 @@
 import yaml from "js-yaml";
+import { createHash } from "node:crypto";
 import type { ToolRecord } from "@adaptivemcp/spec";
 
 /**
@@ -67,6 +68,8 @@ export function toToolMetadataView(record: ToolRecord): ToolMetadataView {
 
 export interface ToolsMetadataDocument {
   version: string;
+  /** Opaque cache token; changes whenever the view changes. */
+  etag: string;
   generated_at: string;
   tools: ToolMetadataView[];
 }
@@ -75,13 +78,26 @@ export function renderToolsMetadata(
   records: ToolRecord[],
   version: string,
 ): ToolsMetadataDocument {
-  return {
-    version,
-    generated_at: new Date().toISOString(),
-    tools: records.map(toToolMetadataView),
-  };
+  const tools = records.map(toToolMetadataView);
+  const generated_at = new Date().toISOString();
+  // etag is a stable hash of the *meaningful* content (version + tools), NOT
+  // including the volatile generated_at timestamp. Two renders of an unchanged
+  // store therefore produce the same etag, so clients can skip re-parsing.
+  const etag = createHash("sha1")
+    .update(yaml.dump({ version, tools }, { noRefs: true }))
+    .digest("hex");
+  return { version, etag, generated_at, tools };
 }
 
 export function toYaml(doc: ToolsMetadataDocument): string {
-  return yaml.dump(doc, { lineWidth: 120, sortKeys: false, noRefs: true });
+  // Strict dump: no custom tags, no object refs — safe to re-parse.
+  return yaml.dump(doc, { lineWidth: 120, sortKeys: false, noRefs: true, schema: yaml.JSON_SCHEMA });
+}
+
+/** Serialize the document in the requested MIME type (YAML or JSON). */
+export function toDocument(doc: ToolsMetadataDocument, mimeType: string): string {
+  if (mimeType === "application/json") {
+    return JSON.stringify(doc, null, 2);
+  }
+  return toYaml(doc);
 }

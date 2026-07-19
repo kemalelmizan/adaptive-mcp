@@ -4,18 +4,28 @@ This is the canonical, self-contained guide for cutting a release by hand. It
 covers **when to commit, when to push, what to watch out for, and how npm vs
 GitHub versioning work** so you can run a release end-to-end without the agent.
 
-The release is driven entirely by two scripts. There is **no manual
-`npm publish`**:
+The release is driven by three steps across two scripts. There is **no manual
+`npm publish`**, and **the release script does NOT build** — building is a
+separate, slow step that does not need the npm 2FA OTP, so it is kept out of
+the publish path:
 
-| Script | What it does |
-| --- | --- |
-| `scripts/release.ts` | Version (Changesets) → build → `npm publish` the publishable packages. |
-| `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, push `--follow-tags`. |
+| Step | Command | What it does |
+| --- | --- | --- |
+| Build (separate) | `pnpm build:publishable` | Compile `dist/` for every publishable package. No OTP needed. Run this BEFORE releasing. |
+| Release | `scripts/release.ts` | Version (Changesets) → `npm publish` **only the packages named in the changeset**. |
+| Record | `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, push `--follow-tags`. |
 
 Publishable set (defined once in `scripts/lib/workspace.ts` →
 `PUBLISHABLE_PACKAGES`): `spec · memory · telemetry · evaluation · extension ·
 runtime · routing · orchestration · approval · thin-client`. `examples` and
 `apps` stay private.
+
+> **Changed-only publishing.** `release.ts` publishes ONLY the packages named
+> in pending changesets — not every publishable package. A changeset that
+> touches just `@adaptivemcp/extension` publishes just `extension`. Internal
+> dependents are no longer auto-bumped (`.changeset/config.json` sets
+> `updateInternalDependencies: never`), so a one-package change stays a
+> one-package release. Use `--no-version` to republish all publishable packages.
 
 ---
 
@@ -70,13 +80,15 @@ commit that contains the version bump.
 
 ## The two flows
 
-### Flow A: one-shot (recommended), `release.ts --tag`
+### Flow A: one-shot (recommended), `build` then `release.ts --tag`
 
-Version bump + build + publish + commit + tag + push, all in one command:
+Build first (no OTP), then version bump + publish + commit + tag + push in one
+command:
 
 ```bash
 eval "$(fnm env)" && fnm use 26
 source .env
+pnpm build:publishable                 # SEPARATE build step (no OTP)
 node scripts/release.ts --tag --otp <CODE>
 ```
 
@@ -84,12 +96,13 @@ Use this when you've already reviewed the dry run and just want it done. The
 `--tag` flag hands off to `version-release.ts` at the end, which commits the
 bump and pushes the tag.
 
-### Flow B: split (verify before committing), `release.ts` then `version-release.ts`
+### Flow B: split (verify before committing), `build` then `release.ts` then `version-release.ts`
 
-Publish first, **inspect npm**, then record the release separately:
+Build + publish first, **inspect npm**, then record the release separately:
 
 ```bash
-node scripts/release.ts --otp <CODE>     # version + build + publish only
+pnpm build:publishable                 # SEPARATE build step (no OTP)
+node scripts/release.ts --otp <CODE>     # version + publish only (changed packages)
 # …verify packages are live on npmjs.com/org/adaptivemcp…
 node scripts/version-release.ts          # commit bump + tag + push
 ```
@@ -132,22 +145,26 @@ If you have no pending changeset, the script just republishes current versions
 node scripts/release.ts --dry-run
 ```
 
-Builds the publishable packages, then runs `changeset status` to **preview** the
-pending changesets: which packages would bump and to what version. It does
-**not** consume the changeset, does **not** bump `package.json` / `CHANGELOG.md`,
-and does **not** publish. The working tree is left exactly as it was, so you can
-re-run the real release immediately afterward with no cleanup:
+Runs `changeset status` to **preview** the pending changesets: which packages
+would bump and to what version. It does **not** build, does **not** consume the
+changeset, does **not** bump `package.json` / `CHANGELOG.md`, and does **not**
+publish. The working tree is left exactly as it was, so you can re-run the real
+release immediately afterward with no cleanup:
 
 ```bash
+pnpm build:publishable                 # build dist/ (separate, no OTP)
 node scripts/release.ts --tag --otp <CODE>
 ```
 
 Use the dry run to sanity-check the version bumps before committing to a publish.
-(The emitted `dist/` is gitignored, so the build step never dirties the tree.)
+Remember to build separately before the real release — the dry run does NOT build.
 
-### 3. Publish (+ optionally tag)
+### 3. Build (separate step, no OTP) then Publish (+ optionally tag)
 
 ```bash
+# Build FIRST — slow, but needs no OTP. Run from the repo root.
+pnpm build:publishable
+
 # Flow A (one-shot):
 node scripts/release.ts --tag --otp <CODE>
 
@@ -159,14 +176,19 @@ node scripts/version-release.ts
 What `release.ts` does, in order:
 
 1. Refuses if the tree is dirty.
-2. Applies pending changesets (`pnpm changeset version`).
-3. Builds `PUBLISHABLE_PACKAGES` ONCE (`pnpm -r --filter … run build`), *after*
-   the version bump. Building here — not before *and* after — keeps the 2FA OTP
-   fresh for the publish step, since the OTP is time-limited.
-4. `npm publish --access public --ignore-scripts` each package in dependency
-   order: `spec → memory → telemetry → evaluation → extension`. Versions that
-   are already on the registry are skipped (resume-safe), so a re-run after a
-   mid-publish failure only publishes what's left.
+2. Determines the publish set: **only the packages named in pending
+   changesets** (not every publishable package). With `--no-version` it instead
+   publishes ALL publishable packages (used for republishing).
+3. Applies pending changesets (`pnpm changeset version`).
+4. `npm publish --access public --ignore-scripts` each package in the publish
+   set, in dependency order (`spec → memory → telemetry → evaluation →
+   extension → runtime → routing → orchestration → approval → thin-client`).
+   Versions that are already on the registry are skipped (resume-safe), so a
+   re-run after a mid-publish failure only publishes what's left.
+
+The build is **not** part of this script — `dist/` must already exist from the
+separate `pnpm build:publishable` step above. This keeps the publish path short
+and the 2FA OTP fresh for the `npm publish` calls.
 
 `--ignore-scripts` keeps the publish hermetic (no lifecycle scripts run inside
 the published tarball).
@@ -246,9 +268,10 @@ git add -A && git commit -m "release: @adaptivemcp/* vX.Y.Z (pre-publish)"
 ```
 
 Now the tree is clean and `release.ts` will run. Because the changeset is already
-consumed, `changeset version` is a no-op and the script just rebuilds + publishes
-the already-bumped versions. (This is exactly what happened at v0.2.1: the first
-publish hit 2FA, we committed the bump, then re-ran with `--otp`.)
+consumed, `changeset version` is a no-op and the script just publishes the
+already-bumped versions (after you re-run `pnpm build:publishable` to refresh
+their `dist/`). (This is exactly what happened at v0.2.1: the first publish hit
+2FA, we committed the bump, then re-ran with `--otp`.)
 
 ### 3. Changeset is consumed, not preserved
 
@@ -256,26 +279,28 @@ publish hit 2FA, we committed the bump, then re-ran with `--otp`.)
 interrupted after that step, the bump is applied but uncommitted (see #2). There
 is no "undo". Just commit and continue.
 
-### 4. Build runs once (after the bump)
+### 4. Build is a separate step (before the release)
 
-The script builds a single time, *after* `changeset version` applies the bump.
-This is deliberate: the 2FA OTP is time-limited, so we want the build to finish
-as close as possible to the `npm publish` calls. The post-bump build overwrites
-any stale `dist/` from a previous run. Don't add a second pre-bump build back in
-— it only burns OTP time before the publish.
+The release script does **not** build. `dist/` is gitignored and produced by the
+separate `pnpm build:publishable` step, which needs no OTP. Run it before
+`release.ts`. Because it's decoupled from the OTP, you can build early (even
+hours before) and the publish path stays short and OTP-fresh. Don't move the
+build back into `release.ts` — it only burns OTP time before the publish.
 
 ### 5. README must ship in the tarball
 
 npm shows "This package does not have a README" if `README.md` isn't in the
-`files` allowlist. The 5 published packages include `"README.md"` alongside
+`files` allowlist. All 10 publishable packages include `"README.md"` alongside
 `"dist"` in `files`. If you add a package to `PUBLISHABLE_PACKAGES`, copy that
 allowlist.
 
 ### 6. Dependency order matters
 
-Publish order is `spec → memory → telemetry → evaluation → extension`. Don't
-reorder or publish by hand. A package can't depend on a version that isn't
-published yet.
+Publish order is `spec → memory → telemetry → evaluation → extension → runtime
+→ routing → orchestration → approval → thin-client`. Don't reorder or publish
+by hand. A package can't depend on a version that isn't published yet. (Only the
+packages named in the changeset are published, but they still go out in this
+order.)
 
 ### 7. Never publish by hand
 
@@ -294,8 +319,11 @@ node scripts/maintenance.ts check
 # Changeset (if shipping a change)
 pnpm changeset && git add .changeset && git commit -m "chore: changeset"
 
-# Dry run
+# Dry run (no build, no publish)
 node scripts/release.ts --dry-run
+
+# Build SEPARATELY (no OTP)
+pnpm build:publishable
 
 # Release (one-shot, with 2FA OTP)
 node scripts/release.ts --tag --otp <CODE>
@@ -318,21 +346,28 @@ node scripts/release.ts --tag --otp <CODE>   # re-run; already-published pkgs sk
 
 | Flag | Script | Effect |
 | --- | --- | --- |
-| `--dry-run` | `release.ts` | Build + `changeset status` preview; no version bump, no publish, tree unchanged. |
-| `--no-version` | `release.ts` | Skip `changeset version`; publish current versions as-is. |
-| `--tag` | `release.ts` | After publish, commit bump + tag + push (via `version-release.ts`). |
+| `--dry-run` | `release.ts` | `changeset status` preview only; no build, no version bump, no publish, tree unchanged. |
+| `--no-version` | `release.ts` | Skip `changeset version`; publish ALL publishable packages as-is (republish). |
+| `--tag` | `release.ts` | After publish, commit bump + tag + push (via `version-release.ts --packages …`). |
 | `--otp <CODE>` | `release.ts` | Pass npm 2FA one-time password to `npm publish`. |
 | `NPM_OTP` | `release.ts` | Env-var alternative to `--otp`. |
+| `--packages a,b` | `version-release.ts` | Scope the release version/tag to these packages (set automatically by `--tag`). |
 | `--no-push` | `version-release.ts` | Commit + tag locally, don't push. |
 | `--dry-run` | `version-release.ts` | Preview git ops, no changes. |
+
+> **Build is never a flag** — it's the separate `pnpm build:publishable` step
+> you run before `release.ts`. The release script has no build flag by design.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `[release] working tree is dirty` | Uncommitted changes (often a prior bump) | Commit or stash, then re-run. |
-| `npm error code EOTP` | 2FA required, no OTP supplied | Re-run with `--otp <CODE>` (fresh code). |
+| `npm error code EOTP` | 2FA required, no OTP supplied | Re-run with `--otp <CODE>` (fresh code). Build is separate, so the OTP only gates publish. |
 | `cannot publish over the previously published version` | Should no longer occur | `release.ts` now skips already-published versions automatically. If you still see it, check `NPM_TOKEN`/registry and the package name. |
+| `npm publish` ships stale/old `dist/` | Forgot the separate build step | Run `pnpm build:publishable` before `release.ts`. `dist/` is gitignored, so the release does NOT rebuild. |
+| `release.ts` published more packages than the changeset | Old changesets or `updateInternalDependencies` changed | Only packages named in pending changesets publish. Ensure `.changeset/config.json` keeps `updateInternalDependencies: never`; delete stale changesets. |
+| `release.ts` published nothing | No pending changesets | Author a changeset, or pass `--no-version` to republish all publishable packages. |
 | npm page shows no README | `README.md` missing from `files` | Add `"README.md"` to the package's `files` allowlist, rebuild, republish. |
 | Tag exists but version missing on npm | Pushed before publish finished | Publish succeeded? If not, publish then re-tag (delete + recreate tag). |
 | `pnpm: command not found` / wrong version | pnpm not pinned | `eval "$(fnm env)" && fnm use 26`; use the pinned pnpm 11.14.0. |

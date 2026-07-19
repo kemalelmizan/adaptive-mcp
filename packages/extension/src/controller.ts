@@ -4,6 +4,7 @@ import { SPEC_VERSION, TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
 import type { Annotation, Store } from "@adaptivemcp/spec";
 import {
   renderToolsMetadata,
+  toDocument,
   toYaml,
   type ToolsMetadataDocument,
 } from "./view.js";
@@ -18,12 +19,13 @@ export interface ExtensionControllerOptions {
  * The Adaptive MCP extension controller.
  *
  * Responsibilities:
- *  - derive the YAML tools-metadata view from the SQLite store;
+ *  - derive the tools-metadata view from the Store (the persistence boundary);
  *  - write it to disk (so out-of-band MCP clients can read it);
- *  - expose it as an MCP resource (`dev.adaptivemcp/tools-metadata`).
+ *  - expose it as an MCP resource (`dev.adaptivemcp/tools-metadata`), serving
+ *    both YAML and JSON via content negotiation.
  *
- * The controller never treats the YAML as the source of truth. Any change to
- * tool metadata flows: event -> MemoryStore -> YAML view.
+ * The controller never treats the view as the source of truth. Any change to
+ * tool metadata flows: event -> Store -> view.
  */
 export class ExtensionController {
   private memory: Store;
@@ -34,7 +36,7 @@ export class ExtensionController {
     this.yamlPath = options.yamlPath;
   }
 
-  /** Recompute the YAML view from the store and (optionally) persist it. */
+  /** Recompute the view from the store and (optionally) persist it as YAML. */
   sync(): ToolsMetadataDocument {
     const doc = renderToolsMetadata(this.memory.allTools(), SPEC_VERSION);
     if (this.yamlPath) {
@@ -54,8 +56,36 @@ export class ExtensionController {
     return TOOLS_METADATA_RESOURCE_URI;
   }
 
-  resourceText(): string {
-    return toYaml(this.view());
+  /** Serialize the view in the requested MIME type (YAML default, or JSON). */
+  resourceText(mimeType = "application/yaml"): string {
+    return toDocument(this.view(), mimeType);
+  }
+
+  /**
+   * The `report_observation` tool definition (the spec-legal client→server
+   * report channel). Servers register this tool so clients can report
+   * execution observations back. The server MAY ignore reports.
+   */
+  reportObservationTool(): {
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  } {
+    return {
+      name: "report_observation",
+      description: "Report a tool execution observation back to the server.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tool: { type: "string" },
+          status: { type: "string", enum: ["success", "failure", "error"] },
+          duration_ms: { type: "number" },
+          cost: { type: "number" },
+          timestamp: { type: "string", format: "date-time" },
+        },
+        required: ["tool", "status", "timestamp"],
+      },
+    };
   }
 
   /** Apply a human annotation and re-sync the view. */
