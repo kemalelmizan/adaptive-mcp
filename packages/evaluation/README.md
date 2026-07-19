@@ -4,7 +4,7 @@ Outcome scoring and feedback loops for Adaptive MCP.
 
 `evaluation` is the **evaluate → remember** step of the adaptation loop. It
 reads the SSOT stats from `@adaptivemcp/memory` and writes derived `Insight`s
-back — e.g. an `observed_failure_rate` or `avg_duration_ms` signal that emerges
+back. For example, an `observed_failure_rate` or `avg_duration_ms` signal emerges
 only once enough samples accumulate.
 
 ## Install

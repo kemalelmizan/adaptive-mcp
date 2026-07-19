@@ -1,14 +1,31 @@
 # Adaptive MCP
 
-Adaptive MCP is a runtime ecosystem that learns how MCP tools are actually used —
+Turn MCP usage into learned metadata, so clients adapt instead of guessing.
+
+Adaptive MCP is a runtime ecosystem that learns how MCP tools are actually used
 and helps runtimes adapt to that behavior over time. It does **not** replace MCP,
 redefine tools, or introduce new protocol abstractions. Instead it observes tool
 usage, attaches learned metadata to existing MCP primitives, and lets clients
 govern themselves from real signal.
 
-> **Talk — MCP Dev Summit Seoul 2026:** Kemal Elmizan introduces Adaptive MCP in
+> **Status:** experimental. The packages are published, but the API may shift
+> before 1.0.
+
+> **Talk: MCP Dev Summit Seoul 2026.** Kemal Elmizan introduces Adaptive MCP in
 > *"Self-Improving MCP Agents"* at the MCP Dev Summit in Seoul (2026).
 > [Session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
+
+**What it is**
+
+- A learning layer over MCP primitives (tools, resources).
+- A derived `tools-metadata.yaml` view, recomputed from a SQLite source of truth.
+- SEP-2133 aligned (unofficial): a server-governed resource that clients read and report against.
+
+**What it is not**
+
+- Not a new protocol, and not a replacement for MCP tools.
+- Not a fork of the MCP SDK.
+- Not an official MCP extension. We use our own `dev.adaptivemcp/` namespace.
 
 ## Quick start
 
@@ -24,7 +41,7 @@ pnpm -r run build
 
 ### See the adaptation loop in one command
 
-The whole loop — observe → evaluate → derive view — runs locally with no server
+The whole loop (observe, evaluate, derive view) runs locally with no server
 or transport. From the repo root:
 
 ```bash
@@ -102,7 +119,7 @@ whenever metadata changes.
 
 - **MCP sets the contract; Adaptive MCP learns the behavior.** MCP answers *"what
   can the model do?"*; Adaptive MCP answers *"what have we learned about how those
-  capabilities are actually used?"* — and turns that into metadata, not new
+  capabilities are actually used?"* and turns that into metadata, not new
   primitives.
 - **Enrich, don't replace.** No first-class `adaptiveTool`, `adaptiveSkill`,
   `adaptiveIntent`, or `adaptiveWorkflow` concepts. Adaptive MCP operates on MCP
@@ -119,18 +136,18 @@ whenever metadata changes.
 
 ## Relationship to MCP
 
-> **Unofficial project.** Adaptive MCP is an independent, community experiment.
+> **Unofficial project.** Adaptive MCP is an independent, personal experiment.
 > It is **not** affiliated with, endorsed by, or maintained by the Model Context
 > Protocol project, its stewards, or any vendor. The `dev.adaptivemcp/` extension
-> namespace is a reversed-domain identifier we own (`adaptivemcp.dev`) and is
-> used in the spirit of, but not as part of, any official MCP extension.
+> namespace is a reversed-domain identifier of the project domain (`adaptivemcp.dev`) 
+> and is used in the spirit of, but not as part of, any official MCP extension.
 
 The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open
 standard that lets applications provide context and capabilities (tools,
 resources, prompts) to language models in a uniform way. MCP answers *"what can
-the model do?"* — it standardizes the **capabilities** a server exposes.
+the model do?"* and standardizes the **capabilities** a server exposes.
 
-Adaptive MCP sits **on top of** MCP rather than beside or beneath it. It does
+Adaptive MCP builds on MCP rather than beside or beneath it. It does
 not fork, extend, or replace the protocol; it observes how MCP tools are actually
 used and attaches learned metadata (annotations, insights, recommendations) to
 the **existing** MCP primitives. Concretely:
@@ -145,7 +162,6 @@ the **existing** MCP primitives. Concretely:
 - Because the `dev.adaptivemcp/` prefix is our own reversed domain, this is an
   **unofficial** extension. It requires no changes to MCP itself and works with
   any compliant MCP server/client.
-```
 
 ## Data model
 
@@ -164,17 +180,17 @@ single `tools` table keyed by `tool_name`:
 
 ### Core types (`@adaptivemcp/spec`)
 
-- **`Annotation`** — static, human-authored metadata: `risk`, `owner`, `tags`,
-  `description`. Never changes on its own.
-- **`Insight`** — learned from observed behavior: `key`, `value`, `confidence`,
-  `source` (`evaluation` | `telemetry`), `sampleSize`. Upserted by key.
-- **`Recommendation`** — suggested adaptation: `type`
-  (`model` | `approval` | `workflow` | `routing`), `payload`, `rationale`,
-  `confidence`. Written by the routing/orchestration/approval packages.
-- **`ToolStats`** — `invocations`, `failures`, `failureRate`, `avgDurationMs`,
+- **`Annotation`**: static, human-authored metadata (`risk`, `owner`, `tags`,
+  `description`). Never changes on its own.
+- **`Insight`**: learned from observed behavior (`key`, `value`, `confidence`,
+  `source` of `evaluation` or `telemetry`, `sampleSize`). Upserted by key.
+- **`Recommendation`**: suggested adaptation (`type` of
+  `model`, `approval`, `workflow`, or `routing`, plus `payload`, `rationale`,
+  `confidence`). Written by the routing/orchestration/approval packages.
+- **`ToolStats`**: `invocations`, `failures`, `failureRate`, `avgDurationMs`,
   `totalCost`, `lastObservedAt`. Folded from each execution event.
-- **`ToolRecord`** — the aggregate row: `toolName`, `serverName`, `annotation`,
-  `insights`, `recommendations`, `stats`, `updatedAt`.
+- **`ToolRecord`**: the aggregate row (`toolName`, `serverName`, `annotation`,
+  `insights`, `recommendations`, `stats`, `updatedAt`).
 
 ### Derived YAML view (`tools-metadata.yaml`)
 
@@ -191,10 +207,10 @@ human-readable projection consumed by out-of-band MCP clients.
 | `@adaptivemcp/telemetry` | `TelemetryRecorder` + memory-backed store + stat queries |
 | `@adaptivemcp/evaluation` | `Evaluator` emits `observed_failure_rate` / `avg_duration_ms` insights |
 | `@adaptivemcp/extension` | `ExtensionController` derives + writes the YAML view and exposes the MCP resource |
-| `@adaptivemcp/routing` | `Router` — model selection + budget guardrails |
-| `@adaptivemcp/orchestration` | `Orchestrator` — retry-policy (`workflow`) recommendations |
-| `@adaptivemcp/approval` | `ApprovalGate` — enforcement (allow / deny / require_confirmation) |
-| `@adaptivemcp/thin-client` | `ThinClient` — client-side execution loop with gate + retry |
+| `@adaptivemcp/routing` | `Router`: model selection + budget guardrails |
+| `@adaptivemcp/orchestration` | `Orchestrator`: retry-policy (`workflow`) recommendations |
+| `@adaptivemcp/approval` | `ApprovalGate`: enforcement (allow / deny / require_confirmation) |
+| `@adaptivemcp/thin-client` | `ThinClient`: client-side execution loop with gate + retry |
 
 ### Adaptation behaviors
 
@@ -214,12 +230,12 @@ human-readable projection consumed by out-of-band MCP clients.
 ## MCP extension spec integration (SEP-2133)
 
 MCP formalizes the **server** contract and lets the server **govern** how clients
-interact with its primitives — the same direction as the **Prompts** primitive
-(server authors, client discovers & applies). Adaptive MCP adopts that pattern:
+interact with its primitives, the same direction as the **Prompts** primitive
+(server authors, client discovers and applies). Adaptive MCP adopts that pattern:
 the server **governs** tool adaptation by publishing policy, and the client is
 the **executor** that learns dynamically and reports observations back.
 
-Adaptive MCP proposes a **narrow, server-governed** extension — a single resource
+Adaptive MCP proposes a **narrow, server-governed** extension, a single resource
 the server publishes so clients can read (and report against) learned tool
 metadata. The proposal (draft) lives at
 [`docs/sep-2133-tools-metadata.md`](./docs/sep-2133-tools-metadata.md).
@@ -244,7 +260,7 @@ The derived YAML view is exposed as the MCP resource
 The `@modelcontextprotocol/sdk` (v1.29) includes `extensions` in its
 `ServerCapabilities` schema, so a server can advertise the extension in
 `initialize` via `capabilities.extensions`. Adaptive MCP's example server does
-**not** rely on that negotiation, however — it exposes the metadata as a plain
+**not** rely on that negotiation. It exposes the metadata as a plain
 resource via `server.registerResource(...)`, which is the SEP-2133-compliant
 approach and degrades gracefully on any host that ignores unknown resources:
 
@@ -256,7 +272,7 @@ approach and degrades gracefully on any host that ignores unknown resources:
 When a server wants to advertise it explicitly, it can pass the capability:
 
 ```ts
-// conceptual — advertise the extension in initialize
+// conceptual: advertise the extension in initialize
 const server = new McpServer({ name: "adaptive-example", version: "0.1.0" });
 server.registerResource("tools-metadata", "dev.adaptivemcp/tools-metadata", {
   title: "Adaptive MCP Tools Metadata",
@@ -273,28 +289,28 @@ MCP package. It stands up a real MCP server + client, registers tools, and
 attaches the Adaptive MCP extension so a `tools-metadata.yaml` view is derived
 automatically from a SQLite single source of truth (SSOT).
 
-- **Full walkthrough** — [`examples/README.md`](./examples/README.md) walks
+- **Full walkthrough.** [`examples/README.md`](./examples/README.md) walks
   through three worked examples:
   1. [A minimal MCP server with the Adaptive extension](./examples/README.md#walkthrough-1-a-minimal-mcp-server-with-the-adaptive-extension)
-     — registers `deploy_service` / `search_customer` tools plus the
+     registers `deploy_service` / `search_customer` tools plus the
      `dev.adaptivemcp/tools-metadata` resource.
   2. [An MCP client that reads the derived view](./examples/README.md#walkthrough-2-an-mcp-client-that-reads-the-derived-view)
-     — connects over stdio, calls tools, and reads the YAML resource.
+     connects over stdio, calls tools, and reads the YAML resource.
   3. [The adaptation loop, locally](./examples/README.md#walkthrough-3-the-adaptation-loop-locally)
-     — `AdaptiveRuntime` wires the packages together without spawning a server.
-- **Scenarios** — small, focused demos of one or two packages each
+     `AdaptiveRuntime` wires the packages together without spawning a server.
+- **Scenarios.** Small, focused demos of one or two packages each
   ([source](./examples/src/scenarios)):
-  - `scenario.js` — improvement over time (healthy → flaky → fixed); the YAML
+  - `scenario.js`: improvement over time (healthy, then flaky, then fixed); the YAML
     view evolves automatically.
-  - `scenarios/ssot.js` — the SQLite store is the SSOT; the YAML is a pure
+  - `scenarios/ssot.js`: the SQLite store is the SSOT; the YAML is a pure
     projection.
-  - `scenarios/insights.js` — telemetry folds events into the SSOT; evaluation
+  - `scenarios/insights.js`: telemetry folds events into the SSOT; evaluation
     emits `observed_failure_rate` / `avg_duration_ms` insights.
-  - `scenarios/annotation.js` — human `Annotation` (static) vs. learned
+  - `scenarios/annotation.js`: human `Annotation` (static) vs. learned
     `Insight` (dynamic) side by side.
-  - `scenarios/adaptive.js` — full stack: routing + orchestration + approval +
-    thin-client.
-- **Sample YAML views** — committed, illustrative examples in
+  - `scenarios/adaptive.js`: full stack (routing, orchestration, approval,
+    thin-client).
+- **Sample YAML views.** Committed, illustrative examples in
   [`examples/yaml/`](./examples/yaml).
 
 ## npm packages
@@ -308,13 +324,12 @@ dependency-light and follow the same boundaries as the architecture above.
 These five are the **published** set (see `PUBLISHABLE_PACKAGES` in
 [`scripts/lib/workspace.ts`](./scripts/lib/workspace.ts)), released with the
 [`scripts/release.ts`](./scripts/release.ts) flow (see
-[`docs/RELEASE.md`](./docs/RELEASE.md) for the full release runbook, and
-[`docs/PLAN.md`](./docs/PLAN.md) → *Phase 6 — Publish to npm*).
+[`docs/RELEASE.md`](./docs/RELEASE.md) for the full release runbook).
 
 | Package | Version | Install | Description |
 | --- | --- | --- | --- |
 | `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | `npm i @adaptivemcp/spec` | Extension identifiers (SEP-2133 `dev.adaptivemcp/` namespace), event schemas, and shared types. |
-| `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | `npm i @adaptivemcp/memory` | Persistent operational knowledge backed by SQLite (`node:sqlite`) — the SSOT. |
+| `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | `npm i @adaptivemcp/memory` | Persistent operational knowledge backed by SQLite (`node:sqlite`), the SSOT. |
 | `@adaptivemcp/telemetry` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry) | `npm i @adaptivemcp/telemetry` | Tool execution events and observability (recorder + memory-backed store). |
 | `@adaptivemcp/evaluation` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation) | `npm i @adaptivemcp/evaluation` | Outcome scoring and feedback loops; emits `observed_failure_rate` / `avg_duration_ms` insights. |
 | `@adaptivemcp/extension` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension) | `npm i @adaptivemcp/extension` | Derives the YAML `tools-metadata` view from the SSOT and serves it as the `dev.adaptivemcp/tools-metadata` MCP resource. |
@@ -322,7 +337,7 @@ These five are the **published** set (see `PUBLISHABLE_PACKAGES` in
 ### Private (not published)
 
 `routing`, `orchestration`, `approval`, and `thin-client` are implemented but
-kept private for now — they are the client-side **executor** of the policy the
+kept private for now. They are the client-side **executor** of the policy the
 server governs, and their APIs are still stabilizing. `examples` and `apps` are
 runnable demos, not libraries.
 
@@ -342,11 +357,11 @@ pnpm lint              # ESLint
 
 The suite (`vitest`) covers every package plus an end-to-end integration test:
 
-- **Unit** — `memory` (SSOT folding), `evaluation` (insight thresholds),
+- **Unit**: `memory` (SSOT folding), `evaluation` (insight thresholds),
   `extension` (view projection + YAML stability), `routing` (model + budget),
   `orchestration` (retry scaling), `approval` (gate decisions), `thin-client`
   (gate + retry execution).
-- **Integration** — `examples/src/runtime.test.ts` drives `AdaptiveRuntime`
+- **Integration**: `examples/src/runtime.test.ts` drives `AdaptiveRuntime`
   through `observeCompleted` and asserts the derived SSOT state, the
   recommendation types, the approval gate decision, and YAML stability/disk
   write.
@@ -362,7 +377,7 @@ adaptive-mcp/
 ├── packages/      # @adaptivemcp/* library packages
 ├── examples/      # runnable server, client, and scenarios
 ├── apps/          # docs / playground (scaffolds)
-├── docs/          # PLAN.md implementation plan
+├── docs/          # ROADMAP.md implementation plan
 ├── scripts/
 ├── vitest.config.ts
 ├── vitest.sqlite-shim.mjs
@@ -374,11 +389,19 @@ adaptive-mcp/
 
 All planned packages are implemented and wired into `AdaptiveRuntime`. The
 `examples` scenarios validate the full adaptation loop end to end. See
-`docs/PLAN.md` for the phased status and `examples/README.md` for the scenario
+`docs/ROADMAP.md` for the phased status and `examples/README.md` for the scenario
 walkthrough.
 
 This project was introduced publicly in the talk *"Self-Improving MCP Agents"*
 at the [MCP Dev Summit Seoul 2026](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
+
+### What's next
+
+- Multi-server aggregation: merge `tools-metadata` across servers into one view.
+- More insight types: cost drift, latency regression, and approval friction.
+- Conformance scenarios so hosts can verify graceful degradation.
+- Promote `routing`, `orchestration`, `approval`, and `thin-client` to published
+  packages once their APIs settle.
 
 ## License
 

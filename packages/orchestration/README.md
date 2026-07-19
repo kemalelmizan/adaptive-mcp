@@ -12,7 +12,7 @@ by the thin client at execution time.
 
 ## What it does
 
-- `planAll()` / `planTool(toolName)` — derive a retry policy from observed failure behavior.
+- `planAll()` / `planTool(toolName)`: derive a retry policy from observed failure behavior.
 - Default policy: `maxAttempts: 3`; `policyFor` caps `maxAttempts` at `6`.
 - Flags tools as flaky when failure rate exceeds `flakyThreshold`.
 

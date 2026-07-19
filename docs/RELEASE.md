@@ -1,10 +1,10 @@
-# Release runbook — publishing `@adaptivemcp/*` to npm
+# Release runbook: publishing `@adaptivemcp/*` to npm
 
 This is the canonical, self-contained guide for cutting a release by hand. It
 covers **when to commit, when to push, what to watch out for, and how npm vs
 GitHub versioning work** so you can run a release end-to-end without the agent.
 
-The release is driven entirely by two scripts — there is **no manual
+The release is driven entirely by two scripts. There is **no manual
 `npm publish`**:
 
 | Script | What it does |
@@ -41,7 +41,7 @@ know about each other.
 ### GitHub (the repo)
 
 - A release is recorded as an **annotated git tag** `vX.Y.Z` (note the `v`
-  prefix — npm has no prefix, GitHub does). The tag is independent of npm; it
+  prefix. npm has no prefix, GitHub does). The tag is independent of npm; it
   just marks the commit where the version bump landed.
 - `git push --follow-tags` pushes the commit **and** the tag together.
 - The base branch is `main`. Changesets' `baseBranch` is `main`.
@@ -56,7 +56,7 @@ commit that contains the version bump.
 
 - **Node 26** (the built-in `node:sqlite` needs it; `node script.ts` uses native
   type stripping). Use `eval "$(fnm env)" && fnm use 26`.
-- **pnpm 11.14.0** (pinned via the repo `packageManager` field — don't use a
+- **pnpm 11.14.0** (pinned via the repo `packageManager` field; don't use a
   different pnpm).
 - An npm account in the **`@adaptivemcp`** org with publish rights
   (`https://www.npmjs.com/org/adaptivemcp`).
@@ -69,7 +69,7 @@ commit that contains the version bump.
 
 ## The two flows
 
-### Flow A — one-shot (recommended): `release.ts --tag`
+### Flow A: one-shot (recommended), `release.ts --tag`
 
 Version bump + build + publish + commit + tag + push, all in one command:
 
@@ -83,7 +83,7 @@ Use this when you've already reviewed the dry run and just want it done. The
 `--tag` flag hands off to `version-release.ts` at the end, which commits the
 bump and pushes the tag.
 
-### Flow B — split (verify before committing): `release.ts` then `version-release.ts`
+### Flow B: split (verify before committing), `release.ts` then `version-release.ts`
 
 Publish first, **inspect npm**, then record the release separately:
 
@@ -120,7 +120,7 @@ git add .changeset && git commit -m "chore: changeset for <scope>"
 
 The changeset is **consumed** by `release.ts` (it runs `changeset version`,
 which deletes the changeset file and bumps `package.json` + `CHANGELOG.md`).
-**Do not** run `changeset version` yourself — let the script own that step.
+**Do not** run `changeset version` yourself; let the script own that step.
 
 If you have no pending changeset, the script just republishes current versions
 (use `--no-version` to skip the version step entirely).
@@ -195,7 +195,7 @@ With Flow A / `version-release.ts`, the commit and tag are already pushed via
 **Rule of thumb:** commit the changeset as part of normal development. The
 *version-bump commit* and the *tag* are created by the release tooling at publish
 time and pushed together. **Never push the version bump before the publish
-succeeds** — otherwise GitHub would show a tag for a version that doesn't exist
+succeeds**. Otherwise GitHub would show a tag for a version that doesn't exist
 on npm.
 
 ---
@@ -217,7 +217,7 @@ NPM_OTP=123456 node scripts/release.ts --tag     # env var
   or the npm auth URL printed by npm, then run the command promptly.
 - If the OTP expires **mid-publish**, the remaining packages fail. Already
   published versions are immutable and skipped on re-run, so just re-run with a
-  fresh OTP — the earlier packages stay published.
+  fresh OTP. The earlier packages stay published.
 - Alternative to OTP: use an npm **automation/CI token** (bypasses 2FA) in
   `.env` as `NPM_TOKEN`. Note npm is deprecating 2FA-bypass tokens (announced
   for 2027), so OTP is the durable path.
@@ -241,7 +241,7 @@ publish hit 2FA, we committed the bump, then re-ran with `--otp`.)
 
 `pnpm changeset version` **deletes** the changeset markdown file. If the run is
 interrupted after that step, the bump is applied but uncommitted (see #2). There
-is no "undo" — just commit and continue.
+is no "undo". Just commit and continue.
 
 ### 4. Build runs twice
 
@@ -258,7 +258,7 @@ allowlist.
 ### 6. Dependency order matters
 
 Publish order is `spec → memory → telemetry → evaluation → extension`. Don't
-reorder or publish by hand — a package can't depend on a version that isn't
+reorder or publish by hand. A package can't depend on a version that isn't
 published yet.
 
 ### 7. Never publish by hand
@@ -316,7 +316,7 @@ node scripts/release.ts --tag --otp <CODE>   # re-run; already-published pkgs sk
 | --- | --- | --- |
 | `[release] working tree is dirty` | Uncommitted changes (often a prior bump) | Commit or stash, then re-run. |
 | `npm error code EOTP` | 2FA required, no OTP supplied | Re-run with `--otp <CODE>` (fresh code). |
-| `cannot publish over the previously published version` | Re-running after partial publish | Expected — already-published pkgs skip; supply OTP for the rest. |
+| `cannot publish over the previously published version` | Re-running after partial publish | Expected. Already-published pkgs skip; supply OTP for the rest. |
 | npm page shows no README | `README.md` missing from `files` | Add `"README.md"` to the package's `files` allowlist, rebuild, republish. |
 | Tag exists but version missing on npm | Pushed before publish finished | Publish succeeded? If not, publish then re-tag (delete + recreate tag). |
 | `pnpm: command not found` / wrong version | pnpm not pinned | `eval "$(fnm env)" && fnm use 26`; use the pinned pnpm 11.14.0. |

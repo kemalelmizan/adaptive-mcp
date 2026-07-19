@@ -6,7 +6,7 @@ Persistent operational knowledge for Adaptive MCP, backed by SQLite
 `memory` is the **single source of truth (SSOT)**. Every other package reads
 from or writes to it: telemetry folds execution events in, evaluation writes
 derived insights back, and the extension derives its YAML view from it. The
-YAML is a *projection* — never the source.
+YAML is a *projection*, never the source.
 
 ## Install
 

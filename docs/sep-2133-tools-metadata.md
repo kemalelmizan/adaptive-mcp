@@ -31,7 +31,7 @@ learns *how those capabilities are actually used* over time, nor how a server ca
 publish adaptive policy for clients to follow.
 
 This extension gives servers a uniform, optional surface to **govern** tool
-adaptation — declaring risk, budgets, and required approvals — while letting the
+adaptation. It declares risk, budgets, and required approvals, while letting the
 client remain the engine of dynamic learning. Clients that do not understand the
 resource simply ignore it (graceful degradation).
 
@@ -79,7 +79,7 @@ generated_at: <ISO-8601>     # when the view was rendered
 tools:
   - name: <string>           # tool identifier (matches tools/list name)
     server: <string?>        # originating server name, if known
-    annotation:              # STATIC GOVERNANCE — authored by the server
+    annotation:              # STATIC GOVERNANCE: authored by the server
       risk: <string?>        # e.g. "low" | "medium" | "high"
       owner: <string?>
       tags: <string[]?>
@@ -88,16 +88,16 @@ tools:
         limit: <number?>
         window: <string?>
       require_approval: <boolean?>  # server mandates confirmation before call
-    insights:                # CLIENT-REPORTED — learned from observed behavior
+    insights:                # CLIENT-REPORTED: learned from observed behavior
       <key>:
         value: <any>
         confidence: <number> # 0..1
         source: <string>     # e.g. "evaluation" | "telemetry"
-    recommendations:         # CLIENT-REPORTED — suggested adaptations
+    recommendations:         # CLIENT-REPORTED: suggested adaptations
       - type: <string>       # e.g. "model" | "approval" | "workflow" | "routing"
         payload: <any>
         rationale: <string>
-    stats:                   # CLIENT-REPORTED — folded from execution events
+    stats:                   # CLIENT-REPORTED: folded from execution events
       invocations: <number>
       failures: <number>
       failure_rate: <number> # 0..1

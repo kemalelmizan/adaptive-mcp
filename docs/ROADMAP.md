@@ -1,4 +1,4 @@
-# Adaptive MCP — Implementation Plan
+# Adaptive MCP: Implementation Plan
 
 This document tracks the phased implementation of Adaptive MCP. It is a living
 plan: each phase is validated by runnable examples before the next begins.
@@ -64,15 +64,15 @@ MCP resource: dev.adaptivemcp/tools-metadata
 | `@adaptivemcp/thin-client` | Client-side execution loop + middleware hooks | ✅ done |
 | `examples` | Runnable server + client + scenarios | ✅ done |
 
-## Phase 0 — Foundation (complete)
+## Phase 0: Foundation (complete)
 
 - Monorepo: pnpm workspaces, TypeScript strict, ESLint 9, Prettier, Vitest,
   Changesets.
 - `@adaptivemcp/spec`: `ToolRecord`, `ToolStats`, `Insight`, `Recommendation`,
-  `Annotation`, event schema, extension namespace `dev.adaptivemcp/` (SEP-2133\n  reversed-domain identifiers).
+  `Annotation`, event schema, extension namespace `dev.adaptivemcp/` (SEP-2133 reversed-domain identifiers).
 - `@adaptivemcp/memory`: `MemoryStore` over `node:sqlite` with `tools` table.
 
-## Phase 1 — Observation → SSOT → View (complete)
+## Phase 1: Observation to SSOT to View (complete)
 
 - `@adaptivemcp/telemetry`: `TelemetryRecorder` + `MemoryBackedTelemetryStore`
   that folds events into the SSOT via `memory.recordExecution`.
@@ -86,7 +86,7 @@ MCP resource: dev.adaptivemcp/tools-metadata
 stdio server/client example. The YAML view evolves automatically; the human
 `annotation.risk` field stays static.
 
-## Phase 2 — Recommendations & routing (complete)
+## Phase 2: Recommendations and routing (complete)
 
 - `@adaptivemcp/evaluation` emits `Recommendation`s (e.g. "add retry",
   "flag high-risk") into the SSOT.
@@ -98,7 +98,7 @@ stdio server/client example. The YAML view evolves automatically; the human
   `ApprovalGate` (allow / deny / require_confirmation) and writes `approval`
   recommendations.
 
-## Phase 3 — Thin client & production hardening (complete)
+## Phase 3: Thin client and production hardening (complete)
 
 - `@adaptivemcp/thin-client`: client-side execution loop with approval gate +
   SSOT-derived retry policy; transport stays with the official MCP SDK.
@@ -106,7 +106,7 @@ stdio server/client example. The YAML view evolves automatically; the human
 - Observability: the SSOT is exposed as the `dev.adaptivemcp/tools-metadata` MCP
   resource and as a derived YAML file.
 
-## Phase 4 — Extension spec alignment (complete)
+## Phase 4: Extension spec alignment (complete)
 
 - A **narrow, server-governed** MCP extension is proposed (SEP-2133): the
   `dev.adaptivemcp/tools-metadata` resource a server publishes to **govern** tool

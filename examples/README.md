@@ -1,4 +1,4 @@
-# Adaptive MCP — Examples & Walkthrough
+# Adaptive MCP: Examples and Walkthrough
 
 This package is a **runnable tour** of the Adaptive MCP packages. It shows how to
 stand up an MCP server and client, register tools, and attach the Adaptive MCP
@@ -24,7 +24,7 @@ SQLite single source of truth (SSOT).
 > ```
 >
 > The YAML is a **derived projection** of the SQLite store. Nobody edits it by
-> hand — Adaptive MCP recomputes it whenever metadata changes.
+> hand. Adaptive MCP recomputes it whenever metadata changes.
 
 ## Prerequisites
 
@@ -46,7 +46,7 @@ cd examples
 
 ---
 
-## Walkthrough 1 — A minimal MCP server with the Adaptive extension
+## Walkthrough 1: A minimal MCP server with the Adaptive extension
 
 The server below exposes two application tools (`deploy_service`,
 `search_customer`) and one Adaptive MCP **resource** (`dev.adaptivemcp/tools-metadata`).
@@ -117,17 +117,17 @@ ADAPTIVE_YAML=tools-metadata.yaml node dist/server.js
 
 **What this highlights**
 
-- `@adaptivemcp/extension` — `ExtensionController.resourceText()` renders the YAML
+- `@adaptivemcp/extension`: `ExtensionController.resourceText()` renders the YAML
   view; `resourceUri()` returns the stable `dev.adaptivemcp/tools-metadata` URI.
-- `@adaptivemcp/spec` — the `dev.adaptivemcp/` namespace; `TOOLS_METADATA_EXTENSION` is the proposed SEP-2133 resource identifier.
+- `@adaptivemcp/spec`: the `dev.adaptivemcp/` namespace; `TOOLS_METADATA_EXTENSION` is the proposed SEP-2133 resource identifier.
 
 ---
 
-## Walkthrough 2 — An MCP client that reads the derived view
+## Walkthrough 2: An MCP client that reads the derived view
 
 The client connects over stdio, calls the tools, and reads the
 `dev.adaptivemcp/tools-metadata` resource. The YAML it receives is computed from
-the server's SQLite SSOT — the client never writes metadata.
+the server's SQLite SSOT. The client never writes metadata.
 
 ```ts
 // examples/src/client.ts (abridged)
@@ -167,12 +167,12 @@ Run it:
 node -e "import('./dist/client.js').then(m => m.runClient())"
 ```
 
-You'll see the server's tools listed and a YAML document printed — the live,
+You'll see the server's tools listed and a YAML document printed. This is the live,
 derived view of the SSOT after a handful of calls.
 
 ---
 
-## Walkthrough 3 — The adaptation loop, locally
+## Walkthrough 3: The adaptation loop, locally
 
 `AdaptiveRuntime` wires the packages together so you can watch the loop without
 spawning a server:
@@ -180,7 +180,7 @@ spawning a server:
 ```ts
 // examples/src/runtime.ts (abridged)
 export class AdaptiveRuntime {
-  readonly memory: MemoryStore;          // @adaptivemcp/memory  — SQLite SSOT
+  readonly memory: MemoryStore;          // @adaptivemcp/memory: SQLite SSOT
   readonly telemetry: TelemetryRecorder; // @adaptivemcp/telemetry
   readonly evaluator: Evaluator;         // @adaptivemcp/evaluation
   readonly extension: ExtensionController;// @adaptivemcp/extension
@@ -228,9 +228,9 @@ node dist/scenarios/adaptive.js
 
 Committed, illustrative examples of the derived view live in [`yaml/`](./yaml):
 
-- [`yaml/healthy.yaml`](./yaml/healthy.yaml) — reliable tool with a human annotation.
-- [`yaml/flaky.yaml`](./yaml/flaky.yaml) — regression detected; `observed_failure_rate` insight appears.
-- [`yaml/annotated.yaml`](./yaml/annotated.yaml) — full shape including a `recommendations` entry.
+- [`yaml/healthy.yaml`](./yaml/healthy.yaml): reliable tool with a human annotation.
+- [`yaml/flaky.yaml`](./yaml/flaky.yaml): regression detected; `observed_failure_rate` insight appears.
+- [`yaml/annotated.yaml`](./yaml/annotated.yaml): full shape including a `recommendations` entry.
 
 These mirror what the scenarios print. Use them to see the schema at a glance.
 
@@ -241,7 +241,7 @@ These mirror what the scenarios print. Use them to see the schema at a glance.
 | Package | Role in the examples |
 | --- | --- |
 | `@adaptivemcp/spec` | Shared types (`ToolRecord`, `Annotation`, `Insight`, `Recommendation`, `ToolStats`) and the `dev.adaptivemcp/` extension namespace. |
-| `@adaptivemcp/memory` | `MemoryStore` over `node:sqlite` — the SSOT. `setAnnotation` / `addInsight` / `addRecommendation` / `recordExecution`. |
+| `@adaptivemcp/memory` | `MemoryStore` over `node:sqlite`, the SSOT. `setAnnotation` / `addInsight` / `addRecommendation` / `recordExecution`. |
 | `@adaptivemcp/telemetry` | `TelemetryRecorder` + `MemoryBackedTelemetryStore` fold every execution event into the SSOT. |
 | `@adaptivemcp/evaluation` | `Evaluator` reads SSOT stats and writes derived `Insight`s once a confidence threshold is met. |
 | `@adaptivemcp/extension` | `ExtensionController` renders the SSOT to `tools-metadata.yaml` and exposes it as an MCP resource. |

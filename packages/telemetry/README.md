@@ -3,7 +3,7 @@
 Tool execution events and observability for Adaptive MCP.
 
 `telemetry` is the **observe** step of the adaptation loop. It captures
-`ToolExecutionEvent`s — the atomic observations of tool executions — and folds
+`ToolExecutionEvent`s, the atomic observations of tool executions, and folds
 them into the SSOT (`@adaptivemcp/memory`).
 
 ## Install

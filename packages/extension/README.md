@@ -53,7 +53,7 @@ console.log(uri === TOOLS_METADATA_EXTENSION); // true
 The `@modelcontextprotocol/sdk` (v1.29) includes `extensions` in its
 `ServerCapabilities` schema, so a server can advertise the extension via
 `capabilities.extensions`. The example server instead registers the resource
-directly via `server.registerResource(...)` — the SEP-2133-compliant approach
+directly via `server.registerResource(...)`, the SEP-2133-compliant approach
 that degrades gracefully on any host that ignores unknown resources.
 
 ## License

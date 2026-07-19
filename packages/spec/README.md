@@ -23,8 +23,8 @@ consume the published types).
 
 | Export | Purpose |
 | --- | --- |
-| `EXTENSION_NAMESPACE` | `"dev.adaptivemcp/"` — the reversed-domain namespace. |
-| `TOOLS_METADATA_EXTENSION` | `"dev.adaptivemcp/tools-metadata"` — the single proposed MCP extension (SEP-2133) resource identifier. |
+| `EXTENSION_NAMESPACE` | `"dev.adaptivemcp/"`: the reversed-domain namespace. |
+| `TOOLS_METADATA_EXTENSION` | `"dev.adaptivemcp/tools-metadata"`: the single proposed MCP extension (SEP-2133) resource identifier. |
 | `PACKAGE_IDENTIFIERS` | Internal reversed-domain identifiers for client-side packages (namespacing only, not advertised as extensions). |
 | `isExtensionIdentifier(value)` | Predicate: does a string start with `dev.adaptivemcp/`? |
 | `packageIdentifier(name)` | Resolve an internal package identifier by name. |
@@ -58,7 +58,7 @@ const event = createToolEvent(
 
 `spec` does **not** introduce new MCP primitives. It defines the identifiers and
 types used by `@adaptivemcp/extension`, which exposes a single
-`dev.adaptivemcp/tools-metadata` **resource** (SEP-2133 compliant — a server
+`dev.adaptivemcp/tools-metadata` **resource** (SEP-2133 compliant: a server
 governs static policy, clients learn and report back). See
 [`docs/sep-2133-tools-metadata.md`](../../docs/sep-2133-tools-metadata.md).
 

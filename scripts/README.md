@@ -3,7 +3,7 @@
 Build, release, and maintenance scripts for the Adaptive MCP monorepo.
 
 All scripts are plain TypeScript run on **Node 26** with native type stripping
-(`node scripts/<name>.ts`) — no `tsx`/`tshy` dependency required. They shell out
+(`node scripts/<name>.ts`), no `tsx`/`tshy` dependency required. They shell out
 to `pnpm` / `npm` / `git` and never couple to a specific CI provider.
 
 ## Scripts
@@ -49,7 +49,7 @@ node scripts/version-release.ts       # commit bump + tag + push (after publish)
 node scripts/version-release.ts --no-push # commit + tag locally, no push
 ```
 
-## Release flow (coordinated with `docs/PLAN.md` → Phase 6)
+## Release flow (coordinated with `docs/ROADMAP.md`)
 
 `release.ts` is the single entry point for distribution. It:
 
@@ -60,13 +60,13 @@ node scripts/version-release.ts --no-push # commit + tag locally, no push
 5. `npm publish --access public --ignore-scripts` each package in dependency
    order (`spec` → `memory` → `telemetry` → `evaluation` → `extension`).
 
-It never commits the version bump or pushes tags by default — that is left to
+It never commits the version bump or pushes tags by default. That is left to
 `scripts/version-release.ts` (or a Changesets release CI workflow). Pass
-`--tag` to `release.ts` to do both in one flow. See `docs/PLAN.md` for the full
+`--tag` to `release.ts` to do both in one flow. See `docs/ROADMAP.md` for the full
 step-by-step publish walkthrough.
 
 > Requires `NPM_TOKEN` (org publish rights) in the environment. If the npm
-> account has **2FA for publishing**, pass `--otp <CODE>` (or `NPM_OTP`) — the
+> account has **2FA for publishing**, pass `--otp <CODE>` (or `NPM_OTP`). The
 > script cannot prompt for the one-time password. Use `--dry-run` to validate the
 > version bump and emitted `dist/` without publishing. Full walkthrough (when to
 > commit/push, npm-vs-GitHub versioning, recovery from interrupted runs) is in

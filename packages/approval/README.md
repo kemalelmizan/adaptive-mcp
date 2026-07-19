@@ -13,7 +13,7 @@ flakiness.
 ## What it does
 
 - `gate(toolName)` → `"allow" | "require_confirmation" | "deny"`.
-- `isFlaky(toolName)` — predicate used by the gate and other packages.
+- `isFlaky(toolName)`: predicate used by the gate and other packages.
 
 ### Defaults
 
