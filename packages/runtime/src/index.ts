@@ -60,7 +60,16 @@ export class AdaptiveRuntime {
     this.approval = new ApprovalGate({ memory: this.memory });
   }
 
-  /** Record a completed tool call, then re-evaluate and re-sync the YAML view. */
+  /**
+   * Record a completed tool call, then re-evaluate and re-sync the YAML view.
+   *
+   * This is the *minimal* observation step: event → MemoryStore → evaluation →
+   * insights → YAML view. Routing, orchestration, and approval are intentionally
+   * NOT run here — they are heavier, cross-tool passes that the caller invokes
+   * explicitly (e.g. `runtime.router.routeAll()`) once enough signal has
+   * accumulated. Keeping them out of the hot path also lets the "observe →
+   * evaluate → derive view" loop be demonstrated on its own.
+   */
   observeCompleted(input: {
     toolName: string;
     serverName?: string;
@@ -80,8 +89,6 @@ export class AdaptiveRuntime {
       { status: input.status, error: input.error },
     );
     this.evaluator.evaluateAll();
-    this.router.routeAll();
-    this.orchestrator.planAll();
     this.extension.sync();
   }
 

@@ -57,7 +57,7 @@ describe("@adaptivemcp/extension", () => {
 
   it("controller exposes the spec-compliant resource URI", () => {
     const controller = new ExtensionController({ memory: store });
-    expect(controller.resourceUri()).toBe("dev.adaptivemcp/tools-metadata");
+    expect(controller.resourceUri()).toBe("dev.adaptivemcp://tools-metadata");
   });
 
   it("controller.sync derives the view and resourceText matches the YAML", () => {

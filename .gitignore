@@ -5,3 +5,8 @@ dist/
 coverage/
 *.tsbuildinfo
 .env
+
+# Derived YAML views written by the examples/scenarios at runtime.
+tools-metadata*.yaml
+examples/yaml/adaptive.yaml
+examples/yaml/.integration.test.yaml

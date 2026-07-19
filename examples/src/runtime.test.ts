@@ -49,9 +49,13 @@ describe("AdaptiveRuntime integration", () => {
     // Evaluation emitted insights.
     expect(record!.insights.some((i) => i.key === "observed_failure_rate")).toBe(true);
 
-    // Routing + orchestration wrote recommendations; approval is produced by the
-    // enforcement hook (gate), which the caller invokes before a tool runs.
-    const types = record!.recommendations.map((r) => r.type);
+    // Routing + orchestration are explicit passes (not run inside observeCompleted).
+    // They write recommendations once enough signal has accumulated. Re-read the
+    // record afterwards, since getTool() returns a fresh snapshot each call.
+    rt.router.routeAll();
+    rt.orchestrator.planAll();
+    const recAfter = rt.memory.getTool("deploy_service")!;
+    const types = recAfter.recommendations.map((r) => r.type);
     expect(types).toContain("model");
     expect(types).toContain("workflow");
 

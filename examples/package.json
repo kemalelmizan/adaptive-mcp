@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "server": "node dist/server.js",
     "client": "node dist/client.js",
+    "client:local": "node -e \"import('./dist/client.js').then(m => m.runLocalLoop())\"",
     "quickstart": "node dist/quickstart.js",
     "scenario": "node dist/scenario.js",
     "scenario:store": "node dist/scenarios/store.js",

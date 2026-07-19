@@ -1,5 +1,5 @@
 import { AdaptiveRuntime } from "@adaptivemcp/runtime";
-import { runTool, section } from "./shared.js";
+import { runTool, section, seedRandom } from "./shared.js";
 
 /**
  * Scenario: human annotation vs. learned insight.
@@ -15,6 +15,7 @@ import { runTool, section } from "./shared.js";
  * own; insights update automatically as behavior changes.
  */
 function main(): void {
+  seedRandom(20260719); // deterministic output so the narrative matches the print
   const runtime = new AdaptiveRuntime({ yamlPath: "tools-metadata.annotation.yaml" });
 
   section("1. Operator annotates deploy_service as high-risk BEFORE any usage");

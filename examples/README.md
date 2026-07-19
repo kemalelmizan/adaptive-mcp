@@ -182,12 +182,17 @@ export class AdaptiveRuntime {
   readonly telemetry: TelemetryRecorder; // @adaptivemcp/telemetry
   readonly evaluator: Evaluator;         // @adaptivemcp/evaluation
   readonly extension: ExtensionController;// @adaptivemcp/extension
+  readonly router: Router;               // @adaptivemcp/routing
+  readonly orchestrator: Orchestrator;   // @adaptivemcp/orchestration
+  readonly approval: ApprovalGate;       // @adaptivemcp/approval
 
   observeCompleted(input) {
     this.telemetry.complete(/* … */);    // event → MemoryStore
     this.evaluator.evaluateAll();        // store stats → insights → store
     this.extension.sync();               // store → tools-metadata.yaml
   }
+  // Routing + orchestration are explicit passes you call once enough signal
+  // has accumulated: router.routeAll(); orchestrator.planAll();
 }
 ```
 

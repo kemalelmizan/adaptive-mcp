@@ -19,10 +19,25 @@ export interface RunOptions {
   cost?: number;
 }
 
+// Small seeded PRNG (xorshift32) so scenario output is reproducible and the
+// printed numbers match the narrative. Each runTool call advances the shared
+// generator; pass `seed` to reset it for a deterministic run.
+let seed = 0x9e3779b9;
+export function seedRandom(value: number): void {
+  seed = value >>> 0 || 1;
+}
+function rand(): number {
+  seed ^= seed << 13;
+  seed ^= seed >>> 17;
+  seed ^= seed << 5;
+  return ((seed >>> 0) % 100000) / 100000;
+}
+
 /**
  * Simulate `calls` invocations of `toolName` against the runtime, with a
  * controllable failure rate and duration. This stands in for a real MCP tool
- * handler calling `runtime.observeCompleted(...)`.
+ * handler calling `runtime.observeCompleted(...)`. Uses a seeded PRNG so the
+ * demo is reproducible.
  */
 export function runTool(
   runtime: AdaptiveRuntime,
@@ -32,11 +47,11 @@ export function runTool(
 ): void {
   const jitter = opts.durationJitter ?? 200;
   for (let i = 0; i < opts.calls; i++) {
-    const failed = Math.random() < opts.failRate;
+    const failed = rand() < opts.failRate;
     runtime.observeCompleted({
       toolName,
       serverName,
-      durationMs: opts.durationBase + Math.floor(Math.random() * jitter),
+      durationMs: opts.durationBase + Math.floor(rand() * jitter),
       status: failed ? "failed" : "completed",
       model: opts.model ?? "gpt-5-mini",
       cost: { amount: opts.cost ?? 0.001 },

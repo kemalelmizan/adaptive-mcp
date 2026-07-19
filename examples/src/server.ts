@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { AdaptiveRuntime } from "@adaptivemcp/runtime";
+import { TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
 
 /**
  * A minimal MCP server that exposes two application-level tools and the
@@ -69,7 +70,7 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
   // Adaptive MCP resource: the derived YAML tools-metadata view.
   server.registerResource(
     "tools-metadata",
-    "dev.adaptivemcp/tools-metadata",
+    TOOLS_METADATA_RESOURCE_URI,
     {
       title: "Adaptive MCP Tools Metadata",
       description:

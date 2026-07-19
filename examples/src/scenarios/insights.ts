@@ -1,5 +1,5 @@
 import { AdaptiveRuntime } from "@adaptivemcp/runtime";
-import { runTool, section } from "./shared.js";
+import { runTool, section, seedRandom } from "./shared.js";
 
 /**
  * Scenario: telemetry -> evaluation -> insights.
@@ -16,6 +16,7 @@ import { runTool, section } from "./shared.js";
  * and strengthen as the sample size grows.
  */
 function main(): void {
+  seedRandom(20260719); // deterministic output so the narrative matches the print
   const runtime = new AdaptiveRuntime({ yamlPath: "tools-metadata.insights.yaml" });
 
   section("Phase A: healthy tool (low failure rate)");

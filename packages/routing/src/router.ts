@@ -70,13 +70,16 @@ export class Router {
 
     const model = this.selectModel(record);
     if (model) {
+      const avg = Math.round(record.stats.avgDurationMs ?? 0);
+      const rationale =
+        avg >= 500
+          ? `Lowest-latency model for slow tool (avg ${avg}ms, failure rate ${record.stats.failureRate.toFixed(2)}); trades cost for speed.`
+          : `Cheapest model for fast tool (avg ${avg}ms, failure rate ${record.stats.failureRate.toFixed(2)}).`;
       this.memory.addRecommendation({
         toolName,
         type: "model",
         payload: { model: model.id },
-        rationale: `Cheapest model meeting observed latency (avg ${Math.round(
-          record.stats.avgDurationMs ?? 0,
-        )}ms) and failure rate (${record.stats.failureRate.toFixed(2)}).`,
+        rationale,
         confidence: confidenceFor(record.stats.invocations),
         generatedAt: new Date().toISOString(),
       });

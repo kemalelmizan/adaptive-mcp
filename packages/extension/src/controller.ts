@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { SPEC_VERSION } from "@adaptivemcp/spec";
+import { SPEC_VERSION, TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
 import type { Annotation, Store } from "@adaptivemcp/spec";
 import {
   renderToolsMetadata,
@@ -49,9 +49,9 @@ export class ExtensionController {
     return renderToolsMetadata(this.memory.allTools(), SPEC_VERSION);
   }
 
-  /** MCP resource URI for the derived tools-metadata view (`dev.adaptivemcp/tools-metadata`). */
+  /** MCP resource URI for the derived tools-metadata view (`dev.adaptivemcp://tools-metadata`). */
   resourceUri(): string {
-    return "dev.adaptivemcp/tools-metadata";
+    return TOOLS_METADATA_RESOURCE_URI;
   }
 
   resourceText(): string {

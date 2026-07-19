@@ -20,6 +20,15 @@ export const EXTENSION_NAMESPACE = "dev.adaptivemcp/";
 export const TOOLS_METADATA_EXTENSION = "dev.adaptivemcp/tools-metadata";
 
 /**
+ * The actual MCP resource URI. MCP requires a valid URL for resource
+ * registration and reads, so we use the reversed-domain `dev.adaptivemcp` as
+ * the URI scheme and `tools-metadata` as the path. This is the wire form of
+ * `TOOLS_METADATA_EXTENSION`; the logical identifier stays scheme-less per the
+ * SEP-2133 naming convention.
+ */
+export const TOOLS_METADATA_RESOURCE_URI = "dev.adaptivemcp://tools-metadata";
+
+/**
  * Internal reversed-domain identifiers for client-side packages. These are NOT
  * MCP extensions; they namespace in-process concepts to avoid collisions.
  */

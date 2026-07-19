@@ -1,5 +1,5 @@
 import { AdaptiveRuntime } from "@adaptivemcp/runtime";
-import { runTool, section } from "./scenarios/shared.js";
+import { runTool, section, seedRandom } from "./scenarios/shared.js";
 
 /**
  * Scenario: improvement over time (the headline demo).
@@ -12,10 +12,12 @@ import { runTool, section } from "./scenarios/shared.js";
  *  Phase 3: a fix restores reliability, and a human annotates it as high-risk.
  *
  * After each phase we print the YAML view so the evolution is visible. This
- * scenario exercises the whole stack: telemetry -> memory (store) -> evaluation
- * -> extension (YAML view).
+ * scenario exercises the observe -> evaluate -> derive-view loop (telemetry ->
+ * memory (store) -> evaluation -> extension (YAML view)). Routing,
+ * orchestration, and approval are demonstrated separately in `scenario:adaptive`.
  */
 function main(): void {
+  seedRandom(20260719); // deterministic output so the narrative matches the print
   const runtime = new AdaptiveRuntime({ yamlPath: "tools-metadata.scenario.yaml" });
 
   // Human-written static annotation (the operator's view).
@@ -57,10 +59,13 @@ function main(): void {
   runtime.extension.sync();
   console.log(runtime.extension.resourceText());
 
-  console.log("\nObservation: the YAML `insights.observed_failure_rate` and `stats`");
-  console.log("track the regression and recovery automatically. The `annotation.risk`");
-  console.log("field stays 'high' because it is the human's static view, not learned.");
-  console.log("The `recommendations` list is populated from the store, not the YAML.");
+  console.log("\nObservation: the store is cumulative — the printed `stats` and");
+  console.log("`insights.observed_failure_rate` are blended across all 120 calls, so the");
+  console.log("final view shows the *net* failure rate after the fix, not the 30% spike");
+  console.log("from Phase 2. The regression and recovery are visible as the rate climbs");
+  console.log("then falls between phases. The `annotation.risk` field stays 'high' because");
+  console.log("it is the human's static view, not learned. Recommendations are written by");
+  console.log("the routing/orchestration/approval packages, not by the YAML view itself.");
   runtime.close();
 }
 

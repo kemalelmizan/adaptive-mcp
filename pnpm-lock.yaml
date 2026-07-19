@@ -33,10 +33,6 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)
 
-  apps/docs: {}
-
-  apps/playground: {}
-
   examples:
     dependencies:
       '@adaptivemcp/approval':
