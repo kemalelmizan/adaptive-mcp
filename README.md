@@ -155,9 +155,8 @@ the **existing** MCP primitives. Concretely:
 - MCP servers stay standard and stateless; Adaptive MCP adds a client-side
   learning loop and a single derived resource (`dev.adaptivemcp/tools-metadata`)
   that a server *may* publish to **govern** tool adaptation.
-- The approach follows the **Extensions Track** pattern: a server-governed
-  resource that clients read and report against, degrading gracefully on any host
-  that ignores it. Our draft is at
+- The pattern is a server-governed resource that clients read and report
+  against, degrading gracefully on any host that ignores it. Our draft is at
   [`docs/sep-2133-tools-metadata.md`](./docs/sep-2133-tools-metadata.md).
 - Because the `dev.adaptivemcp/` prefix is our own reversed domain, this is an
   **unofficial** extension. It requires no changes to MCP itself and works with
