@@ -1,5 +1,4 @@
-import type { MemoryStore } from "@adaptivemcp/memory";
-import type { ToolRecord } from "@adaptivemcp/spec";
+import type { Store, ToolRecord } from "@adaptivemcp/spec";
 
 export interface ModelOption {
   id: string;
@@ -17,7 +16,7 @@ export interface BudgetPolicy {
 }
 
 export interface RoutingOptions {
-  memory: MemoryStore;
+  memory: Store;
   /** Candidate models, cheapest first by default. */
   models?: ModelOption[];
   /** Per-tool / per-server cost budgets. */
@@ -38,7 +37,7 @@ export interface RoutingOptions {
  * `model` and `routing` respectively, so the YAML view surfaces them.
  */
 export class Router {
-  private memory: MemoryStore;
+  private memory: Store;
   private models: ModelOption[];
   private budget: BudgetPolicy;
   private minInvocations: number;

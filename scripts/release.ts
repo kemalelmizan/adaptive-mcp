@@ -33,6 +33,7 @@ import {
   run,
   isDirty,
   npmRegistry,
+  changesetStatus,
 } from "./lib/workspace.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,13 +58,6 @@ function main(): void {
   console.log(`[release] registry: ${npmRegistry()}`);
   console.log(`[release] packages: ${PUBLISHABLE_PACKAGES.join(", ")}`);
 
-  if (isDirty()) {
-    console.error(
-      "[release] working tree is dirty. Commit or stash changes before releasing.",
-    );
-    process.exit(1);
-  }
-
   if (DRY_RUN) {
     // True dry run: build + preview the pending changesets WITHOUT consuming
     // them or bumping versions. `changeset status` reads the changeset files
@@ -71,9 +65,16 @@ function main(): void {
     // tree untouched (no version bump, no CHANGELOG edit, no publish).
     console.log("[release] --dry-run: building + previewing pending changesets (no publish, no version bump)");
     pnpm(["-r", ...PUBLISHABLE_PACKAGES.flatMap((p) => ["--filter", p]), "run", "build"]);
-    pnpm(["changeset", "status"]);
+    changesetStatus();
     console.log("[release] --dry-run: done. Working tree is unchanged; re-run without --dry-run to publish.");
     return;
+  }
+
+  if (isDirty()) {
+    console.error(
+      "[release] working tree is dirty. Commit or stash changes before releasing.",
+    );
+    process.exit(1);
   }
 
   // 1. Apply pending changesets (bumps versions, updates CHANGELOG).

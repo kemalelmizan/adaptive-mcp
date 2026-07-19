@@ -1,4 +1,4 @@
-import { AdaptiveRuntime } from "../runtime.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 import { ThinClient } from "@adaptivemcp/thin-client";
 import { runTool, section } from "./shared.js";
 

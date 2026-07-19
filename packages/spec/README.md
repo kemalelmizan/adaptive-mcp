@@ -16,7 +16,7 @@ the shared `ToolRecord` / `Insight` / `Recommendation` / `Annotation` types.
 npm i @adaptivemcp/spec
 ```
 
-Requires **Node 26** (native TypeScript type stripping; no build step needed to
+Requires **Node 22+** (Node 26 recommended; native TypeScript type stripping; no build step needed to
 consume the published types).
 
 ## What's inside

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { AdaptiveRuntime } from "./runtime.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 
 /**
  * A minimal MCP server that exposes two application-level tools and the

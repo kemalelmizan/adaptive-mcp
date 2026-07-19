@@ -2,7 +2,7 @@
 
 Build, release, and maintenance scripts for the Adaptive MCP monorepo.
 
-All scripts are plain TypeScript run on **Node 26** with native type stripping
+All scripts are plain TypeScript run on **Node 22+** (Node 26 recommended) with native type stripping
 (`node scripts/<name>.ts`), no `tsx`/`tshy` dependency required. They shell out
 to `pnpm` / `npm` / `git` and never couple to a specific CI provider.
 

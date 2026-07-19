@@ -1,5 +1,4 @@
-import type { ToolExecutionEvent } from "@adaptivemcp/spec";
-import type { MemoryStore } from "@adaptivemcp/memory";
+import type { Store, ToolExecutionEvent } from "@adaptivemcp/spec";
 import type { TelemetryStore } from "./store.js";
 
 /**
@@ -9,9 +8,9 @@ import type { TelemetryStore } from "./store.js";
  */
 export class MemoryBackedTelemetryStore implements TelemetryStore {
   private events = new Map<string, ToolExecutionEvent>();
-  private memory: MemoryStore;
+  private memory: Store;
 
-  constructor(memory: MemoryStore) {
+  constructor(memory: Store) {
     this.memory = memory;
   }
 

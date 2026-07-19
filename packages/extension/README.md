@@ -15,7 +15,7 @@ observations back.
 npm i @adaptivemcp/extension
 ```
 
-Requires **Node 26**.
+Requires **Node 22+** (Node 26 recommended).
 
 ## Usage
 

@@ -1,7 +1,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { SPEC_VERSION } from "@adaptivemcp/spec";
-import type { MemoryStore } from "@adaptivemcp/memory";
+import type { Annotation, Store } from "@adaptivemcp/spec";
 import {
   renderToolsMetadata,
   toYaml,
@@ -9,7 +9,7 @@ import {
 } from "./view.js";
 
 export interface ExtensionControllerOptions {
-  memory: MemoryStore;
+  memory: Store;
   /** Where to write the derived YAML view. If omitted, only the in-memory doc is produced. */
   yamlPath?: string;
 }
@@ -26,7 +26,7 @@ export interface ExtensionControllerOptions {
  * tool metadata flows: event -> MemoryStore -> YAML view.
  */
 export class ExtensionController {
-  private memory: MemoryStore;
+  private memory: Store;
   private yamlPath?: string;
 
   constructor(options: ExtensionControllerOptions) {
@@ -59,7 +59,7 @@ export class ExtensionController {
   }
 
   /** Apply a human annotation and re-sync the view. */
-  annotate(toolName: string, annotation: Parameters<MemoryStore["setAnnotation"]>[0]): ToolsMetadataDocument {
+  annotate(toolName: string, annotation: Annotation): ToolsMetadataDocument {
     this.memory.setAnnotation(annotation);
     return this.sync();
   }

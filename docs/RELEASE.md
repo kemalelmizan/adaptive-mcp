@@ -55,7 +55,7 @@ commit that contains the version bump.
 
 ## Prerequisites
 
-- **Node 26** (the built-in `node:sqlite` needs it; `node script.ts` uses native
+- **Node 22+** (Node 26 recommended; the built-in `node:sqlite` needs it; `node script.ts` uses native
   type stripping). Use `eval "$(fnm env)" && fnm use 26`.
 - **pnpm 11.14.0** (pinned via the repo `packageManager` field; don't use a
   different pnpm).

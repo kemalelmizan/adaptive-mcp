@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { readFileSync, existsSync, rmSync } from "node:fs";
-import { AdaptiveRuntime } from "./runtime.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 import { toToolMetadataView } from "@adaptivemcp/extension";
 
 /**

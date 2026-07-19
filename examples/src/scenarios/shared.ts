@@ -1,4 +1,4 @@
-import { AdaptiveRuntime } from "../runtime.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 
 /**
  * Shared helpers for the example scenarios.

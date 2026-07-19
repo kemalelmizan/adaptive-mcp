@@ -14,7 +14,7 @@ YAML is a *projection*, never the source.
 npm i @adaptivemcp/memory
 ```
 
-Requires **Node 26** (the `node:sqlite` module is available without the
+Requires **Node 22+** (Node 26 recommended; the `node:sqlite` module is available without the
 `--experimental-sqlite` flag).
 
 ## Usage

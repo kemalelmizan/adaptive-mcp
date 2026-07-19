@@ -1,4 +1,4 @@
-import type { MemoryStore } from "@adaptivemcp/memory";
+import type { Store } from "@adaptivemcp/spec";
 
 export interface RetryPolicy {
   /** Maximum attempts (including the first). */
@@ -10,7 +10,7 @@ export interface RetryPolicy {
 }
 
 export interface OrchestrationOptions {
-  memory: MemoryStore;
+  memory: Store;
   /** Default retry policy applied to flaky tools. */
   defaultPolicy?: RetryPolicy;
   /** Failure rate at/above which a tool is considered flaky. */
@@ -29,7 +29,7 @@ export interface OrchestrationOptions {
  * agent loop), which can read the recommendation and act on it.
  */
 export class Orchestrator {
-  private memory: MemoryStore;
+  private memory: Store;
   private defaultPolicy: RetryPolicy;
   private flakyThreshold: number;
   private minInvocations: number;

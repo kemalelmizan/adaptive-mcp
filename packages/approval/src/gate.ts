@@ -1,5 +1,4 @@
-import type { MemoryStore } from "@adaptivemcp/memory";
-import type { Annotation, ToolRecord } from "@adaptivemcp/spec";
+import type { Annotation, Store, ToolRecord } from "@adaptivemcp/spec";
 
 export type ApprovalDecision = "allow" | "deny" | "require_confirmation";
 
@@ -19,7 +18,7 @@ export interface ApprovalPolicy {
 }
 
 export interface ApprovalOptions {
-  memory: MemoryStore;
+  memory: Store;
   policy?: ApprovalPolicy;
   /** Minimum invocations before flaky-based gating trusts stats. */
   minInvocations?: number;
@@ -38,7 +37,7 @@ export interface ApprovalOptions {
  * view reflects the current approval boundary for each tool.
  */
 export class ApprovalGate {
-  private memory: MemoryStore;
+  private memory: Store;
   private policy: Required<ApprovalPolicy>;
   private minInvocations: number;
 

@@ -1,8 +1,7 @@
-import type { Insight, ToolRecord } from "@adaptivemcp/spec";
-import type { MemoryStore } from "@adaptivemcp/memory";
+import type { Insight, Store, ToolRecord } from "@adaptivemcp/spec";
 
 export interface EvaluationOptions {
-  memory: MemoryStore;
+  memory: Store;
   /** Failure rate above which an insight is emitted. */
   failureRateThreshold?: number;
   /** Minimum invocations before evaluating. */
@@ -16,7 +15,7 @@ export interface EvaluationOptions {
  * store stats and writes derived Insights back into the MemoryStore.
  */
 export class Evaluator {
-  private memory: MemoryStore;
+  private memory: Store;
   private failureRateThreshold: number;
   private minInvocations: number;
 

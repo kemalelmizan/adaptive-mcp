@@ -5,7 +5,7 @@ plan: each phase is validated by runnable examples before the next begins.
 
 ## Guiding constraints
 
-- **Node 26**
+- **Node 22+** (Node 26 recommended)
 - **pnpm 11.14.0** (pinned via the repo's `packageManager` field).
 - **SQLite is the store.** The `tools-metadata.yaml`
   file is a *derived view* of the SQLite store, never edited directly.
@@ -34,8 +34,8 @@ pnpm --filter @adaptivemcp/examples client
 
 | Package | Responsibility | Status |
 | --- | --- | --- |
-| `@adaptivemcp/spec` | Extension identifiers, event schemas, shared types | ✅ done |
-| `@adaptivemcp/memory` | SQLite store (`node:sqlite`) | ✅ done |
+| `@adaptivemcp/spec` | Extension identifiers, event schemas, shared types, `Store` interface | ✅ done |
+| `@adaptivemcp/memory` | SQLite store (`node:sqlite`), reference `Store` impl | ✅ done |
 | `@adaptivemcp/telemetry` | Recorder + memory-backed store + queries | ✅ done |
 | `@adaptivemcp/evaluation` | Insight generation from observed stats | ✅ done |
 | `@adaptivemcp/extension` | Derives + writes `tools-metadata.yaml` view | ✅ done |
@@ -43,6 +43,7 @@ pnpm --filter @adaptivemcp/examples client
 | `@adaptivemcp/orchestration` | Execution composition / retries | ✅ done |
 | `@adaptivemcp/approval` | Intent → plan → tool approval gate | ✅ done |
 | `@adaptivemcp/thin-client` | Client-side execution loop + middleware hooks | ✅ done |
+| `@adaptivemcp/runtime` | Batteries-included `AdaptiveRuntime` wiring all packages | ✅ done |
 | `examples` | Runnable server + client + scenarios | ✅ done |
 
 ## Phase 0: Foundation (complete)

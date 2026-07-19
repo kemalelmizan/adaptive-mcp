@@ -12,7 +12,7 @@ them into the store (`@adaptivemcp/memory`).
 npm i @adaptivemcp/telemetry
 ```
 
-Requires **Node 26**.
+Requires **Node 22+** (Node 26 recommended).
 
 ## Usage
 

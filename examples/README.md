@@ -28,7 +28,7 @@ SQLite store.
 
 ## Prerequisites
 
-- **Node 26**
+- **Node 22+** (Node 26 recommended)
 - **pnpm 11.14.0**
 
 ```bash

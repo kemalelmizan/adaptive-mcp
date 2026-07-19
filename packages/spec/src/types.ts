@@ -107,3 +107,44 @@ export interface ToolStats {
   totalCost: number;
   lastObservedAt: string | null;
 }
+
+/**
+ * The persistence boundary for Adaptive MCP.
+ *
+ * Packages depend on this interface, not on the concrete `MemoryStore`, so the
+ * backend (SQLite, Postgres, in-memory, remote) can be swapped without touching
+ * the middleware. `MemoryStore` in `@adaptivemcp/memory` is the reference
+ * implementation.
+ */
+export interface Store {
+  /** Close the underlying backend and release resources. */
+  close(): void;
+
+  /** Ensure a tool record exists, seeding it with an empty annotation. */
+  ensureTool(toolName: string, serverName?: string): ToolRecord;
+
+  /** Read a single tool record, or `undefined` if it has never been observed. */
+  getTool(toolName: string): ToolRecord | undefined;
+
+  /** Read every tool record, ordered by tool name. */
+  allTools(): ToolRecord[];
+
+  /** Persist a human-written annotation (the static metadata layer). */
+  setAnnotation(annotation: Annotation): ToolRecord;
+
+  /** Record a learned insight derived from observed behavior. */
+  addInsight(insight: Insight): ToolRecord;
+
+  /** Store a suggested adaptation. */
+  addRecommendation(rec: Recommendation): ToolRecord;
+
+  /**
+   * Remove all recommendations of a given type for a tool. Used by the routing,
+   * orchestration, and approval packages so each adaptation pass recomputes its
+   * own recommendations instead of appending duplicates on every observation.
+   */
+  clearRecommendations(toolName: string, type: RecommendationType): ToolRecord;
+
+  /** Fold a tool execution event into the persisted stats. */
+  recordExecution(event: ToolExecutionEvent): ToolRecord;
+}

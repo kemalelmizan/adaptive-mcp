@@ -1,4 +1,4 @@
-import type { MemoryStore } from "@adaptivemcp/memory";
+import type { Store } from "@adaptivemcp/spec";
 import type { ApprovalGate, ApprovalDecision } from "@adaptivemcp/approval";
 import type { RetryPolicy } from "@adaptivemcp/orchestration";
 
@@ -7,7 +7,7 @@ export interface ToolHandler {
 }
 
 export interface ThinClientOptions {
-  memory: MemoryStore;
+  memory: Store;
   /** The approval gate used before each tool call. */
   gate: ApprovalGate;
   /**
@@ -35,7 +35,7 @@ export interface ThinClientOptions {
  * is the "operational machinery" that runs on the client side.
  */
 export class ThinClient {
-  private memory: MemoryStore;
+  private memory: Store;
   private gate: ApprovalGate;
   private requestApproval: (toolName: string) => boolean | Promise<boolean>;
   private defaultRetry: RetryPolicy;

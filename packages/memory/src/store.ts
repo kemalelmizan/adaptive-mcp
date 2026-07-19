@@ -4,6 +4,7 @@ import type {
   Insight,
   Recommendation,
   RecommendationType,
+  Store,
   ToolExecutionEvent,
   ToolRecord,
   ToolStats,
@@ -44,7 +45,7 @@ CREATE TABLE IF NOT EXISTS tools (
  * stats — is persisted here. The YAML tools-metadata view is a *derived*
  * projection of this store, never the source of truth.
  */
-export class MemoryStore {
+export class MemoryStore implements Store {
   private db: DatabaseSync;
 
   constructor(options: MemoryStoreOptions = {}) {

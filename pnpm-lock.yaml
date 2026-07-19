@@ -57,6 +57,9 @@ importers:
       '@adaptivemcp/routing':
         specifier: workspace:*
         version: link:../packages/routing
+      '@adaptivemcp/runtime':
+        specifier: workspace:*
+        version: link:../packages/runtime
       '@adaptivemcp/spec':
         specifier: workspace:*
         version: link:../packages/spec
@@ -178,6 +181,43 @@ importers:
         specifier: workspace:*
         version: link:../spec
     devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)
+
+  packages/runtime:
+    dependencies:
+      '@adaptivemcp/approval':
+        specifier: workspace:*
+        version: link:../approval
+      '@adaptivemcp/evaluation':
+        specifier: workspace:*
+        version: link:../evaluation
+      '@adaptivemcp/extension':
+        specifier: workspace:*
+        version: link:../extension
+      '@adaptivemcp/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@adaptivemcp/orchestration':
+        specifier: workspace:*
+        version: link:../orchestration
+      '@adaptivemcp/routing':
+        specifier: workspace:*
+        version: link:../routing
+      '@adaptivemcp/spec':
+        specifier: workspace:*
+        version: link:../spec
+      '@adaptivemcp/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

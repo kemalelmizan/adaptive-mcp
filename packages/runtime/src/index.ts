@@ -8,9 +8,16 @@ import { ExtensionController } from "@adaptivemcp/extension";
 import { Router } from "@adaptivemcp/routing";
 import { Orchestrator } from "@adaptivemcp/orchestration";
 import { ApprovalGate, type ApprovalDecision } from "@adaptivemcp/approval";
+import type { Store } from "@adaptivemcp/spec";
 
 export interface AdaptiveRuntimeOptions {
-  /** SQLite path for the store. Defaults to an in-memory database. */
+  /**
+   * The persistence backend. Defaults to an in-memory `MemoryStore`. Any object
+   * implementing the `Store` interface from `@adaptivemcp/spec` is accepted, so
+   * callers can swap in a file-backed or remote store without touching the loop.
+   */
+  store?: Store;
+  /** SQLite path for the default store. Ignored when `store` is provided. */
   dbPath?: string;
   /** Where the derived YAML view is written. */
   yamlPath?: string;
@@ -19,16 +26,18 @@ export interface AdaptiveRuntimeOptions {
 /**
  * Wires the Adaptive MCP packages into a single runtime:
  *
- *   tool call -> telemetry -> MemoryStore -> evaluation -> insights
- *                                                          -> routing      -> recommendations
- *                                                          -> orchestration-> recommendations
- *                                                          -> approval     -> gate + recommendation
- *                                                          -> ExtensionController -> YAML view
+ *   tool call -> telemetry -> Store -> evaluation -> insights
+ *                                                    -> routing      -> recommendations
+ *                                                    -> orchestration-> recommendations
+ *                                                    -> approval     -> gate + recommendation
+ *                                                    -> ExtensionController -> YAML view
  *
  * This is the operational machinery; it is intentionally transport-agnostic.
+ * The runtime owns the adaptation loop but not the MCP transport — pair it with
+ * the official SDK (or the thin client) to execute tool calls.
  */
 export class AdaptiveRuntime {
-  readonly memory: MemoryStore;
+  readonly memory: Store;
   readonly telemetry: TelemetryRecorder;
   readonly evaluator: Evaluator;
   readonly extension: ExtensionController;
@@ -37,7 +46,7 @@ export class AdaptiveRuntime {
   readonly approval: ApprovalGate;
 
   constructor(options: AdaptiveRuntimeOptions = {}) {
-    this.memory = new MemoryStore({ path: options.dbPath ?? ":memory:" });
+    this.memory = options.store ?? new MemoryStore({ path: options.dbPath ?? ":memory:" });
     this.telemetry = new TelemetryRecorder({
       store: new MemoryBackedTelemetryStore(this.memory),
     });
@@ -85,3 +94,6 @@ export class AdaptiveRuntime {
     this.memory.close();
   }
 }
+
+export type { Store } from "@adaptivemcp/spec";
+export { MemoryStore } from "@adaptivemcp/memory";
