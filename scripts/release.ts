@@ -38,6 +38,8 @@ import { join } from "node:path";
 const DRY_RUN = process.argv.includes("--dry-run");
 const SKIP_VERSION = process.argv.includes("--no-version");
 const TAG = process.argv.includes("--tag");
+const OTP_INDEX = process.argv.indexOf("--otp");
+const OTP = OTP_INDEX >= 0 ? process.argv[OTP_INDEX + 1] : undefined;
 
 function main(): void {
   console.log(`[release] registry: ${npmRegistry()}`);
@@ -70,7 +72,9 @@ function main(): void {
   for (const pkg of PUBLISHABLE_PACKAGES) {
     const cwd = join(REPO_ROOT, "packages", pkg.replace("@adaptivemcp/", ""));
     console.log(`[release] publishing ${pkg}`);
-    run("npm", ["publish", "--access", "public", "--ignore-scripts"], { cwd });
+    const args = ["publish", "--access", "public", "--ignore-scripts"];
+    if (OTP) args.push("--otp", OTP);
+    run("npm", args, { cwd });
   }
 
   console.log("[release] done. Remember to push the version commit + tags.");

@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/evaluation",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Outcome scoring and feedback loops for Adaptive MCP.",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,5 +1,17 @@
 # @adaptivemcp/extension
 
+## 0.2.1
+
+### Patch Changes
+
+- fcb25d7: Add per-package README files and include them in the published npm tarballs
+  (previously the `files` allowlist shipped only `dist`, so package pages on npm
+  showed "This package does not have a README"). Each published package now ships
+  usage examples, API tables, and its relationship to the MCP extension surface.
+- Updated dependencies [fcb25d7]
+  - @adaptivemcp/spec@0.1.1
+  - @adaptivemcp/memory@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

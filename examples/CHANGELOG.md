@@ -1,5 +1,20 @@
 # @adaptivemcp/examples
 
+## 0.0.2
+
+### Patch Changes
+
+- Updated dependencies [fcb25d7]
+  - @adaptivemcp/spec@0.1.1
+  - @adaptivemcp/memory@0.2.1
+  - @adaptivemcp/telemetry@0.1.1
+  - @adaptivemcp/evaluation@0.2.1
+  - @adaptivemcp/extension@0.2.1
+  - @adaptivemcp/approval@0.0.2
+  - @adaptivemcp/orchestration@0.0.2
+  - @adaptivemcp/routing@0.0.2
+  - @adaptivemcp/thin-client@0.0.2
+
 ## 0.0.1
 
 ### Patch Changes
