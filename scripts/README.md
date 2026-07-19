@@ -11,7 +11,7 @@ to `pnpm` / `npm` / `git` and never couple to a specific CI provider.
 | Script | Purpose |
 | --- | --- |
 | `scripts/build.ts` | Build the publishable `@adaptivemcp/*` packages. `--check` fails if the build leaves the git tree dirty. |
-| `scripts/release.ts` | Version (Changesets) + build + publish the core subset to npm. `--dry-run` skips publish; `--no-version` publishes as-is; `--tag` also commits the bump + pushes the tag; `--otp <CODE>` (or `NPM_OTP`) supplies the npm 2FA one-time password. |
+| `scripts/release.ts` | Version (Changesets) + build + publish the publishable packages to npm. `--dry-run` skips publish; `--no-version` publishes as-is; `--tag` also commits the bump + pushes the tag; `--otp <CODE>` (or `NPM_OTP`) supplies the npm 2FA one-time password. |
 | `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, and push `--follow-tags`. `--dry-run` previews; `--no-push` keeps it local. |
 | `scripts/maintenance.ts` | Repo hygiene: `status`, `stale-dist`, `check` (build+lint+test), `outdated`. |
 
@@ -26,11 +26,15 @@ in `PUBLISHABLE_PACKAGES` (`scripts/lib/workspace.ts`):
 - `@adaptivemcp/telemetry`
 - `@adaptivemcp/evaluation`
 - `@adaptivemcp/extension`
+- `@adaptivemcp/runtime`
+- `@adaptivemcp/routing`
+- `@adaptivemcp/orchestration`
+- `@adaptivemcp/approval`
+- `@adaptivemcp/thin-client`
 
-`routing`, `orchestration`, `approval`, `thin-client`, `examples`, and `apps`
-remain private for now. To promote a package, add it to `PUBLISHABLE_PACKAGES`
-and ensure its `package.json` has no `"private": true` and a `files: ["dist"]`
-allowlist.
+`examples` and `apps` stay private. To promote a package, add it to
+`PUBLISHABLE_PACKAGES` and ensure its `package.json` has no `"private": true`
+and a `files: ["dist"]` allowlist.
 
 ## Usage
 

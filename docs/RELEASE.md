@@ -9,13 +9,13 @@ The release is driven entirely by two scripts. There is **no manual
 
 | Script | What it does |
 | --- | --- |
-| `scripts/release.ts` | Version (Changesets) → build → `npm publish` the 5 core packages. |
+| `scripts/release.ts` | Version (Changesets) → build → `npm publish` the publishable packages. |
 | `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, push `--follow-tags`. |
 
 Publishable set (defined once in `scripts/lib/workspace.ts` →
-`PUBLISHABLE_PACKAGES`): `spec · memory · telemetry · evaluation · extension`.
-`routing`, `orchestration`, `approval`, `thin-client`, `examples`, `apps` stay
-private.
+`PUBLISHABLE_PACKAGES`): `spec · memory · telemetry · evaluation · extension ·
+runtime · routing · orchestration · approval · thin-client`. `examples` and
+`apps` stay private.
 
 ---
 
