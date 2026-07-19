@@ -7,6 +7,38 @@ existing MCP primitives, and helps runtimes adapt over time.
 
 > MCP standardizes capabilities. Adaptive MCP learns behavior.
 
+> **Unofficial project.** Adaptive MCP is an independent, community experiment.
+> It is **not** affiliated with, endorsed by, or maintained by the Model Context
+> Protocol project, its stewards, or any vendor. The `dev.adaptivemcp/` extension
+> namespace is a reversed-domain identifier we own (`adaptivemcp.dev`) and is
+> used in the spirit of, but not as part of, any official MCP extension. See
+> [Relationship to MCP](#relationship-to-mcp) below.
+> **Talk — MCP Dev Summit Seoul 2026:** Kemal Elmizan introduces Adaptive MCP in
+> *"Self-Improving MCP Agents"* at the MCP Dev Summit in Seoul (2026).
+> [Session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
+## Relationship to MCP
+
+The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open
+standard that lets applications provide context and capabilities (tools,
+resources, prompts) to language models in a uniform way. MCP answers *"what can
+the model do?"* — it standardizes the **capabilities** a server exposes.
+
+Adaptive MCP sits **on top of** MCP rather than beside or beneath it. It does
+not fork, extend, or replace the protocol; it observes how MCP tools are actually
+used and attaches learned metadata (annotations, insights, recommendations) to
+the **existing** MCP primitives. Concretely:
+
+- MCP servers stay standard and stateless; Adaptive MCP adds a client-side
+  learning loop and a single derived resource (`dev.adaptivemcp/tools-metadata`)
+  that a server *may* publish to **govern** tool adaptation.
+- The approach follows the **Extensions Track** pattern described in
+  [SEP-2133](./docs/sep-2133-tools-metadata.md): a server-governed resource that
+  clients read and report against, degrading gracefully on any host that ignores
+  it.
+- Because the `dev.adaptivemcp/` prefix is our own reversed domain, this is an
+  **unofficial** extension. It requires no changes to MCP itself and works with
+  any compliant MCP server/client.
+
 ## Design constraints
 
 - **MCP standardizes capabilities; Adaptive MCP learns behavior.** The system
@@ -206,7 +238,7 @@ Requires **Node 26** (the `node:sqlite` module is available without the
 **pnpm 11.14.0**.
 
 ```bash
-git clone https://github.com/<you>/adaptive-mcp
+git clone https://github.com/kemalelmizan/adaptive-mcp
 cd adaptive-mcp
 pnpm install
 pnpm -r run build
@@ -361,3 +393,10 @@ All planned packages are implemented and wired into `AdaptiveRuntime`. The
 `examples` scenarios validate the full adaptation loop end to end. See
 `docs/PLAN.md` for the phased status and `examples/README.md` for the scenario
 walkthrough.
+
+This project was introduced publicly in the talk *"Self-Improving MCP Agents"*
+at the [MCP Dev Summit Seoul 2026](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
+
+## License
+
+Released under the [MIT License](./LICENSE). Copyright (c) 2026 Kemal Elmizan.

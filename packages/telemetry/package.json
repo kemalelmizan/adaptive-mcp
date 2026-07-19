@@ -2,6 +2,7 @@
   "name": "@adaptivemcp/telemetry",
   "version": "0.1.1",
   "description": "Tool execution events and observability for Adaptive MCP.",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

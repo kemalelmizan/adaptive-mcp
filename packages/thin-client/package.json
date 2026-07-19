@@ -3,6 +3,7 @@
   "version": "0.0.2",
   "private": true,
   "description": "Minimal MCP client implementation for Adaptive MCP. (stub)",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

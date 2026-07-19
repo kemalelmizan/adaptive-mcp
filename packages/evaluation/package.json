@@ -2,6 +2,7 @@
   "name": "@adaptivemcp/evaluation",
   "version": "0.2.1",
   "description": "Outcome scoring and feedback loops for Adaptive MCP.",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Runnable MCP server + client examples with the Adaptive MCP extension, plus improvement-over-time scenarios.",
+  "license": "MIT",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "server": "node dist/server.js",
