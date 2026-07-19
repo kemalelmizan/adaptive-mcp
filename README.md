@@ -166,6 +166,143 @@ server.registerResource("tools-metadata", "dev.adaptivemcp/tools-metadata", {
 // capabilities: { extensions: { "dev.adaptivemcp/tools-metadata": {} } }
 ```
 
+## Examples
+
+The [`examples/`](./examples) directory is a **runnable tour** of every Adaptive
+MCP package. It stands up a real MCP server + client, registers tools, and
+attaches the Adaptive MCP extension so a `tools-metadata.yaml` view is derived
+automatically from a SQLite single source of truth (SSOT).
+
+- **Full walkthrough** — [`examples/README.md`](./examples/README.md) walks
+  through three worked examples:
+  1. [A minimal MCP server with the Adaptive extension](./examples/README.md#walkthrough-1-a-minimal-mcp-server-with-the-adaptive-extension)
+     — registers `deploy_service` / `search_customer` tools plus the
+     `dev.adaptivemcp/tools-metadata` resource.
+  2. [An MCP client that reads the derived view](./examples/README.md#walkthrough-2-an-mcp-client-that-reads-the-derived-view)
+     — connects over stdio, calls tools, and reads the YAML resource.
+  3. [The adaptation loop, locally](./examples/README.md#walkthrough-3-the-adaptation-loop-locally)
+     — `AdaptiveRuntime` wires the packages together without spawning a server.
+- **Scenarios** — small, focused demos of one or two packages each
+  ([source](./examples/src/scenarios)):
+  - `scenario.js` — improvement over time (healthy → flaky → fixed); the YAML
+    view evolves automatically.
+  - `scenarios/ssot.js` — the SQLite store is the SSOT; the YAML is a pure
+    projection.
+  - `scenarios/insights.js` — telemetry folds events into the SSOT; evaluation
+    emits `observed_failure_rate` / `avg_duration_ms` insights.
+  - `scenarios/annotation.js` — human `Annotation` (static) vs. learned
+    `Insight` (dynamic) side by side.
+  - `scenarios/adaptive.js` — full stack: routing + orchestration + approval +
+    thin-client.
+- **Sample YAML views** — committed, hand-annotated examples in
+  [`examples/yaml/`](./examples/yaml).
+
+## Quick start
+
+Requires **Node 26** (the `node:sqlite` module is stable; no flag required) and
+**pnpm 11.14.0**.
+
+```bash
+git clone https://github.com/<you>/adaptive-mcp
+cd adaptive-mcp
+pnpm install
+pnpm -r run build
+```
+
+### Watch the adaptation loop in 15 lines
+
+The whole loop — observe → evaluate → derive view — runs locally with
+`AdaptiveRuntime` (no server needed):
+
+```ts
+import { AdaptiveRuntime } from "@adaptivemcp/extension"; // re-exports AdaptiveRuntime from examples in the demo
+
+// In the published packages, compose the pieces directly:
+import { MemoryStore } from "@adaptivemcp/memory";
+import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/telemetry";
+import { Evaluator } from "@adaptivemcp/evaluation";
+import { ExtensionController } from "@adaptivemcp/extension";
+
+const memory = new MemoryStore();                       // SQLite SSOT
+const telemetry = new TelemetryRecorder({ store: new MemoryBackedTelemetryStore(memory) });
+const evaluator = new Evaluator({ memory });
+const extension = new ExtensionController({ memory, yamlPath: "tools-metadata.yaml" });
+
+for (let i = 0; i < 20; i++) {
+  telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 900, cost: { amount: 0.002, currency: "USD" } });
+}
+evaluator.evaluateAll();   // SSOT stats → insights → SSOT
+extension.sync();          // SSOT → tools-metadata.yaml (and the MCP resource text)
+console.log(extension.resourceText());
+```
+
+Run it from the repo root after building:
+
+```bash
+node --input-type=module -e "$(cat <<'EOF'
+import { MemoryStore } from './packages/memory/dist/index.js';
+import { TelemetryRecorder, MemoryBackedTelemetryStore } from './packages/telemetry/dist/index.js';
+import { Evaluator } from './packages/evaluation/dist/index.js';
+import { ExtensionController } from './packages/extension/dist/index.js';
+const memory = new MemoryStore();
+const telemetry = new TelemetryRecorder({ store: new MemoryBackedTelemetryStore(memory) });
+const evaluator = new Evaluator({ memory });
+const extension = new ExtensionController({ memory, yamlPath: 'tools-metadata.yaml' });
+for (let i = 0; i < 20; i++) telemetry.complete({ toolName: 'deploy_service', serverName: 'demo' }, { durationMs: 900 });
+evaluator.evaluateAll();
+extension.sync();
+console.log(extension.resourceText());
+EOF
+)"
+```
+
+### Run the MCP server + client example
+
+```bash
+cd examples
+node dist/server.js   # registers deploy_service, search_customer, and the tools-metadata resource
+node dist/client.js    # local loop that reads dev.adaptivemcp/tools-metadata
+```
+
+### Run the scenarios
+
+```bash
+cd examples
+node dist/scenario.js            # improvement over time (healthy → flaky → fixed)
+node dist/scenarios/ssot.js      # SSOT is the source of truth; YAML is derived
+node dist/scenarios/insights.js  # telemetry → evaluation → insights
+node dist/scenarios/annotation.js # human annotation vs. learned insight
+node dist/scenarios/adaptive.js   # full stack: routing + orchestration + approval + thin-client
+```
+
+## npm packages
+
+Adaptive MCP publishes its core libraries under the **[`@adaptivemcp` npm
+organization](https://www.npmjs.com/org/adaptivemcp)**. The packages are
+dependency-light and follow the same boundaries as the architecture above.
+
+### Published (`@adaptivemcp/*`)
+
+| Package | Description | Install |
+| --- | --- | --- |
+| [`@adaptivemcp/spec`](https://www.npmjs.com/package/@adaptivemcp/spec) | Extension identifiers (SEP-2133 `dev.adaptivemcp/` namespace), event schemas, and shared types. | `npm i @adaptivemcp/spec` |
+| [`@adaptivemcp/memory`](https://www.npmjs.com/package/@adaptivemcp/memory) | Persistent operational knowledge backed by SQLite (`node:sqlite`) — the SSOT. | `npm i @adaptivemcp/memory` |
+| [`@adaptivemcp/telemetry`](https://www.npmjs.com/package/@adaptivemcp/telemetry) | Tool execution events and observability (recorder + memory-backed store). | `npm i @adaptivemcp/telemetry` |
+| [`@adaptivemcp/evaluation`](https://www.npmjs.com/package/@adaptivemcp/evaluation) | Outcome scoring and feedback loops; emits `observed_failure_rate` / `avg_duration_ms` insights. | `npm i @adaptivemcp/evaluation` |
+| [`@adaptivemcp/extension`](https://www.npmjs.com/package/@adaptivemcp/extension) | Derives the YAML `tools-metadata` view from the SSOT and serves it as the `dev.adaptivemcp/tools-metadata` MCP resource. | `npm i @adaptivemcp/extension` |
+
+These five are the **publishable** set (see `PUBLISHABLE_PACKAGES` in
+[`scripts/lib/workspace.ts`](./scripts/lib/workspace.ts)). They are released with
+the [`scripts/release.ts`](./scripts/release.ts) flow (see
+[`docs/PLAN.md`](./docs/PLAN.md) → *Phase 6 — Publish to npm*).
+
+### Private (not yet published)
+
+`routing`, `orchestration`, `approval`, and `thin-client` are implemented but
+kept private for now — they are the client-side **executor** of the policy the
+server governs, and their APIs are still stabilizing. `examples` and `apps` are
+runnable demos, not libraries.
+
 ## How to build, test, and run
 
 Requires **Node 26** (the `node:sqlite` module is stable; no flag required)
@@ -176,24 +313,6 @@ pnpm install
 pnpm -r run build      # compile all packages + examples
 pnpm test              # run the Vitest suite (unit + integration)
 pnpm lint              # ESLint
-```
-
-### Scenarios (`examples`)
-
-```bash
-cd examples
-node dist/scenario.js          # improvement over time (healthy → flaky → fixed)
-node dist/scenarios/ssot.js     # SSOT is the source of truth; YAML is derived
-node dist/scenarios/insights.js # telemetry → evaluation → insights
-node dist/scenarios/annotation.js # human annotation vs. learned insight
-node dist/scenarios/adaptive.js   # full stack: routing + orchestration + approval + thin-client
-```
-
-### MCP server + client
-
-```bash
-node dist/server.js   # registers deploy_service, search_customer, and the tools-metadata resource
-node dist/client.js    # local loop that reads dev.adaptivemcp/tools-metadata
 ```
 
 ## Testing

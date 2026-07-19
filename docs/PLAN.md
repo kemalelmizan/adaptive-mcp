@@ -242,3 +242,117 @@ node -e "import('./dist/client.js').then(m=>m.runClient())"  # real stdio client
 - [ ] Runnable prototype linked (ours: `@adaptivemcp/extension` + `examples/`)
 - [ ] PR opened, file renamed to PR number, AI disclosure added (Steps 3–4)
 - [ ] Sponsor identified and tagged (Step 4)
+
+## Phase 6 — Publish the packages to npm (walkthrough)
+
+> Scope: publish the **core subset** under the `@adaptivemcp` npm organization
+> (`https://www.npmjs.com/org/adaptivemcp`). The publishable set is defined once
+> in `scripts/lib/workspace.ts` as `PUBLISHABLE_PACKAGES`:
+> `spec · memory · telemetry · evaluation · extension`. `routing`,
+> `orchestration`, `approval`, `thin-client`, `examples`, and `apps` stay
+> private. All distribution is driven by the `scripts/` runners — there is no
+> manual `npm publish` by hand.
+
+### Prerequisites
+
+- **Node 26** and **pnpm 11.14.0** (the repo's `packageManager` field pins pnpm).
+- An npm account that is a member of the **`adaptivemcp`** organization.
+- `NPM_TOKEN` with publish rights to the org, available in the environment (CI
+  secret or local shell). The token is read by `npm publish` automatically.
+- A clean working tree (`git status --porcelain` empty) — the scripts refuse to
+  release otherwise.
+
+### Step 1 — Verify the release surface
+
+```bash
+node scripts/maintenance.ts status      # versions + dist state per package
+node scripts/maintenance.ts stale-dist  # fail if any package lacks dist/
+node scripts/maintenance.ts check       # build + lint + test gate (CI-equivalent)
+```
+
+All publishable packages must show `built` and the check must pass. Fix any
+missing `dist/` by running `node scripts/build.ts` first.
+
+### Step 2 — Author a Changeset
+
+Each meaningful change ships with a changeset so versions and CHANGELOGs stay
+accurate:
+
+```bash
+pnpm changeset        # pick the affected @adaptivemcp/* packages + semver bump
+git add .changeset && git commit -m "chore: changeset for <scope>"
+```
+
+`release.ts` runs `changeset version` to apply pending changesets and bump
+versions. **Do not** run `changeset version` by hand before releasing — let the
+script own that step so the bump and the publish stay in one flow.
+
+### Step 3 — Dry run (no publish)
+
+```bash
+node scripts/release.ts --dry-run
+```
+
+This builds the publishable packages, applies pending changesets, rebuilds, and
+stops before `npm publish`. Inspect the version bumps and the emitted `dist/`
+outputs. Nothing is pushed or published.
+
+### Step 4 — Publish
+
+```bash
+export NPM_TOKEN=...        # org-scoped publish token
+node scripts/release.ts     # version + build + npm publish (--access public)
+```
+
+What the script does, in order:
+
+1. Refuses if the working tree is dirty.
+2. Builds `PUBLISHABLE_PACKAGES` (`pnpm -r --filter … run build`).
+3. Applies pending changesets (`pnpm changeset version`).
+4. Rebuilds (the version bump may change emitted code).
+5. `npm publish --access public --ignore-scripts` for each package, in
+   dependency order (`spec` → `memory` → `telemetry` → `evaluation` →
+   `extension`).
+
+`--ignore-scripts` keeps publish hermetic (no postinstall in the published
+tarball). The script never commits the version bump or pushes tags — that is
+left to the caller (e.g. a Changesets release CI workflow) to keep history clean.
+
+### Step 5 — Record the release
+
+```bash
+git add -A && git commit -m "release: @adaptivemcp/* vX.Y.Z"
+git tag -a vX.Y.Z -m "release: @adaptivemcp/* vX.Y.Z"
+git push --follow-tags
+```
+
+The `release.ts` output prints the version; mirror it in the commit/tag message.
+
+### Step 6 — Verify on npm
+
+- Check each package page under `https://www.npmjs.com/org/adaptivemcp` shows
+  the new version.
+- Sanity-check a fresh install in a temp dir:
+  ```bash
+  npm view @adaptivemcp/extension version
+  ```
+
+### Publish checklist
+
+- [ ] `node scripts/maintenance.ts check` passes (Step 1)
+- [ ] Changeset authored for the change (Step 2)
+- [ ] `--dry-run` inspected and clean (Step 3)
+- [ ] `NPM_TOKEN` set with org publish rights (Step 4)
+- [ ] `node scripts/release.ts` succeeded; versions bumped (Step 4)
+- [ ] Version commit + tag pushed (Step 5)
+- [ ] Packages visible on npmjs `@adaptivemcp` org (Step 6)
+
+### Notes / guardrails
+
+- **Only the 5 core packages publish.** To add one (e.g. promote `routing`), add
+  it to `PUBLISHABLE_PACKAGES` in `scripts/lib/workspace.ts` and ensure its
+  `package.json` has no `"private": true` and a `files: ["dist"]` allowlist.
+- **Never publish by hand.** The scripts guarantee dependency order and a clean
+  tree; ad-hoc `npm publish` can skip the version bump or break ordering.
+- **`--no-version`** publishes the current versions as-is (skips `changeset
+  version`) — only for re-publishing an already-bumped state.
