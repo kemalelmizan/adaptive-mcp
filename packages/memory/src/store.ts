@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS tools (
 `;
 
 /**
- * SQLite-backed single source of truth for Adaptive MCP.
+ * SQLite-backed store for Adaptive MCP.
  *
  * All tool metadata — annotations, learned insights, recommendations, and raw
  * stats — is persisted here. The YAML tools-metadata view is a *derived*

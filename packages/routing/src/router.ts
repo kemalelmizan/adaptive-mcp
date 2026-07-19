@@ -34,7 +34,7 @@ export interface RoutingOptions {
  *  - budget guardrails: warn (as a recommendation) when a tool or server is
  *    approaching or over its cost budget.
  *
- * Both outcomes are written into the SSOT as `recommendation` entries of type
+ * Both outcomes are written into the store as `recommendation` entries of type
  * `model` and `routing` respectively, so the YAML view surfaces them.
  */
 export class Router {

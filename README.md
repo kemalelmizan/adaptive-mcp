@@ -38,7 +38,7 @@ pnpm install
 pnpm -r run build
 ```
 
-### See the adaptation loop in one command
+### Adaptation loop
 
 The whole loop (observe, evaluate, derive view) runs locally with no server
 or transport. From the repo root:
@@ -58,7 +58,7 @@ import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/tele
 import { Evaluator } from "@adaptivemcp/evaluation";
 import { ExtensionController } from "@adaptivemcp/extension";
 
-const memory = new MemoryStore();                                   // SQLite SSOT
+const memory = new MemoryStore();                                   // SQLite store
 const telemetry = new TelemetryRecorder({ store: new MemoryBackedTelemetryStore(memory) });
 const evaluator = new Evaluator({ memory });
 const extension = new ExtensionController({ memory, yamlPath: "tools-metadata.yaml" });
@@ -66,8 +66,8 @@ const extension = new ExtensionController({ memory, yamlPath: "tools-metadata.ya
 for (let i = 0; i < 20; i++) {
   telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 900 });
 }
-evaluator.evaluateAll();   // SSOT stats → insights → SSOT
-extension.sync();          // SSOT → tools-metadata.yaml (and the MCP resource text)
+evaluator.evaluateAll();   // store stats → insights → store
+extension.sync();          // store → tools-metadata.yaml (and the MCP resource text)
 console.log(extension.resourceText());
 ```
 
@@ -84,7 +84,7 @@ pnpm server     # or start the server alone (blocks on stdio)
 ```bash
 cd examples
 pnpm scenario            # improvement over time (healthy → flaky → fixed)
-pnpm scenario:ssot       # SSOT is the source of truth; YAML is derived
+pnpm scenario:store       # the store holds the metadata; YAML is derived
 pnpm scenario:insights   # telemetry → evaluation → insights
 pnpm scenario:annotation # human annotation vs. learned insight
 pnpm scenario:adaptive   # full stack: routing + orchestration + approval + thin-client
@@ -97,18 +97,18 @@ The adaptation loop runs entirely on the client/runtime side:
 ```mermaid
 flowchart TD
     ToolExec["Tool execution (MCP server)"] --> Telemetry
-    Telemetry -->|records event| Memory["MemoryStore (SQLite SSOT)"]
+    Telemetry -->|records event| Memory["MemoryStore (SQLite)"]
     Memory --> Eval["Evaluation"]
     Eval -->|insights| Memory
     Telemetry --> Ext["ExtensionController"]
     Memory --> Ext
     Eval --> Ext
-    Ext -->|reads SSOT| YAML["tools-metadata.yaml (derived view)"]
+    Ext -->|reads the store| YAML["tools-metadata.yaml (derived view)"]
     Ext --> Resource["MCP resource: dev.adaptivemcp/tools-metadata"]
 ```
 
-Data always flows in one direction: **event → MemoryStore (SSOT) → derived
-YAML view**. The YAML is never edited directly; it is recomputed from the SSOT
+Data always flows in one direction: **event → MemoryStore → derived
+YAML view**. The YAML is never edited directly; it is recomputed from the store
 whenever metadata changes.
 
 ## Design constraints
@@ -198,7 +198,7 @@ human-readable projection consumed by out-of-band MCP clients.
 | Package | Responsibility |
 | --- | --- |
 | `@adaptivemcp/spec` | Extension identifiers (`dev.adaptivemcp/` reversed-domain namespace), event schemas, shared types |
-| `@adaptivemcp/memory` | SQLite SSOT store (`MemoryStore`) over `node:sqlite` |
+| `@adaptivemcp/memory` | SQLite store (`MemoryStore`) over `node:sqlite` |
 | `@adaptivemcp/telemetry` | `TelemetryRecorder` + memory-backed store + stat queries |
 | `@adaptivemcp/evaluation` | `Evaluator` emits `observed_failure_rate` / `avg_duration_ms` insights |
 | `@adaptivemcp/extension` | `ExtensionController` derives + writes the YAML view and exposes the MCP resource |
@@ -220,7 +220,7 @@ human-readable projection consumed by out-of-band MCP clients.
   ≥ `flakyFailureRate`, default 0.2, after `minInvocations`), else `allow`.
   Writes an `approval` recommendation with `payload: { decision }`.
 - **Thin client** (`ThinClient.run`): consults the gate, then executes with the
-  SSOT-derived retry policy (or default). Records the outcome back to the SSOT.
+  store-derived retry policy (or default). Records the outcome back to the store.
 
 ## The `tools-metadata` extension resource
 
@@ -282,7 +282,7 @@ server.registerResource("tools-metadata", "dev.adaptivemcp/tools-metadata", {
 The [`examples/`](./examples) directory is a **runnable tour** of every Adaptive
 MCP package. It stands up a real MCP server + client, registers tools, and
 attaches the Adaptive MCP extension so a `tools-metadata.yaml` view is derived
-automatically from a SQLite single source of truth (SSOT).
+automatically from a SQLite store.
 
 - **Full walkthrough.** [`examples/README.md`](./examples/README.md) walks
   through three worked examples:
@@ -297,9 +297,9 @@ automatically from a SQLite single source of truth (SSOT).
   ([source](./examples/src/scenarios)):
   - `scenario.js`: improvement over time (healthy, then flaky, then fixed); the YAML
     view evolves automatically.
-  - `scenarios/ssot.js`: the SQLite store is the SSOT; the YAML is a pure
+  - `scenarios/store.js`: the SQLite MemoryStore is the store; the YAML is a pure
     projection.
-  - `scenarios/insights.js`: telemetry folds events into the SSOT; evaluation
+  - `scenarios/insights.js`: telemetry folds events into the store; evaluation
     emits `observed_failure_rate` / `avg_duration_ms` insights.
   - `scenarios/annotation.js`: human `Annotation` (static) vs. learned
     `Insight` (dynamic) side by side.
@@ -324,10 +324,10 @@ These five are the **published** set (see `PUBLISHABLE_PACKAGES` in
 | Package | Version | Install | Description |
 | --- | --- | --- | --- |
 | `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | `npm i @adaptivemcp/spec` | Extension identifiers (`dev.adaptivemcp/` reversed-domain namespace), event schemas, and shared types. |
-| `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | `npm i @adaptivemcp/memory` | Persistent operational knowledge backed by SQLite (`node:sqlite`), the SSOT. |
+| `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | `npm i @adaptivemcp/memory` | Persistent operational knowledge backed by SQLite (`node:sqlite`), the store. |
 | `@adaptivemcp/telemetry` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry) | `npm i @adaptivemcp/telemetry` | Tool execution events and observability (recorder + memory-backed store). |
 | `@adaptivemcp/evaluation` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation) | `npm i @adaptivemcp/evaluation` | Outcome scoring and feedback loops; emits `observed_failure_rate` / `avg_duration_ms` insights. |
-| `@adaptivemcp/extension` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension) | `npm i @adaptivemcp/extension` | Derives the YAML `tools-metadata` view from the SSOT and serves it as the `dev.adaptivemcp/tools-metadata` MCP resource. |
+| `@adaptivemcp/extension` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension) | `npm i @adaptivemcp/extension` | Derives the YAML `tools-metadata` view from the store and serves it as the `dev.adaptivemcp/tools-metadata` MCP resource. |
 
 ### Private (not published)
 
@@ -352,12 +352,12 @@ pnpm lint              # ESLint
 
 The suite (`vitest`) covers every package plus an end-to-end integration test:
 
-- **Unit**: `memory` (SSOT folding), `evaluation` (insight thresholds),
+- **Unit**: `memory` (store folding), `evaluation` (insight thresholds),
   `extension` (view projection + YAML stability), `routing` (model + budget),
   `orchestration` (retry scaling), `approval` (gate decisions), `thin-client`
   (gate + retry execution).
 - **Integration**: `examples/src/runtime.test.ts` drives `AdaptiveRuntime`
-  through `observeCompleted` and asserts the derived SSOT state, the
+  through `observeCompleted` and asserts the derived store state, the
   recommendation types, the approval gate decision, and YAML stability/disk
   write.
 

@@ -4,8 +4,8 @@ import type { ToolRecord } from "@adaptivemcp/spec";
 /**
  * A single tool entry in the derived YAML tools-metadata view.
  *
- * The YAML is a *projection* of the SQLite SSOT. It is never edited directly;
- * Adaptive MCP recomputes it from the SSOT whenever metadata changes.
+ * The YAML is a *projection* of the SQLite store. It is never edited directly;
+ * Adaptive MCP recomputes it from the store whenever metadata changes.
  */
 export interface ToolMetadataView {
   name: string;

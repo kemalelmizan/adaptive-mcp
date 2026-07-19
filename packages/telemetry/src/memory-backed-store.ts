@@ -4,7 +4,7 @@ import type { TelemetryStore } from "./store.js";
 
 /**
  * Telemetry store that keeps a recent event log in memory AND folds every event
- * into the SQLite-backed MemoryStore (the SSOT). This keeps the hot event log
+ * into the SQLite-backed MemoryStore (the store). This keeps the hot event log
  * cheap while ensuring durable stats accumulate over time.
  */
 export class MemoryBackedTelemetryStore implements TelemetryStore {

@@ -6,14 +6,14 @@ Model selection and cost optimization for Adaptive MCP.
 > API is still stabilizing, so it is not part of the published `@adaptivemcp/*`
 > set. It is the client-side **executor** of policy the server governs.
 
-`routing` reads learned stats from the SSOT (`@adaptivemcp/memory`) and emits
+`routing` reads learned stats from the store (`@adaptivemcp/memory`) and emits
 `model` and `routing` recommendations. For example, steer a flaky or expensive tool
 toward a cheaper/faster model once the evidence supports it.
 
 ## What it does
 
 - `routeAll()` / `routeTool(toolName)`: derive routing recommendations from observed stats.
-- Emits `model` and `routing` recommendations into the SSOT.
+- Emits `model` and `routing` recommendations into the store.
 - Warns when projected cost crosses ~80% of a configured budget.
 
 ### Defaults

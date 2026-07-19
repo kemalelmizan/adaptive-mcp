@@ -3,7 +3,7 @@
 Persistent operational knowledge for Adaptive MCP, backed by SQLite
 (`node:sqlite`).
 
-`memory` is the **single source of truth (SSOT)**. Every other package reads
+`memory` is the **store**. Every other package reads
 from or writes to it: telemetry folds execution events in, evaluation writes
 derived insights back, and the extension derives its YAML view from it. The
 YAML is a *projection*, never the source.

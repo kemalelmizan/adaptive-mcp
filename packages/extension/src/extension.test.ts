@@ -49,7 +49,7 @@ describe("@adaptivemcp/extension", () => {
     const text = toYaml(doc);
     expect(text).toContain("name: deploy_service");
     expect(text).toContain("risk: high");
-    // Re-rendering the same SSOT yields identical tool projection (ignoring the
+    // Re-rendering the same store yields identical tool projection (ignoring the
     // render timestamp, which is intentionally regenerated each call).
     const stripTs = (s: string) => s.replace(/generated_at:.*\n/, "");
     expect(stripTs(toYaml(renderToolsMetadata(store.allTools(), SPEC_VERSION)))).toBe(stripTs(text));
@@ -69,7 +69,7 @@ describe("@adaptivemcp/extension", () => {
     expect(controller.resourceText()).toContain("name: deploy_service");
   });
 
-  it("controller.annotate writes into the SSOT and re-syncs", () => {
+  it("controller.annotate writes into the store and re-syncs", () => {
     store.ensureTool("deploy_service", "srv");
     const controller = new ExtensionController({ memory: store });
     controller.annotate("deploy_service", { toolName: "deploy_service", risk: "high" });

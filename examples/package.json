@@ -11,7 +11,7 @@
     "client": "node dist/client.js",
     "quickstart": "node dist/quickstart.js",
     "scenario": "node dist/scenario.js",
-    "scenario:ssot": "node dist/scenarios/ssot.js",
+    "scenario:store": "node dist/scenarios/store.js",
     "scenario:insights": "node dist/scenarios/insights.js",
     "scenario:annotation": "node dist/scenarios/annotation.js",
     "scenario:adaptive": "node dist/scenarios/adaptive.js"

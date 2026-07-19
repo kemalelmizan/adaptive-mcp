@@ -28,8 +28,8 @@ export interface ThinClientOptions {
  *
  *   1. asks the `ApprovalGate` whether the call may proceed (enforcement hook);
  *   2. if allowed/confirmed, executes with a retry policy derived from the
- *      SSOT `workflow` recommendation (or the default);
- *   3. records the outcome into the SSOT via the caller-supplied recorder.
+ *      store `workflow` recommendation (or the default);
+ *   3. records the outcome into the store via the caller-supplied recorder.
  *
  * It does NOT implement MCP transport — that remains the official SDK's job. It
  * is the "operational machinery" that runs on the client side.
@@ -79,7 +79,7 @@ export class ThinClient {
     return { decision, executed: true };
   }
 
-  /** Read the suggested retry policy from the SSOT, else fall back to default. */
+  /** Read the suggested retry policy from the store, else fall back to default. */
   private retryPolicyFor(toolName: string): RetryPolicy {
     const rec = this.memory
       .getTool(toolName)

@@ -15,7 +15,7 @@ middleware packages (`routing`, `orchestration`, `approval`).
 
 - `run(toolName, handler, input, record)`: execute a tool, consulting the
   approval `gate` and the orchestration retry policy, and recording the outcome
-  into the SSOT.
+  into the store.
 - Does **not** implement MCP transport. That remains an implementation detail
   of the host.
 

@@ -7,7 +7,7 @@ plan: each phase is validated by runnable examples before the next begins.
 
 - **Node 26**
 - **pnpm 11.14.0** (pinned via the repo's `packageManager` field).
-- **SQLite is the single source of truth (SSOT).** The `tools-metadata.yaml`
+- **SQLite is the store.** The `tools-metadata.yaml`
   file is a *derived view* of the SQLite store, never edited directly.
 - **Adaptive MCP computes and writes the YAML.** MCP clients read the YAML as a
   static, human- and machine-readable projection of learned behavior.
@@ -35,7 +35,7 @@ pnpm --filter @adaptivemcp/examples client
 | Package | Responsibility | Status |
 | --- | --- | --- |
 | `@adaptivemcp/spec` | Extension identifiers, event schemas, shared types | ✅ done |
-| `@adaptivemcp/memory` | SQLite SSOT store (`node:sqlite`) | ✅ done |
+| `@adaptivemcp/memory` | SQLite store (`node:sqlite`) | ✅ done |
 | `@adaptivemcp/telemetry` | Recorder + memory-backed store + queries | ✅ done |
 | `@adaptivemcp/evaluation` | Insight generation from observed stats | ✅ done |
 | `@adaptivemcp/extension` | Derives + writes `tools-metadata.yaml` view | ✅ done |
@@ -53,13 +53,13 @@ pnpm --filter @adaptivemcp/examples client
   `Annotation`, event schema, extension namespace `dev.adaptivemcp/` (reversed-domain identifiers).
 - `@adaptivemcp/memory`: `MemoryStore` over `node:sqlite` with `tools` table.
 
-## Phase 1: Observation to SSOT to View (complete)
+## Phase 1: Observation to store to View (complete)
 
 - `@adaptivemcp/telemetry`: `TelemetryRecorder` + `MemoryBackedTelemetryStore`
-  that folds events into the SSOT via `memory.recordExecution`.
+  that folds events into the store via `memory.recordExecution`.
 - `@adaptivemcp/evaluation`: `Evaluator` emits `observed_failure_rate` and
   `avg_duration_ms` insights once a confidence threshold is met.
-- `@adaptivemcp/extension`: `ExtensionController` renders the SSOT to
+- `@adaptivemcp/extension`: `ExtensionController` renders the store to
   `tools-metadata.yaml` and exposes it as the `dev.adaptivemcp/tools-metadata`
   MCP resource.
 
@@ -70,7 +70,7 @@ stdio server/client example. The YAML view evolves automatically; the human
 ## Phase 2: Recommendations and routing (complete)
 
 - `@adaptivemcp/evaluation` emits `Recommendation`s (e.g. "add retry",
-  "flag high-risk") into the SSOT.
+  "flag high-risk") into the store.
 - `@adaptivemcp/routing` consumes stats + insights to suggest model/budget
   choices; surfaces them in the YAML `recommendations` list.
 - `@adaptivemcp/orchestration` derives retry policies from observed failure
@@ -82,9 +82,9 @@ stdio server/client example. The YAML view evolves automatically; the human
 ## Phase 3: Thin client and production hardening (complete)
 
 - `@adaptivemcp/thin-client`: client-side execution loop with approval gate +
-  SSOT-derived retry policy; transport stays with the official MCP SDK.
+  store-derived retry policy; transport stays with the official MCP SDK.
 - Persistence: file-backed SQLite by default (`:memory:` for tests).
-- Observability: the SSOT is exposed as the `dev.adaptivemcp/tools-metadata` MCP
+- Observability: the store is exposed as the `dev.adaptivemcp/tools-metadata` MCP
   resource and as a derived YAML file.
 
 ## Phase 4: Extension spec alignment (complete)

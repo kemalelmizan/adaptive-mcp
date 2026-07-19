@@ -88,7 +88,7 @@ describe("@adaptivemcp/thin-client", () => {
     expect(called).toBe(false);
   });
 
-  it("retries using the SSOT-derived policy", async () => {
+  it("retries using the store-derived policy", async () => {
     record(store, "deploy_service", 0.3, 40);
     new Orchestrator({ memory: store }).planTool("deploy_service");
     client = new ThinClient({ memory: store, gate });

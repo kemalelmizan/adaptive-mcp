@@ -86,7 +86,7 @@ export interface Recommendation {
 }
 
 /**
- * The single source of truth (SSOT) record for a tool, persisted in SQLite.
+ * The store record for a tool, persisted in SQLite.
  * The YAML tools-metadata view is derived from this record.
  */
 export interface ToolRecord {

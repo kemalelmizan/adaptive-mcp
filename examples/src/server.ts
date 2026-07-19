@@ -73,7 +73,7 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
     {
       title: "Adaptive MCP Tools Metadata",
       description:
-        "Derived view of tool metadata (annotations, learned insights, recommendations, stats) from the SQLite SSOT.",
+        "Derived view of tool metadata (annotations, learned insights, recommendations, stats) from the SQLite store.",
       mimeType: "application/yaml",
     },
     async (uri) => ({

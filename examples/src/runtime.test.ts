@@ -6,7 +6,7 @@ import { toToolMetadataView } from "@adaptivemcp/extension";
 /**
  * End-to-end integration test: drive AdaptiveRuntime through the full
  * observation -> evaluation -> routing -> orchestration -> extension loop and
- * assert the derived SSOT + YAML state.
+ * assert the derived store + YAML state.
  */
 describe("AdaptiveRuntime integration", () => {
   const runtimes: AdaptiveRuntime[] = [];
@@ -56,11 +56,11 @@ describe("AdaptiveRuntime integration", () => {
     expect(types).toContain("workflow");
 
     // The approval gate reflects the high-risk annotation and writes its own
-    // recommendation into the SSOT.
+    // recommendation into the store.
     expect(rt.gate("deploy_service")).toBe("require_confirmation");
     expect(rt.memory.getTool("deploy_service")?.recommendations.some((r) => r.type === "approval")).toBe(true);
 
-    // The YAML view is a faithful projection of the SSOT.
+    // The YAML view is a faithful projection of the store.
     const view = toToolMetadataView(record!);
     expect(view.name).toBe("deploy_service");
     expect(view.annotation.risk).toBe("high");
@@ -68,7 +68,7 @@ describe("AdaptiveRuntime integration", () => {
     expect(view.recommendations.length).toBe(record!.recommendations.length);
   });
 
-  it("keeps the YAML view stable across identical SSOT state", () => {
+  it("keeps the YAML view stable across identical store state", () => {
     const rt = makeRuntime();
     for (let i = 0; i < 40; i++) {
       rt.observeCompleted({

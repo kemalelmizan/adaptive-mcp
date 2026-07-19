@@ -13,7 +13,7 @@ export interface EvaluationOptions {
  * Turns accumulated telemetry into learned insights.
  *
  * This is the "evaluate -> remember" step of the adaptation loop: it reads the
- * SSOT stats and writes derived Insights back into the MemoryStore.
+ * store stats and writes derived Insights back into the MemoryStore.
  */
 export class Evaluator {
   private memory: MemoryStore;

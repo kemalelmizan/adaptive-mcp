@@ -6,7 +6,7 @@ import { runTool, section } from "./shared.js";
  *
  * Highlights:
  *   - `@adaptivemcp/telemetry`: `TelemetryRecorder` + `MemoryBackedTelemetryStore`
- *     fold every execution event into the SSOT.
+ *     fold every execution event into the store.
  *   - `@adaptivemcp/evaluation`: `Evaluator` reads accumulated stats and writes
  *     derived `Insight`s (observed_failure_rate, avg_duration_ms) back into the
  *     store once a confidence threshold is met.

@@ -6,7 +6,7 @@ import { AdaptiveRuntime } from "../runtime.js";
  * Each scenario focuses on a different slice of the Adaptive MCP packages while
  * reusing the same `AdaptiveRuntime` wiring:
  *
- *   tool call -> telemetry -> MemoryStore (SSOT) -> evaluation -> insights
+ *   tool call -> telemetry -> MemoryStore -> evaluation -> insights
  *                                                          -> ExtensionController -> YAML view
  */
 

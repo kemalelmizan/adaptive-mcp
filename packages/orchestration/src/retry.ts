@@ -22,7 +22,7 @@ export interface OrchestrationOptions {
 /**
  * Derives execution strategies (currently: retry policies) from observed
  * behavior. When a tool's observed failure rate crosses `flakyThreshold`, a
- * `workflow` recommendation suggesting a retry policy is written into the SSOT.
+ * `workflow` recommendation suggesting a retry policy is written into the store.
  *
  * The package is intentionally limited to *suggesting* strategies here; the
  * actual retry execution belongs to the caller (e.g. the thin client or an

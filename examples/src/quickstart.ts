@@ -16,7 +16,7 @@ import {
 import { Evaluator } from "@adaptivemcp/evaluation";
 import { ExtensionController } from "@adaptivemcp/extension";
 
-const memory = new MemoryStore(); // SQLite SSOT (in-memory)
+const memory = new MemoryStore(); // SQLite store (in-memory)
 const telemetry = new TelemetryRecorder({
   store: new MemoryBackedTelemetryStore(memory),
 });
@@ -31,10 +31,10 @@ for (let i = 0; i < 20; i++) {
   );
 }
 
-// 2. Evaluate: fold the observations into insights in the SSOT.
+// 2. Evaluate: fold the observations into insights in the store.
 evaluator.evaluateAll();
 
-// 3. Derive: project the SSOT into the YAML view (and the MCP resource text).
+// 3. Derive: project the store into the YAML view (and the MCP resource text).
 extension.sync();
 
 console.log(extension.resourceText());

@@ -12,7 +12,7 @@ import { runTool, section } from "./scenarios/shared.js";
  *  Phase 3: a fix restores reliability, and a human annotates it as high-risk.
  *
  * After each phase we print the YAML view so the evolution is visible. This
- * scenario exercises the whole stack: telemetry -> memory (SSOT) -> evaluation
+ * scenario exercises the whole stack: telemetry -> memory (store) -> evaluation
  * -> extension (YAML view).
  */
 function main(): void {
@@ -60,7 +60,7 @@ function main(): void {
   console.log("\nObservation: the YAML `insights.observed_failure_rate` and `stats`");
   console.log("track the regression and recovery automatically. The `annotation.risk`");
   console.log("field stays 'high' because it is the human's static view, not learned.");
-  console.log("The `recommendations` list is populated from the SSOT, not the YAML.");
+  console.log("The `recommendations` list is populated from the store, not the YAML.");
   runtime.close();
 }
 

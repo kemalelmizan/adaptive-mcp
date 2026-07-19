@@ -34,7 +34,7 @@ export interface ApprovalOptions {
  * rate). When `require_confirmation` is returned, the caller must obtain human
  * approval before proceeding.
  *
- * The package also writes an `approval` recommendation into the SSOT so the YAML
+ * The package also writes an `approval` recommendation into the store so the YAML
  * view reflects the current approval boundary for each tool.
  */
 export class ApprovalGate {
@@ -98,7 +98,7 @@ export class ApprovalGate {
   }
 }
 
-/** Helper: did the SSOT record cross the flaky threshold? */
+/** Helper: did the store record cross the flaky threshold? */
 export function isFlaky(record: ToolRecord | undefined, threshold: number): boolean {
   return !!record && record.stats.invocations > 0 && record.stats.failureRate >= threshold;
 }

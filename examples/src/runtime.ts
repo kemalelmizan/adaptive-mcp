@@ -10,7 +10,7 @@ import { Orchestrator } from "@adaptivemcp/orchestration";
 import { ApprovalGate, type ApprovalDecision } from "@adaptivemcp/approval";
 
 export interface AdaptiveRuntimeOptions {
-  /** SQLite path for the SSOT. Defaults to an in-memory database. */
+  /** SQLite path for the store. Defaults to an in-memory database. */
   dbPath?: string;
   /** Where the derived YAML view is written. */
   yamlPath?: string;
@@ -19,7 +19,7 @@ export interface AdaptiveRuntimeOptions {
 /**
  * Wires the Adaptive MCP packages into a single runtime:
  *
- *   tool call -> telemetry -> MemoryStore (SSOT) -> evaluation -> insights
+ *   tool call -> telemetry -> MemoryStore -> evaluation -> insights
  *                                                          -> routing      -> recommendations
  *                                                          -> orchestration-> recommendations
  *                                                          -> approval     -> gate + recommendation

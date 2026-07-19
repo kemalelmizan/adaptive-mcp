@@ -4,7 +4,7 @@ Tool execution events and observability for Adaptive MCP.
 
 `telemetry` is the **observe** step of the adaptation loop. It captures
 `ToolExecutionEvent`s, the atomic observations of tool executions, and folds
-them into the SSOT (`@adaptivemcp/memory`).
+them into the store (`@adaptivemcp/memory`).
 
 ## Install
 
@@ -41,7 +41,7 @@ recorder.complete(ctx, { durationMs: 1200, output: { ok: true }, cost: { amount:
 | `TelemetryRecorder` | Ergonomic surface for emitting observations. `record(event)`, `start(ctx, extra?)`, `complete(ctx, {durationMs?, output?, cost?}, extra?)`, `fail(ctx, {message, code?}, extra?)`. |
 | `TelemetryStore` | Store interface for events. |
 | `InMemoryTelemetryStore` | Default volatile store. |
-| `MemoryBackedTelemetryStore` | Folds events directly into a `MemoryStore` (the SSOT) via `recordExecution`. |
+| `MemoryBackedTelemetryStore` | Folds events directly into a `MemoryStore` (the store) via `recordExecution`. |
 | `queries` | Read-side helpers over stored events. |
 
 ## License
