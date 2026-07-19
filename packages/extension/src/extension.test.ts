@@ -108,5 +108,55 @@ describe("@adaptivemcp/extension", () => {
     expect(tool.inputSchema.required).toContain("tool");
     expect(tool.inputSchema.required).toContain("status");
     expect(tool.inputSchema.required).toContain("timestamp");
+    expect(tool.inputSchema.properties.client_id).toBeDefined();
+  });
+
+  it("reportObservation folds a valid report and updates stats", () => {
+    store.ensureTool("deploy_service", "srv");
+    const controller = new ExtensionController({ memory: store });
+    const res = controller.reportObservation({
+      tool: "deploy_service",
+      status: "failure",
+      duration_ms: 1200,
+      cost: 0.5,
+      timestamp: "2026-07-19T10:00:00Z",
+      client_id: "client-a",
+    });
+    expect(res.accepted).toBe(true);
+    const rec = store.getTool("deploy_service")!;
+    expect(rec.stats.invocations).toBe(1);
+    expect(rec.stats.failures).toBe(1);
+    expect(rec.stats.lastObservedAt).toBe("2026-07-19T10:00:00.000Z");
+    expect(rec.stats.totalCost).toBe(0.5);
+  });
+
+  it("reportObservation drops invalid fields and substitutes bad timestamp", () => {
+    store.ensureTool("search_customer", "crm");
+    const controller = new ExtensionController({ memory: store });
+    const res = controller.reportObservation({
+      tool: "search_customer",
+      status: "success",
+      duration_ms: -5, // invalid → dropped
+      cost: -1, // invalid → dropped
+      timestamp: "not-a-date", // invalid → now
+    });
+    expect(res.accepted).toBe(true);
+    const rec = store.getTool("search_customer")!;
+    expect(rec.stats.invocations).toBe(1);
+    expect(rec.stats.totalCost).toBe(0);
+    expect(rec.stats.lastObservedAt).not.toBe("not-a-date");
+  });
+
+  it("reportObservation is a no-op when foldReports is false", () => {
+    store.ensureTool("deploy_service", "srv");
+    const controller = new ExtensionController({ memory: store });
+    const res = controller.reportObservation({
+      tool: "deploy_service",
+      status: "success",
+      timestamp: "2026-07-19T10:00:00Z",
+      foldReports: false,
+    });
+    expect(res.accepted).toBe(false);
+    expect(store.getTool("deploy_service")!.stats.invocations).toBe(0);
   });
 });

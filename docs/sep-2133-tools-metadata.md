@@ -1,6 +1,6 @@
 # SEP: Adaptive MCP `tools-metadata` Resource
 
-- **Status**: Draft (proposal)
+- **Status**: Experimental / Incubating
 - **Type**: Extensions Track
 - **Extension identifier**: `dev.adaptivemcp/tools-metadata`
 - **Vendor prefix**: `dev.adaptivemcp` (reversed domain of `adaptivemcp.dev`, owned by the author)
@@ -161,14 +161,40 @@ via `tools/list` and call it only if present.
     "properties": {
       "tool": { "type": "string" },
       "status": { "type": "string", "enum": ["success", "failure", "error"] },
-      "duration_ms": { "type": "number" },
-      "cost": { "type": "number" },
-      "timestamp": { "type": "string", "format": "date-time" }
+      "duration_ms": { "type": "number", "minimum": 0 },
+      "cost": { "type": "number", "minimum": 0 },
+      "timestamp": { "type": "string", "format": "date-time" },
+      "client_id": { "type": "string", "description": "Optional caller identifier for per-client aggregation." }
     },
     "required": ["tool", "status", "timestamp"]
   }
 }
 ```
+
+**Server handling of reports.** Reports are client-supplied and MUST be validated
+by the server before being folded into the published view (see *Security
+considerations*). A conforming server:
+
+- MAY ignore reports entirely. A stateless server SHOULD still register the tool
+  but treat it as a no-op (a *conformance signal*); folding is **opt-in** via a
+  server flag (e.g. `foldReports`). When folding is disabled, the tool returns
+  `accepted: false` and does not mutate state.
+- MUST validate the payload: `duration_ms` and `cost` MUST be finite and
+  non-negative (otherwise dropped); `timestamp` MUST be a parseable ISO-8601
+  date (otherwise the server substitutes the receipt time so `stats.last_observed_at`
+  stays meaningful).
+- SHOULD `ensureTool` before recording so reports for not-yet-known tools are
+  accepted gracefully rather than rejected.
+- MAY record `client_id` (when supplied) so it can later support **per-client vs
+  aggregated** semantics (see *Multi-client semantics*).
+
+**Multi-client semantics.** When multiple clients report, the server decides
+whether to fold reports into a single shared view (aggregated stats) or to keep
+per-client views keyed by `client_id`. This extension does not mandate one model;
+the default reference impl aggregates all reports into the published view, while
+preserving `client_id` in the underlying event metadata for deployments that want
+per-client isolation. The value proposition (per-client learning vs cross-client
+aggregated signal) is a deployment choice, not a protocol requirement.
 SEP-2133 defines an `extensions` capability, but at the time of writing it is not
 yet present in the released `ClientCapabilities`/`ServerCapabilities` schemas (it
 is specified as a future addition). Until SDKs expose `capabilities.extensions`,
@@ -197,6 +223,35 @@ capabilities. An empty settings object indicates no per-extension configuration.
 - Absence of the resource does not change any tool's behavior.
 - A server that publishes only static `annotation` (no client reports) still
   provides useful suggestions; clients apply them without learned stats.
+
+## Maturity & graduation
+
+This extension is published as **Experimental / Incubating** under SEP-2133's
+incubation pathway. It is usable and has a reference implementation, but it is not
+yet on the track to **Final** for the following reason:
+
+- SEP-2133 requires *"at least one reference implementation in an official SDK
+  prior to review."* The current reference implementation lives in
+  `@adaptivemcp/extension` (the Adaptive MCP project), **not** in an official
+  MCP SDK (`@modelcontextprotocol/sdk`). Until a minimal conformance module is
+  contributed upstream into an official SDK, this SEP remains Experimental.
+
+**Graduation plan.** To reach Final, the following are planned (not yet done):
+
+1. Contribute a minimal `toolsMetadata` module to `@modelcontextprotocol/sdk`
+   (TypeScript) exporting: the `report_observation` tool definition, the
+   `renderToolsMetadata` / `toDocument` helpers, and the `experimental`
+   capability advertisement helper. `@adaptivemcp/extension` remains the
+   canonical, richer implementation; the SDK module is the minimal conformance
+   surface.
+2. Engage **Server Card** (MCP issue #1649) as the likely long-term home for
+   governance metadata — SEP-2133's own framing points there — so this
+   extension complements rather than duplicates core governance work.
+3. Publish a conformance test suite so other SDKs can self-verify against this
+   document.
+
+Until then, the extension is safe to adopt experimentally; breaking changes use a
+new extension identifier per *Backwards compatibility*.
 
 ## Backwards compatibility
 

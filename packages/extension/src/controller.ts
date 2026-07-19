@@ -65,6 +65,9 @@ export class ExtensionController {
    * The `report_observation` tool definition (the spec-legal client→server
    * report channel). Servers register this tool so clients can report
    * execution observations back. The server MAY ignore reports.
+   *
+   * `client_id` is optional but recommended: it lets the server distinguish
+   * reports from different clients for per-client vs aggregated semantics.
    */
   reportObservationTool(): {
     name: string;
@@ -79,13 +82,69 @@ export class ExtensionController {
         properties: {
           tool: { type: "string" },
           status: { type: "string", enum: ["success", "failure", "error"] },
-          duration_ms: { type: "number" },
-          cost: { type: "number" },
+          duration_ms: { type: "number", minimum: 0 },
+          cost: { type: "number", minimum: 0 },
           timestamp: { type: "string", format: "date-time" },
+          client_id: { type: "string", description: "Optional caller identifier for per-client aggregation." },
         },
         required: ["tool", "status", "timestamp"],
       },
     };
+  }
+
+  /**
+   * Validate and fold a `report_observation` payload into the store.
+   *
+   * Validation (per SEP §Security: client-supplied reports MUST be validated):
+   *  - `duration_ms` / `cost` must be finite and non-negative (else dropped);
+   *  - `timestamp` must be a parseable ISO-8601 date (else the current time is
+   *    used so `stats.last_observed_at` stays meaningful).
+   *
+   * The server MAY ignore reports entirely; callers gate this with
+   * `foldReports` (a stateless server passes `false` and this is a no-op).
+   * `client_id`, when present, is recorded in the event `metadata` so the
+   * server can later support per-client aggregation.
+   */
+  reportObservation(input: {
+    tool: string;
+    status: "success" | "failure" | "error";
+    duration_ms?: number;
+    cost?: number;
+    timestamp: string;
+    client_id?: string;
+    foldReports?: boolean;
+  }): { accepted: boolean; reason?: string } {
+    if (input.foldReports === false) {
+      return { accepted: false, reason: "server does not persist observations" };
+    }
+    const durationMs =
+      typeof input.duration_ms === "number" && Number.isFinite(input.duration_ms) && input.duration_ms >= 0
+        ? input.duration_ms
+        : undefined;
+    const cost =
+      typeof input.cost === "number" && Number.isFinite(input.cost) && input.cost >= 0
+        ? { amount: input.cost, currency: "USD" }
+        : undefined;
+    const timestamp = this.validTimestamp(input.timestamp);
+    const metadata: Record<string, unknown> = {};
+    if (input.client_id) metadata.client_id = input.client_id;
+
+    this.memory.recordExecution({
+      id: crypto.randomUUID(),
+      toolName: input.tool,
+      timestamp,
+      status: input.status === "success" ? "completed" : "failed",
+      durationMs,
+      cost,
+      metadata,
+    });
+    return { accepted: true };
+  }
+
+  /** Parse `timestamp`; fall back to now if it is not a valid ISO-8601 date. */
+  private validTimestamp(value: string): string {
+    const t = Date.parse(value);
+    return Number.isNaN(t) ? new Date().toISOString() : new Date(t).toISOString();
   }
 
   /** Apply a human annotation and re-sync the view. */
