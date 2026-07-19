@@ -19,7 +19,7 @@ govern themselves from real signal.
 
 - A learning layer over MCP primitives (tools, resources).
 - A derived `tools-metadata.yaml` view, recomputed from a SQLite source of truth.
-- SEP-2133 aligned (unofficial): a server-governed resource that clients read and report against.
+- An unofficial, server-governed resource: clients read it and report observations back.
 
 **What it is not**
 
@@ -155,10 +155,10 @@ the **existing** MCP primitives. Concretely:
 - MCP servers stay standard and stateless; Adaptive MCP adds a client-side
   learning loop and a single derived resource (`dev.adaptivemcp/tools-metadata`)
   that a server *may* publish to **govern** tool adaptation.
-- The approach follows the **Extensions Track** pattern described in
-  [SEP-2133](./docs/sep-2133-tools-metadata.md): a server-governed resource that
-  clients read and report against, degrading gracefully on any host that ignores
-  it.
+- The approach follows the **Extensions Track** pattern: a server-governed
+  resource that clients read and report against, degrading gracefully on any host
+  that ignores it. Our draft is at
+  [`docs/sep-2133-tools-metadata.md`](./docs/sep-2133-tools-metadata.md).
 - Because the `dev.adaptivemcp/` prefix is our own reversed domain, this is an
   **unofficial** extension. It requires no changes to MCP itself and works with
   any compliant MCP server/client.
@@ -202,7 +202,7 @@ human-readable projection consumed by out-of-band MCP clients.
 
 | Package | Responsibility |
 | --- | --- |
-| `@adaptivemcp/spec` | Extension identifiers (SEP-2133 `dev.adaptivemcp/` namespace), event schemas, shared types |
+| `@adaptivemcp/spec` | Extension identifiers (`dev.adaptivemcp/` reversed-domain namespace), event schemas, shared types |
 | `@adaptivemcp/memory` | SQLite SSOT store (`MemoryStore`) over `node:sqlite` |
 | `@adaptivemcp/telemetry` | `TelemetryRecorder` + memory-backed store + stat queries |
 | `@adaptivemcp/evaluation` | `Evaluator` emits `observed_failure_rate` / `avg_duration_ms` insights |
@@ -227,7 +227,7 @@ human-readable projection consumed by out-of-band MCP clients.
 - **Thin client** (`ThinClient.run`): consults the gate, then executes with the
   SSOT-derived retry policy (or default). Records the outcome back to the SSOT.
 
-## MCP extension spec integration (SEP-2133)
+## The `tools-metadata` extension resource
 
 MCP formalizes the **server** contract and lets the server **govern** how clients
 interact with its primitives, the same direction as the **Prompts** primitive
@@ -247,7 +247,7 @@ metadata. The proposal (draft) lives at
 | Scope | server governance (annotations, budgets, required approvals) + client-reported observations |
 
 The `dev.adaptivemcp/` prefix is the reversed domain of `adaptivemcp.dev` (owned
-by the author), satisfying SEP-2133's namespace rule. The client learning
+by the author), using the reversed-domain namespace convention. The client learning
 machinery (`@adaptivemcp/telemetry`, `evaluation`, `routing`, `orchestration`,
 `approval`, `thin-client`) is the **executor** of this policy, not part of the
 extension's server contract.
@@ -261,8 +261,8 @@ The `@modelcontextprotocol/sdk` (v1.29) includes `extensions` in its
 `ServerCapabilities` schema, so a server can advertise the extension in
 `initialize` via `capabilities.extensions`. Adaptive MCP's example server does
 **not** rely on that negotiation. It exposes the metadata as a plain
-resource via `server.registerResource(...)`, which is the SEP-2133-compliant
-approach and degrades gracefully on any host that ignores unknown resources:
+resource via `server.registerResource(...)`, the standard MCP approach that
+degrades gracefully on any host that ignores unknown resources:
 
 - the resource is registered directly via `server.registerResource(...)`;
 - the `EXTENSION_NAMESPACE` / `TOOLS_METADATA_EXTENSION` constants in
@@ -328,7 +328,7 @@ These five are the **published** set (see `PUBLISHABLE_PACKAGES` in
 
 | Package | Version | Install | Description |
 | --- | --- | --- | --- |
-| `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | `npm i @adaptivemcp/spec` | Extension identifiers (SEP-2133 `dev.adaptivemcp/` namespace), event schemas, and shared types. |
+| `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | `npm i @adaptivemcp/spec` | Extension identifiers (`dev.adaptivemcp/` reversed-domain namespace), event schemas, and shared types. |
 | `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | `npm i @adaptivemcp/memory` | Persistent operational knowledge backed by SQLite (`node:sqlite`), the SSOT. |
 | `@adaptivemcp/telemetry` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry) | `npm i @adaptivemcp/telemetry` | Tool execution events and observability (recorder + memory-backed store). |
 | `@adaptivemcp/evaluation` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation) | `npm i @adaptivemcp/evaluation` | Outcome scoring and feedback loops; emits `observed_failure_rate` / `avg_duration_ms` insights. |

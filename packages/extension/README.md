@@ -5,7 +5,7 @@ SSOT and serves it to MCP clients.
 
 This is the **one** package that touches the MCP protocol surface. It exposes a
 single resource, `dev.adaptivemcp/tools-metadata` (mime type `application/yaml`),
-as proposed in SEP-2133. A server publishes it to **govern** tool adaptation
+as proposed in our extension draft. A server publishes it to **govern** tool adaptation
 (annotations, budgets, required approvals); clients read it, learn, and report
 observations back.
 
@@ -53,7 +53,7 @@ console.log(uri === TOOLS_METADATA_EXTENSION); // true
 The `@modelcontextprotocol/sdk` (v1.29) includes `extensions` in its
 `ServerCapabilities` schema, so a server can advertise the extension via
 `capabilities.extensions`. The example server instead registers the resource
-directly via `server.registerResource(...)`, the SEP-2133-compliant approach
+directly via `server.registerResource(...)`, the standard MCP approach
 that degrades gracefully on any host that ignores unknown resources.
 
 ## License

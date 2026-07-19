@@ -3,8 +3,8 @@
 Extension identifiers, event schemas, and shared types for Adaptive MCP.
 
 This package is the dependency-light foundation every other `@adaptivemcp/*`
-package builds on. It owns the canonical identifiers (the SEP-2133
-`dev.adaptivemcp/` namespace), the `ToolExecutionEvent` observation schema, and
+package builds on. It owns the canonical identifiers (the
+`dev.adaptivemcp/` reversed-domain namespace), the `ToolExecutionEvent` observation schema, and
 the shared `ToolRecord` / `Insight` / `Recommendation` / `Annotation` types.
 
 > MCP sets the contract; Adaptive MCP learns the behavior. `spec` defines the
@@ -24,7 +24,7 @@ consume the published types).
 | Export | Purpose |
 | --- | --- |
 | `EXTENSION_NAMESPACE` | `"dev.adaptivemcp/"`: the reversed-domain namespace. |
-| `TOOLS_METADATA_EXTENSION` | `"dev.adaptivemcp/tools-metadata"`: the single proposed MCP extension (SEP-2133) resource identifier. |
+| `TOOLS_METADATA_EXTENSION` | `"dev.adaptivemcp/tools-metadata"`: the single proposed MCP extension resource identifier. |
 | `PACKAGE_IDENTIFIERS` | Internal reversed-domain identifiers for client-side packages (namespacing only, not advertised as extensions). |
 | `isExtensionIdentifier(value)` | Predicate: does a string start with `dev.adaptivemcp/`? |
 | `packageIdentifier(name)` | Resolve an internal package identifier by name. |
@@ -58,7 +58,7 @@ const event = createToolEvent(
 
 `spec` does **not** introduce new MCP primitives. It defines the identifiers and
 types used by `@adaptivemcp/extension`, which exposes a single
-`dev.adaptivemcp/tools-metadata` **resource** (SEP-2133 compliant: a server
+`dev.adaptivemcp/tools-metadata` **resource** (a server
 governs static policy, clients learn and report back). See
 [`docs/sep-2133-tools-metadata.md`](../../docs/sep-2133-tools-metadata.md).
 

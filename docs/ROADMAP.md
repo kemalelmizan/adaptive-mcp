@@ -69,7 +69,7 @@ MCP resource: dev.adaptivemcp/tools-metadata
 - Monorepo: pnpm workspaces, TypeScript strict, ESLint 9, Prettier, Vitest,
   Changesets.
 - `@adaptivemcp/spec`: `ToolRecord`, `ToolStats`, `Insight`, `Recommendation`,
-  `Annotation`, event schema, extension namespace `dev.adaptivemcp/` (SEP-2133 reversed-domain identifiers).
+  `Annotation`, event schema, extension namespace `dev.adaptivemcp/` (reversed-domain identifiers).
 - `@adaptivemcp/memory`: `MemoryStore` over `node:sqlite` with `tools` table.
 
 ## Phase 1: Observation to SSOT to View (complete)
@@ -108,7 +108,7 @@ stdio server/client example. The YAML view evolves automatically; the human
 
 ## Phase 4: Extension spec alignment (complete)
 
-- A **narrow, server-governed** MCP extension is proposed (SEP-2133): the
+- A **narrow, server-governed** MCP extension is proposed: the
   `dev.adaptivemcp/tools-metadata` resource a server publishes to **govern** tool
   adaptation (annotations, budgets, required approvals), with the client learning
   dynamically and reporting observations back. The draft lives at
