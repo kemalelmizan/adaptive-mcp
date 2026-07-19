@@ -1,5 +1,13 @@
 # @adaptivemcp/examples
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [f602c85]
+  - @adaptivemcp/extension@0.3.1
+  - @adaptivemcp/runtime@0.2.2
+
 ## 0.0.8
 
 ### Patch Changes
