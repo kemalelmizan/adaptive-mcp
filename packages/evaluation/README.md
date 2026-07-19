@@ -47,4 +47,4 @@ Insights emitted: `observed_failure_rate` and `avg_duration_ms`.
 
 ## License
 
-Part of the Adaptive MCP monorepo. See the root [`README.md`](../../README.md).
+Released under the [MIT License](../../LICENSE). Copyright (c) 2026 Kemal Elmizan.

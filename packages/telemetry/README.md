@@ -46,4 +46,4 @@ recorder.complete(ctx, { durationMs: 1200, output: { ok: true }, cost: { amount:
 
 ## License
 
-Part of the Adaptive MCP monorepo. See the root [`README.md`](../../README.md).
+Released under the [MIT License](../../LICENSE). Copyright (c) 2026 Kemal Elmizan.
