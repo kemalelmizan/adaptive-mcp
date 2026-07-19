@@ -95,7 +95,7 @@ The client should remain small:
 
 Business logic belongs in middleware packages.
 
-### Stateless servers
+### Stateless servers, governing clients
 
 Assume MCP servers are:
 
@@ -103,9 +103,15 @@ Assume MCP servers are:
 * stateless;
 * replaceable.
 
-Servers expose capabilities.
+Servers **govern**: they publish adaptive policy (annotations, cost budgets,
+required approvals) as the `dev.adaptivemcp/tools-metadata` resource, following
+the same control direction as the MCP Prompts primitive (server authors, client
+discovers & applies).
 
-Clients accumulate knowledge.
+Clients **execute and report**: they are the engine of dynamic learning
+(telemetry, evaluation, routing, orchestration, approval) and report
+observations back to the governing server. Clients accumulate knowledge; the
+server folds reports into the published view.
 
 ### Extensions over frameworks
 

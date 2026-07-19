@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createToolEvent, isExtensionIdentifier, extensionIdentifier } from "@adaptivemcp/spec";
+import { createToolEvent, isExtensionIdentifier, packageIdentifier, TOOLS_METADATA_EXTENSION } from "@adaptivemcp/spec";
 
 describe("@adaptivemcp/spec", () => {
   it("creates a tool event with defaults", () => {
@@ -11,7 +11,8 @@ describe("@adaptivemcp/spec", () => {
   });
 
   it("recognizes extension identifiers", () => {
-    expect(isExtensionIdentifier(extensionIdentifier("telemetry"))).toBe(true);
+    expect(isExtensionIdentifier(TOOLS_METADATA_EXTENSION)).toBe(true);
+    expect(isExtensionIdentifier(packageIdentifier("telemetry"))).toBe(true);
     expect(isExtensionIdentifier("mcp://tools")).toBe(false);
   });
 });

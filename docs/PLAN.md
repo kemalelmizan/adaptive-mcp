@@ -91,8 +91,13 @@ stdio server/client example. The YAML view evolves automatically; the human
 
 ## Phase 4 — Extension spec alignment (complete)
 
-- Extension identifiers follow SEP-2133 (`dev.adaptivemcp/<name>`). The derived
-  YAML view is advertised as the `dev.adaptivemcp/tools-metadata` resource.
+- A **narrow, server-governed** MCP extension is proposed (SEP-2133): the
+  `dev.adaptivemcp/tools-metadata` resource a server publishes to **govern** tool
+  adaptation (annotations, budgets, required approvals), with the client learning
+  dynamically and reporting observations back. The draft lives at
+  `docs/sep-2133-tools-metadata.md`.
+- The client-side learning packages use internal `dev.adaptivemcp/<name>`
+  identifiers for namespacing but are NOT advertised as MCP extensions.
 - See the main README for how to advertise the extension in `initialize`
   capabilities once the MCP SDK supports the `extensions` capability map.
 

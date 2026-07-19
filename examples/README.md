@@ -118,7 +118,7 @@ ADAPTIVE_YAML=tools-metadata.yaml node --experimental-sqlite dist/server.js
 
 - `@adaptivemcp/extension` — `ExtensionController.resourceText()` renders the YAML
   view; `resourceUri()` returns the stable `dev.adaptivemcp/tools-metadata` URI.
-- `@adaptivemcp/spec` — the `dev.adaptivemcp/` extension namespace (`EXTENSIONS.toolsMetadata`).
+- `@adaptivemcp/spec` — the `dev.adaptivemcp/` namespace; `TOOLS_METADATA_EXTENSION` is the proposed SEP-2133 resource identifier.
 
 ---
 

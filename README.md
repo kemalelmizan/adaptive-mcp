@@ -115,21 +115,28 @@ human-readable projection consumed by out-of-band MCP clients.
 
 ## MCP extension spec integration (SEP-2133)
 
-SEP-2133 (Final) identifies extensions by `{vendor-prefix}/{extension-name}`,
-where the vendor prefix SHOULD be a reversed domain name, advertised in the
-`initialize` request/response `capabilities.extensions` map. Adaptive MCP uses
-the reversed-domain namespace `dev.adaptivemcp/`:
+MCP formalizes the **server** contract and lets the server **govern** how clients
+interact with its primitives — the same direction as the **Prompts** primitive
+(server authors, client discovers & applies). Adaptive MCP adopts that pattern:
+the server **governs** tool adaptation by publishing policy, and the client is
+the **executor** that learns dynamically and reports observations back.
 
-| Extension | Identifier |
+Adaptive MCP proposes a **narrow, server-governed** extension — a single resource
+the server publishes so clients can read (and report against) learned tool
+metadata. The proposal (draft) lives at
+[`docs/sep-2133-tools-metadata.md`](./docs/sep-2133-tools-metadata.md).
+
+| Field | Value |
 | --- | --- |
-| Telemetry | `dev.adaptivemcp/telemetry` |
-| Insights | `dev.adaptivemcp/insights` |
-| Evaluation | `dev.adaptivemcp/evaluation` |
-| Memory | `dev.adaptivemcp/memory` |
-| Routing | `dev.adaptivemcp/routing` |
-| Orchestration | `dev.adaptivemcp/orchestration` |
-| Approval | `dev.adaptivemcp/approval` |
-| Tools metadata view | `dev.adaptivemcp/tools-metadata` |
+| URI | `dev.adaptivemcp/tools-metadata` |
+| MIME type | `application/yaml` |
+| Scope | server governance (annotations, budgets, required approvals) + client-reported observations |
+
+The `dev.adaptivemcp/` prefix is the reversed domain of `adaptivemcp.dev` (owned
+by the author), satisfying SEP-2133's namespace rule. The client learning
+machinery (`@adaptivemcp/telemetry`, `evaluation`, `routing`, `orchestration`,
+`approval`, `thin-client`) is the **executor** of this policy, not part of the
+extension's server contract.
 
 The derived YAML view is exposed as the MCP resource
 `dev.adaptivemcp/tools-metadata` (mime type `application/yaml`).
@@ -142,17 +149,21 @@ through the SDK's `initialize` capabilities. Until it does, Adaptive MCP
 degrades gracefully:
 
 - the resource is registered directly via `server.registerResource(...)`;
-- the `EXTENSION_NAMESPACE` / `EXTENSIONS` constants in `@adaptivemcp/spec`
-  provide the canonical identifiers for any host that wants to advertise them
-  once the SDK supports `capabilities.extensions`.
+- the `EXTENSION_NAMESPACE` / `TOOLS_METADATA_EXTENSION` constants in
+  `@adaptivemcp/spec` provide the canonical identifier for any host that wants to
+  advertise it once the SDK supports `capabilities.extensions`.
 
-When the SDK supports it, a host would include:
+When the SDK supports it, a server would advertise:
 
 ```ts
 // conceptual — pending SDK support for capabilities.extensions
-const client = await server.connect(transport, {
-  capabilities: { extensions: { "dev.adaptivemcp/tools-metadata": {} } },
-});
+const server = new McpServer({ name: "adaptive-example", version: "0.1.0" });
+server.registerResource("tools-metadata", "dev.adaptivemcp/tools-metadata", {
+  title: "Adaptive MCP Tools Metadata",
+  mimeType: "application/yaml",
+}, async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/yaml", text: runtime.extension.resourceText() }] }));
+// and, once supported, advertise in initialize:
+// capabilities: { extensions: { "dev.adaptivemcp/tools-metadata": {} } }
 ```
 
 ## How to build, test, and run
