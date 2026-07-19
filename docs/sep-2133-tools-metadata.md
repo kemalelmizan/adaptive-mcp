@@ -64,7 +64,8 @@ A supporting server registers one resource:
 
 | Field | Value |
 | --- | --- |
-| URI | `dev.adaptivemcp/tools-metadata` |
+| Extension identifier | `dev.adaptivemcp/tools-metadata` (scheme-less, per SEP-2133 naming) |
+| Resource URI (wire) | `dev.adaptivemcp://tools-metadata` (the identifier with a `://` URI scheme) |
 | Name | `tools-metadata` |
 | Title | `Adaptive MCP Tools Metadata` |
 | MIME type | `application/yaml` or `application/json` (content negotiation) |
@@ -96,6 +97,10 @@ tools:
         unit: <"calls"|"usd"|"tokens">?  # what `limit` counts
         window: <ISO-8601 duration>?     # e.g. "PT1H", "P1D" (RFC 3339 duration)
       require_approval: <boolean?>  # server SUGGESTS confirmation before call
+    # NOTE: `budget` and `require_approval` are part of the schema but are NOT
+    # yet emitted by the reference implementation (`@adaptivemcp/extension`);
+    # the server MAY populate them, but clients MUST treat them as optional and
+    # the reference impl currently omits them. See the SEP's implementation notes.
     insights:                # CLIENT-REPORTED: learned from observed behavior
       <key>:
         value: <any>
@@ -171,6 +176,16 @@ via `tools/list` and call it only if present.
 }
 ```
 
+**Two-store model.** There are two distinct stores. (1) The **client-owned local
+store** — the client learns from its own executions and improves *that client
+only*; this is the primary value of the extension and works with no server
+involvement. (2) The **server-published view** — a *separate, optional* cross-client
+signal the server MAY assemble by folding `report_observation` reports. A stateless
+server that ignores reports still publishes a useful static `annotation`, but its
+view does **not** reflect any single client's learned behavior. Adopters MUST NOT
+assume a stateless server's view reflects their local learning; the local store is
+the source of truth for that client.
+
 **Server handling of reports.** Reports are client-supplied and MUST be validated
 by the server before being folded into the published view (see *Security
 considerations*). A conforming server:
@@ -195,25 +210,26 @@ the default reference impl aggregates all reports into the published view, while
 preserving `client_id` in the underlying event metadata for deployments that want
 per-client isolation. The value proposition (per-client learning vs cross-client
 aggregated signal) is a deployment choice, not a protocol requirement.
-SEP-2133 defines an `extensions` capability, but at the time of writing it is not
-yet present in the released `ClientCapabilities`/`ServerCapabilities` schemas (it
-is specified as a future addition). Until SDKs expose `capabilities.extensions`,
-servers SHOULD advertise support through the existing `experimental` capability:
+SEP-2133 defines an `extensions` capability, and it is now part of the released
+wire schema (the TypeScript SDK exposes `extensions?: Record<string, object>` on
+both `ClientCapabilities` and `ServerCapabilities` as of `@modelcontextprotocol/sdk@1.29.0`).
+Servers SHOULD advertise support through the `extensions` capability:
 
 ```json
 {
   "capabilities": {
-    "experimental": {
+    "extensions": {
       "dev.adaptivemcp/tools-metadata": {}
     }
   }
 }
 ```
 
-When `capabilities.extensions` becomes available in a target SDK, servers SHOULD
-move the advertisement there. In all cases, the resource remains discoverable via
-`resources/list`, which is the mandatory fallback for clients that do not parse
-capabilities. An empty settings object indicates no per-extension configuration.
+For SDKs older than the SEP-2133 Final cut, servers MAY fall back to advertising
+under the existing `experimental` capability. In all cases, the resource remains
+discoverable via `resources/list`, which is the mandatory fallback for clients
+that do not parse capabilities. An empty settings object indicates no per-extension
+configuration.
 
 ### Graceful degradation
 

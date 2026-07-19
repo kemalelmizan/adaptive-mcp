@@ -11,7 +11,13 @@ import { TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
  */
 export async function startServer(dbPath?: string, yamlPath?: string): Promise<McpServer> {
   const runtime = new AdaptiveRuntime({ dbPath, yamlPath });
-  const server = new McpServer({ name: "adaptive-example-server", version: "0.1.0" });
+  const server = new McpServer(
+    { name: "adaptive-example-server", version: "0.1.0" },
+    // Advertise the Adaptive MCP extension via the SEP-2133 `extensions`
+    // capability (present in @modelcontextprotocol/sdk >= 1.29.0). Clients that
+    // don't parse capabilities still discover the resource via `resources/list`.
+    { capabilities: { extensions: { "dev.adaptivemcp/tools-metadata": {} } } },
+  );
 
   // Tool: deploy a service (high-risk, slow).
   server.registerTool(
