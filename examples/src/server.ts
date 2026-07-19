@@ -2,7 +2,19 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { AdaptiveRuntime } from "@adaptivemcp/runtime";
-import { TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
+import { TOOLS_METADATA_RESOURCE_URI, riskToToolAnnotations, type RiskLevel } from "@adaptivemcp/spec";
+
+/**
+ * Merge an Adaptive MCP static `risk` level into a tool's core `annotations`
+ * (Strategy 2 of the governance hybrid, doubts.md §11): the host's native,
+ * already-parsed risk signal carries the risk instead of a parallel field.
+ */
+function withRisk(
+  annotations: Record<string, unknown>,
+  risk?: RiskLevel,
+): Record<string, unknown> {
+  return { ...annotations, ...riskToToolAnnotations(risk) };
+}
 
 /**
  * A minimal MCP server that exposes two application-level tools and the
@@ -19,14 +31,18 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
     { capabilities: { extensions: { "dev.adaptivemcp/tools-metadata": {} } } },
   );
 
-  // Tool: deploy a service (high-risk, slow).
+  // Tool: deploy a service (high-risk, slow). Static risk is projected onto
+  // core Tool.annotations via riskToToolAnnotations (Strategy 2 demo).
   server.registerTool(
     "deploy_service",
     {
       title: "Deploy Service",
       description: "Deploy a service to the target environment.",
       inputSchema: { environment: z.string(), version: z.string() },
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      annotations: withRisk(
+        { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+        "high",
+      ),
     },
     async ({ environment, version }) => {
       // Simulate occasional failure.
@@ -50,14 +66,18 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
     },
   );
 
-  // Tool: search a customer (low-risk, fast).
+  // Tool: search a customer (low-risk, fast). Static risk projected onto core
+  // Tool.annotations (Strategy 2 demo).
   server.registerTool(
     "search_customer",
     {
       title: "Search Customer",
       description: "Look up a customer by id.",
       inputSchema: { customerId: z.string() },
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      annotations: withRisk(
+        { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+        "low",
+      ),
     },
     async ({ customerId }) => {
       const durationMs = 20 + Math.floor(Math.random() * 60);

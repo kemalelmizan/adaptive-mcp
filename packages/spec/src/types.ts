@@ -60,7 +60,49 @@ export interface Insight {
 export type RiskLevel = "low" | "medium" | "high";
 
 /**
+ * Core MCP `ToolAnnotations` (the `annotations` object on a tool in
+ * `tools/list`). Adaptive MCP maps its *static* risk onto these native hints so
+ * hosts don't have to learn a parallel taxonomy. See `riskToToolAnnotations`.
+ */
+export interface ToolAnnotationsLike {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
+/**
+ * Map an Adaptive MCP static `risk` level onto core MCP `ToolAnnotations`.
+ *
+ * The MCP spec says clients MUST treat `ToolAnnotations` as untrusted unless
+ * from a trusted server, so this is advisory — but it rides the host's native,
+ * already-parsed risk signal (higher uptake than a custom `risk` field). The
+ * server-published tools-metadata resource keeps `risk` for the *learned/
+ * observed* dimension only (e.g. "observed flaky / costly in practice"), which
+ * core hints cannot express. See doubts.md §10/§11 (Strategy 2 of the hybrid).
+ */
+export function riskToToolAnnotations(risk?: RiskLevel): ToolAnnotationsLike {
+  switch (risk) {
+    case "high":
+      return { destructiveHint: true, openWorldHint: true };
+    case "medium":
+      return { idempotentHint: false, openWorldHint: true };
+    case "low":
+      return { readOnlyHint: true };
+    default:
+      return {};
+  }
+}
+
+/**
  * Written metadata attached to a tool by a human or operator.
+ *
+ * `risk` here is the *static* operator-assigned risk. Per the governance hybrid
+ * (doubts.md §11), static risk SHOULD be projected onto core `Tool.annotations`
+ * via `riskToToolAnnotations` rather than emitted in the resource; the resource's
+ * `annotation.risk` is reserved for learned/observed risk. `owner`/`tags`/
+ * `description` are non-governance metadata with no core-MCP equivalent.
  */
 export interface Annotation {
   toolName: string;

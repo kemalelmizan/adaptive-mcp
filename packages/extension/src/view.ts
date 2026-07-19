@@ -13,6 +13,13 @@ export interface ToolMetadataView {
   server?: string;
   /** Static, human-written annotation. */
   annotation: {
+    /**
+     * Learned/observed risk only. Per the governance hybrid (doubts.md §11),
+     * *static* operator risk SHOULD be projected onto core `Tool.annotations`
+     * via `riskToToolAnnotations`, not emitted here, to avoid duplicating the
+     * protocol's native risk signal. This field carries observed risk (e.g.
+     * "flaky in practice") that core hints cannot express.
+     */
     risk?: string;
     owner?: string;
     tags?: string[];

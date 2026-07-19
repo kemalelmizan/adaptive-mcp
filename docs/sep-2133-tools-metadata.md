@@ -282,6 +282,24 @@ schema MUST use a new extension identifier (e.g.
 - `recommendations` and `require_approval` are suggestions; enforcement is the
   client's responsibility and is explicitly out of scope for this extension. A
   client MAY ignore any field without consequence.
+- **Precedence (governance overlap with the host consent UI).** Consent is a
+  client/host responsibility per the MCP Tools spec ("there SHOULD always be a
+  human in the loop"; clients SHOULD prompt on sensitive operations). Adaptive
+  MCP's `require_approval` / `budget` are *server suggestions* about when that
+  gate should fire, not an enforcement mechanism. The precedence is therefore:
+
+  ```
+  host consent UI  >  Adaptive MCP suggestion  >  nothing
+  ```
+
+  - The host MAY always prompt, regardless of `require_approval`.
+  - `require_approval: true` is a request the host SHOULD honor but MAY ignore.
+  - `require_approval: false` / `budget` NEVER lowers a gate the host already
+    applies.
+  - Static `risk` SHOULD be projected onto core `Tool.annotations` (via
+    `riskToToolAnnotations`) rather than emitted as a parallel field, to avoid
+    duplicating the protocol's native (untrusted) risk signal. The resource's
+    `annotation.risk` is reserved for learned/observed risk. See doubts.md §10/§11.
 - Observation reports are client-supplied and MUST be validated by the server
   before being folded into the published view.
 - **Parser safety.** When serving or consuming the YAML form, implementations
