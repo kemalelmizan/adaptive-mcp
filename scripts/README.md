@@ -11,7 +11,7 @@ to `pnpm` / `npm` / `git` and never couple to a specific CI provider.
 | Script | Purpose |
 | --- | --- |
 | `scripts/build.ts` | Build the publishable `@adaptivemcp/*` packages. `--check` fails if the build leaves the git tree dirty. |
-| `scripts/release.ts` | Version (Changesets) + build + publish the core subset to npm. `--dry-run` skips publish; `--no-version` publishes as-is; `--tag` also commits the bump + pushes the tag. |
+| `scripts/release.ts` | Version (Changesets) + build + publish the core subset to npm. `--dry-run` skips publish; `--no-version` publishes as-is; `--tag` also commits the bump + pushes the tag; `--otp <CODE>` (or `NPM_OTP`) supplies the npm 2FA one-time password. |
 | `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, and push `--follow-tags`. `--dry-run` previews; `--no-push` keeps it local. |
 | `scripts/maintenance.ts` | Repo hygiene: `status`, `stale-dist`, `check` (build+lint+test), `outdated`. |
 
@@ -44,6 +44,7 @@ node scripts/maintenance.ts outdated  # pnpm outdated for the workspace
 node scripts/release.ts --dry-run     # version + build, no publish
 node scripts/release.ts               # publish to npm (needs NPM_TOKEN)
 node scripts/release.ts --tag         # publish + commit bump + push tag
+node scripts/release.ts --tag --otp <CODE>  # same, with npm 2FA one-time password
 node scripts/version-release.ts       # commit bump + tag + push (after publish)
 node scripts/version-release.ts --no-push # commit + tag locally, no push
 ```
@@ -64,6 +65,9 @@ It never commits the version bump or pushes tags by default — that is left to
 `--tag` to `release.ts` to do both in one flow. See `docs/PLAN.md` for the full
 step-by-step publish walkthrough.
 
-> Requires `NPM_TOKEN` (org publish rights) in the environment. Use
-> `--dry-run` to validate the version bump and emitted `dist/` without
-> publishing.
+> Requires `NPM_TOKEN` (org publish rights) in the environment. If the npm
+> account has **2FA for publishing**, pass `--otp <CODE>` (or `NPM_OTP`) — the
+> script cannot prompt for the one-time password. Use `--dry-run` to validate the
+> version bump and emitted `dist/` without publishing. Full walkthrough (when to
+> commit/push, npm-vs-GitHub versioning, recovery from interrupted runs) is in
+> [`docs/RELEASE.md`](../docs/RELEASE.md).

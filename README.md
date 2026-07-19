@@ -293,6 +293,7 @@ dependency-light and follow the same boundaries as the architecture above.
 These five are the **published** set (see `PUBLISHABLE_PACKAGES` in
 [`scripts/lib/workspace.ts`](./scripts/lib/workspace.ts)), released with the
 [`scripts/release.ts`](./scripts/release.ts) flow (see
+[`docs/RELEASE.md`](./docs/RELEASE.md) for the full release runbook, and
 [`docs/PLAN.md`](./docs/PLAN.md) → *Phase 6 — Publish to npm*).
 
 | Package | Version | Install | Description |

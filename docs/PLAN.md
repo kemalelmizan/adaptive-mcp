@@ -244,7 +244,7 @@ node -e "import('./dist/client.js').then(m=>m.runClient())"  # real stdio client
 - [ ] PR opened, file renamed to PR number, AI disclosure added (Steps 3–4)
 - [ ] Sponsor identified and tagged (Step 4)
 
-## Phase 6 — Publish the packages to npm (walkthrough)
+## Phase 6 — Publish the packages to npm
 
 > Scope: publish the **core subset** under the `@adaptivemcp` npm organization
 > (`https://www.npmjs.com/org/adaptivemcp`). The publishable set is defined once
@@ -256,8 +256,13 @@ node -e "import('./dist/client.js').then(m=>m.runClient())"  # real stdio client
 >
 > **Status:** the five core packages are **published** (initial versions:
 > `spec` 0.1.0, `memory` 0.2.0, `telemetry` 0.1.0, `evaluation` 0.2.0,
-> `extension` 0.2.0). This walkthrough remains the canonical flow for future
-> releases.
+> `extension` 0.2.0; current release `v0.2.1`).
+>
+> The full, self-contained walkthrough — including **when to commit / when to
+> push, npm-vs-GitHub versioning, the 2FA one-time-password flow, and what to
+> watch out for** — now lives in **[`docs/RELEASE.md`](./RELEASE.md)**. Read
+> that before cutting a release. The condensed steps are kept below for
+> reference.
 
 ### Prerequisites
 
@@ -308,9 +313,16 @@ outputs. Nothing is pushed or published.
 ### Step 4 — Publish
 
 ```bash
-export NPM_TOKEN=...        # org-scoped publish token
-node scripts/release.ts     # version + build + npm publish (--access public)
+source .env                 # provides NPM_TOKEN
+node scripts/release.ts --tag --otp <CODE>   # version + build + publish + commit + tag + push
 ```
+
+`--tag` makes the script hand off to `version-release.ts` at the end, so the
+version bump is committed and the `vX.Y.Z` tag is pushed in one flow. If your npm
+account has **2FA for publishing** (it does, for `@adaptivemcp`), pass the
+one-time password via `--otp <CODE>` or the `NPM_OTP` env var — the non-interactive
+script cannot prompt for it. Get a fresh code from your authenticator / the npm
+auth URL, then run promptly (the code is single-use and time-limited).
 
 What the script does, in order:
 
@@ -323,10 +335,15 @@ What the script does, in order:
    `extension`).
 
 `--ignore-scripts` keeps publish hermetic (no postinstall in the published
-tarball). The script never commits the version bump or pushes tags — that is
-left to the caller (e.g. a Changesets release CI workflow) to keep history clean.
+tarball). Without `--tag`, the script never commits or pushes — that is left to
+`version-release.ts` (or you, manually) to keep history clean.
 
-### Step 5 — Record the release
+> Prefer the one-shot `--tag` flow. If you want to verify on npm *before*
+> creating history, run `node scripts/release.ts --otp <CODE>` (publish only),
+> inspect npm, then `node scripts/version-release.ts`. Full detail in
+> [`docs/RELEASE.md`](./RELEASE.md).
+
+### Step 5 — Record the release (only if you did NOT use `--tag`)
 
 ```bash
 git add -A && git commit -m "release: @adaptivemcp/* vX.Y.Z"
@@ -334,7 +351,8 @@ git tag -a vX.Y.Z -m "release: @adaptivemcp/* vX.Y.Z"
 git push --follow-tags
 ```
 
-The `release.ts` output prints the version; mirror it in the commit/tag message.
+With `--tag` this is already done by `version-release.ts`. The `release.ts`
+output prints the version; mirror it in the commit/tag message.
 
 ### Step 6 — Verify on npm
 
@@ -364,3 +382,7 @@ The `release.ts` output prints the version; mirror it in the commit/tag message.
   tree; ad-hoc `npm publish` can skip the version bump or break ordering.
 - **`--no-version`** publishes the current versions as-is (skips `changeset
   version`) — only for re-publishing an already-bumped state.
+- **2FA / OTP:** with publishing 2FA on, pass `--otp <CODE>` (or `NPM_OTP`). If a
+  run dies after consuming the changeset, commit the bump (`git add -A && git
+  commit -m "release: @adaptivemcp/* vX.Y.Z (pre-publish)"`) so the tree is clean,
+  then re-run — already-published versions are skipped. See `docs/RELEASE.md`.
