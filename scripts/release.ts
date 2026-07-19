@@ -17,10 +17,12 @@
  *   node scripts/release.ts            # full version + build + publish
  *   node scripts/release.ts --dry-run  # build + version, but do not publish
  *   node scripts/release.ts --no-version # skip changeset version (publish as-is)
+ *   node scripts/release.ts --tag      # also commit the bump + push tag (via version-release.ts)
  *
  * Requires: `NPM_TOKEN` in the environment (or a logged-in npm session) and
- * network access to the registry. Never commits the version bump — that is left
- * to the caller (e.g. a Changesets release CI workflow) to keep history clean.
+ * network access to the registry. By default it never commits the version bump
+ * — that is left to `scripts/version-release.ts` (or a Changesets release CI
+ * workflow) to keep history clean. Pass `--tag` to do it in one flow.
  */
 
 import {
@@ -35,6 +37,7 @@ import { join } from "node:path";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const SKIP_VERSION = process.argv.includes("--no-version");
+const TAG = process.argv.includes("--tag");
 
 function main(): void {
   console.log(`[release] registry: ${npmRegistry()}`);
@@ -71,6 +74,12 @@ function main(): void {
   }
 
   console.log("[release] done. Remember to push the version commit + tags.");
+
+  // 5. Optionally commit the version bump and push the tag.
+  if (TAG) {
+    console.log("[release] --tag: committing version bump + pushing tag");
+    run("node", [join(REPO_ROOT, "scripts", "version-release.ts")], { cwd: REPO_ROOT });
+  }
 }
 
 main();

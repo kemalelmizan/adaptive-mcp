@@ -253,6 +253,11 @@ node -e "import('./dist/client.js').then(m=>m.runClient())"  # real stdio client
 > `orchestration`, `approval`, `thin-client`, `examples`, and `apps` stay
 > private. All distribution is driven by the `scripts/` runners — there is no
 > manual `npm publish` by hand.
+>
+> **Status:** the five core packages are **published** (initial versions:
+> `spec` 0.1.0, `memory` 0.2.0, `telemetry` 0.1.0, `evaluation` 0.2.0,
+> `extension` 0.2.0). This walkthrough remains the canonical flow for future
+> releases.
 
 ### Prerequisites
 

@@ -284,27 +284,24 @@ node dist/scenarios/adaptive.js   # full stack: routing + orchestration + approv
 
 ## npm packages
 
-Adaptive MCP will publish its core libraries under the **[`@adaptivemcp` npm
+Adaptive MCP publishes its core libraries under the **[`@adaptivemcp` npm
 organization](https://www.npmjs.com/org/adaptivemcp)**. The packages are
 dependency-light and follow the same boundaries as the architecture above.
 
-> Note: these packages are **not yet published** to npm. The release flow is
-documented in [`docs/PLAN.md`](./docs/PLAN.md) → *Phase 6 — Publish to npm*.
+### Published (`@adaptivemcp/*)`)
 
-### Publishable (`@adaptivemcp/*)`)
-
-These five are the **publishable** set (see `PUBLISHABLE_PACKAGES` in
-[`scripts/lib/workspace.ts`](./scripts/lib/workspace.ts)). They will be released
-with the [`scripts/release.ts`](./scripts/release.ts) flow (see
+These five are the **published** set (see `PUBLISHABLE_PACKAGES` in
+[`scripts/lib/workspace.ts`](./scripts/lib/workspace.ts)), released with the
+[`scripts/release.ts`](./scripts/release.ts) flow (see
 [`docs/PLAN.md`](./docs/PLAN.md) → *Phase 6 — Publish to npm*).
 
-| Package | Description |
-| --- | --- |
-| `@adaptivemcp/spec` | Extension identifiers (SEP-2133 `dev.adaptivemcp/` namespace), event schemas, and shared types. |
-| `@adaptivemcp/memory` | Persistent operational knowledge backed by SQLite (`node:sqlite`) — the SSOT. |
-| `@adaptivemcp/telemetry` | Tool execution events and observability (recorder + memory-backed store). |
-| `@adaptivemcp/evaluation` | Outcome scoring and feedback loops; emits `observed_failure_rate` / `avg_duration_ms` insights. |
-| `@adaptivemcp/extension` | Derives the YAML `tools-metadata` view from the SSOT and serves it as the `dev.adaptivemcp/tools-metadata` MCP resource. |
+| Package | Version | Install | Description |
+| --- | --- | --- | --- |
+| `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | `npm i @adaptivemcp/spec` | Extension identifiers (SEP-2133 `dev.adaptivemcp/` namespace), event schemas, and shared types. |
+| `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | `npm i @adaptivemcp/memory` | Persistent operational knowledge backed by SQLite (`node:sqlite`) — the SSOT. |
+| `@adaptivemcp/telemetry` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry) | `npm i @adaptivemcp/telemetry` | Tool execution events and observability (recorder + memory-backed store). |
+| `@adaptivemcp/evaluation` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation) | `npm i @adaptivemcp/evaluation` | Outcome scoring and feedback loops; emits `observed_failure_rate` / `avg_duration_ms` insights. |
+| `@adaptivemcp/extension` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension) | `npm i @adaptivemcp/extension` | Derives the YAML `tools-metadata` view from the SSOT and serves it as the `dev.adaptivemcp/tools-metadata` MCP resource. |
 
 ### Private (not published)
 

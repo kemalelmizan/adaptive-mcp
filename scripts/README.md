@@ -11,13 +11,14 @@ to `pnpm` / `npm` / `git` and never couple to a specific CI provider.
 | Script | Purpose |
 | --- | --- |
 | `scripts/build.ts` | Build the publishable `@adaptivemcp/*` packages. `--check` fails if the build leaves the git tree dirty. |
-| `scripts/release.ts` | Version (Changesets) + build + publish the core subset to npm. `--dry-run` skips publish; `--no-version` publishes as-is. |
+| `scripts/release.ts` | Version (Changesets) + build + publish the core subset to npm. `--dry-run` skips publish; `--no-version` publishes as-is; `--tag` also commits the bump + pushes the tag. |
+| `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, and push `--follow-tags`. `--dry-run` previews; `--no-push` keeps it local. |
 | `scripts/maintenance.ts` | Repo hygiene: `status`, `stale-dist`, `check` (build+lint+test), `outdated`. |
 
 ## Publishable packages
 
 The core subset is distributed to npm under the **`@adaptivemcp`**
-organization once published (`https://www.npmjs.com/org/adaptivemcp`). The set is defined once
+organization (`https://www.npmjs.com/org/adaptivemcp`). The set is defined once
 in `PUBLISHABLE_PACKAGES` (`scripts/lib/workspace.ts`):
 
 - `@adaptivemcp/spec`
@@ -42,6 +43,9 @@ node scripts/maintenance.ts check     # build + lint + test gate
 node scripts/maintenance.ts outdated  # pnpm outdated for the workspace
 node scripts/release.ts --dry-run     # version + build, no publish
 node scripts/release.ts               # publish to npm (needs NPM_TOKEN)
+node scripts/release.ts --tag         # publish + commit bump + push tag
+node scripts/version-release.ts       # commit bump + tag + push (after publish)
+node scripts/version-release.ts --no-push # commit + tag locally, no push
 ```
 
 ## Release flow (coordinated with `docs/PLAN.md` → Phase 6)
@@ -55,8 +59,9 @@ node scripts/release.ts               # publish to npm (needs NPM_TOKEN)
 5. `npm publish --access public --ignore-scripts` each package in dependency
    order (`spec` → `memory` → `telemetry` → `evaluation` → `extension`).
 
-It never commits the version bump or pushes tags — that is left to the caller
-(e.g. a Changesets release CI workflow). See `docs/PLAN.md` for the full
+It never commits the version bump or pushes tags by default — that is left to
+`scripts/version-release.ts` (or a Changesets release CI workflow). Pass
+`--tag` to `release.ts` to do both in one flow. See `docs/PLAN.md` for the full
 step-by-step publish walkthrough.
 
 > Requires `NPM_TOKEN` (org publish rights) in the environment. Use
