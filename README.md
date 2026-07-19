@@ -11,26 +11,25 @@ govern themselves from real signal.
 > **Status:** experimental. The packages are published, but the API may shift
 > before 1.0.
 
-> **Talk: MCP Dev Summit Seoul 2026.** Kemal Elmizan introduces Adaptive MCP in
+> **Talk: MCP Dev Summit Seoul 2026.** I introduced this project in the talk
 > *"Self-Improving MCP Agents"* at the MCP Dev Summit in Seoul (2026).
 > [Session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
 
 **What it is**
 
-- A learning layer over MCP primitives (tools, resources).
-- A derived `tools-metadata.yaml` view, recomputed from a SQLite source of truth.
-- An unofficial, server-governed resource: clients read it and report observations back.
+- A learning layer over MCP primitives (tools, resources)
+- A derived `tools-metadata.yaml` view, recomputed from a SQLite source of truth
+- An unofficial, server-governed resource: clients read it and report observations back
 
 **What it is not**
 
-- Not a new protocol, and not a replacement for MCP tools.
-- Not a fork of the MCP SDK.
-- Not an official MCP extension. We use our own `dev.adaptivemcp/` namespace.
+- Not a new protocol, and not a replacement for MCP tools
+- Not a fork of the MCP SDK
+- Not an official MCP extension
 
 ## Quick start
 
-Requires **Node 26** (the `node:sqlite` module is available without the
-`--experimental-sqlite` flag) and **pnpm 11.14.0**.
+Requires **Node 26** and **pnpm 11.14.0**
 
 ```bash
 git clone https://github.com/kemalelmizan/adaptive-mcp

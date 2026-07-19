@@ -1,8 +1,7 @@
 # Contributing to Adaptive MCP
 
 Thanks for your interest. Adaptive MCP is a small, opinionated project, so the
-bar for contributions is mostly: keep it narrow, keep it honest, and don't
-reinvent MCP.
+bar for contributions is mostly: keep it narrow and keep it honest.
 
 ## What this project is
 
