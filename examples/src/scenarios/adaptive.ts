@@ -5,7 +5,7 @@ import { runTool, section } from "./shared.js";
 /**
  * Scenario: adaptive behavior across the full stack.
  *
- * Demonstrates the four planned packages wired into the runtime:
+ * Demonstrates the four published executor packages wired into the runtime:
  *   - routing:        model selection + budget warnings
  *   - orchestration:  retry policy for flaky tools
  *   - approval:       enforcement gate for high-risk tools
