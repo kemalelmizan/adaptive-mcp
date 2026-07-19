@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/spec",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Extension identifiers, event schemas, and shared types for Adaptive MCP.",
   "license": "MIT",
   "type": "module",

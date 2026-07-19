@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/runtime",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Batteries-included Adaptive MCP runtime: wires telemetry, evaluation, routing, orchestration, approval, and the extension into one transport-agnostic loop.",
   "license": "MIT",
   "type": "module",
