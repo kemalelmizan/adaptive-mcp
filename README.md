@@ -1,11 +1,10 @@
 # Adaptive MCP
 
-Adaptive MCP is a runtime ecosystem that learns behavior around MCP primitives.
-It does **not** replace MCP, redefine tools, or introduce new protocol
-abstractions. Instead it observes how tools are used, attaches metadata to
-existing MCP primitives, and helps runtimes adapt over time.
-
-> MCP standardizes capabilities. Adaptive MCP learns behavior.
+Adaptive MCP is a runtime ecosystem that learns how MCP tools are actually used —
+and helps runtimes adapt to that behavior over time. It does **not** replace MCP,
+redefine tools, or introduce new protocol abstractions. Instead it observes tool
+usage, attaches learned metadata to existing MCP primitives, and lets clients
+govern themselves from real signal.
 
 > **Unofficial project.** Adaptive MCP is an independent, community experiment.
 > It is **not** affiliated with, endorsed by, or maintained by the Model Context
@@ -41,9 +40,10 @@ the **existing** MCP primitives. Concretely:
 
 ## Design constraints
 
-- **MCP standardizes capabilities; Adaptive MCP learns behavior.** The system
-  answers *"what have we learned about how models and humans use those
-  capabilities?"* — not *"what can the model do?"*.
+- **MCP sets the contract; Adaptive MCP learns the behavior.** MCP answers *"what
+  can the model do?"*; Adaptive MCP answers *"what have we learned about how those
+  capabilities are actually used?"* — and turns that into metadata, not new
+  primitives.
 - **Enrich, don't replace.** No first-class `adaptiveTool`, `adaptiveSkill`,
   `adaptiveIntent`, or `adaptiveWorkflow` concepts. Adaptive MCP operates on MCP
   primitives (tools, resources) as intentional boundaries.
@@ -80,6 +80,70 @@ MCP resource: dev.adaptivemcp/tools-metadata
 Data always flows in one direction: **event → MemoryStore (SSOT) → derived
 YAML view**. The YAML is never edited directly; it is recomputed from the SSOT
 whenever metadata changes.
+
+## Quick start
+
+Requires **Node 26** (the `node:sqlite` module is available without the
+`--experimental-sqlite` flag) and **pnpm 11.14.0**.
+
+```bash
+git clone https://github.com/kemalelmizan/adaptive-mcp
+cd adaptive-mcp
+pnpm install
+pnpm -r run build
+```
+
+### See the adaptation loop in one command
+
+The whole loop — observe → evaluate → derive view — runs locally with no server
+or transport. From the repo root:
+
+```bash
+cd examples
+pnpm quickstart
+```
+
+That runs [`examples/src/quickstart.ts`](./examples/src/quickstart.ts), which
+feeds a few `deploy_service` calls through the learning loop and prints the
+derived `tools-metadata.yaml` view:
+
+```ts
+import { MemoryStore } from "@adaptivemcp/memory";
+import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/telemetry";
+import { Evaluator } from "@adaptivemcp/evaluation";
+import { ExtensionController } from "@adaptivemcp/extension";
+
+const memory = new MemoryStore();                                   // SQLite SSOT
+const telemetry = new TelemetryRecorder({ store: new MemoryBackedTelemetryStore(memory) });
+const evaluator = new Evaluator({ memory });
+const extension = new ExtensionController({ memory, yamlPath: "tools-metadata.yaml" });
+
+for (let i = 0; i < 20; i++) {
+  telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 900 });
+}
+evaluator.evaluateAll();   // SSOT stats → insights → SSOT
+extension.sync();          // SSOT → tools-metadata.yaml (and the MCP resource text)
+console.log(extension.resourceText());
+```
+
+### Run the MCP server + client example
+
+```bash
+cd examples
+pnpm client     # real stdio client that spawns the server and reads the resource
+pnpm server     # or start the server alone (blocks on stdio)
+```
+
+### Run the scenarios
+
+```bash
+cd examples
+pnpm scenario            # improvement over time (healthy → flaky → fixed)
+pnpm scenario:ssot       # SSOT is the source of truth; YAML is derived
+pnpm scenario:insights   # telemetry → evaluation → insights
+pnpm scenario:annotation # human annotation vs. learned insight
+pnpm scenario:adaptive   # full stack: routing + orchestration + approval + thin-client
+```
 
 ## Data model
 
@@ -230,89 +294,6 @@ automatically from a SQLite single source of truth (SSOT).
     thin-client.
 - **Sample YAML views** — committed, illustrative examples in
   [`examples/yaml/`](./examples/yaml).
-
-## Quick start
-
-Requires **Node 26** (the `node:sqlite` module is available without the
-`--experimental-sqlite` flag) and
-**pnpm 11.14.0**.
-
-```bash
-git clone https://github.com/kemalelmizan/adaptive-mcp
-cd adaptive-mcp
-pnpm install
-pnpm -r run build
-```
-
-### Watch the adaptation loop in 15 lines
-
-The whole loop — observe → evaluate → derive view — runs locally with
-`AdaptiveRuntime` (a demo helper in `examples/`, not a published package):
-
-```ts
-// Compose the published pieces directly:
-import { MemoryStore } from "@adaptivemcp/memory";
-import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/telemetry";
-import { Evaluator } from "@adaptivemcp/evaluation";
-import { ExtensionController } from "@adaptivemcp/extension";
-
-const memory = new MemoryStore();                       // SQLite SSOT
-const telemetry = new TelemetryRecorder({ store: new MemoryBackedTelemetryStore(memory) });
-const evaluator = new Evaluator({ memory });
-const extension = new ExtensionController({ memory, yamlPath: "tools-metadata.yaml" });
-
-for (let i = 0; i < 20; i++) {
-  telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 900, cost: { amount: 0.002, currency: "USD" } });
-}
-evaluator.evaluateAll();   // SSOT stats → insights → SSOT
-extension.sync();          // SSOT → tools-metadata.yaml (and the MCP resource text)
-console.log(extension.resourceText());
-```
-
-Run it from the repo root after building:
-
-```bash
-node --input-type=module -e "$(cat <<'EOF'
-import { MemoryStore } from './packages/memory/dist/index.js';
-import { TelemetryRecorder, MemoryBackedTelemetryStore } from './packages/telemetry/dist/index.js';
-import { Evaluator } from './packages/evaluation/dist/index.js';
-import { ExtensionController } from './packages/extension/dist/index.js';
-const memory = new MemoryStore();
-const telemetry = new TelemetryRecorder({ store: new MemoryBackedTelemetryStore(memory) });
-const evaluator = new Evaluator({ memory });
-const extension = new ExtensionController({ memory, yamlPath: 'tools-metadata.yaml' });
-for (let i = 0; i < 20; i++) telemetry.complete({ toolName: 'deploy_service', serverName: 'demo' }, { durationMs: 900 });
-evaluator.evaluateAll();
-extension.sync();
-console.log(extension.resourceText());
-EOF
-)"
-```
-
-### Run the MCP server + client example
-
-```bash
-cd examples
-# Option A — real stdio client that spawns the server and reads the resource:
-node -e "import('./dist/client.js').then(m => m.runClient())"
-
-# Option B — start the server alone (blocks on stdio):
-node dist/server.js
-
-# Option C — local loop that derives the YAML view without spawning a server:
-node dist/client.js
-```
-
-### Run the scenarios
-
-```bash
-cd examples
-node dist/scenario.js            # improvement over time (healthy → flaky → fixed)
-node dist/scenarios/ssot.js      # SSOT is the source of truth; YAML is derived
-node dist/scenarios/insights.js  # telemetry → evaluation → insights
-node dist/scenarios/annotation.js # human annotation vs. learned insight
-node dist/scenarios/adaptive.js   # full stack: routing + orchestration + approval + thin-client
-```
 
 ## npm packages
 

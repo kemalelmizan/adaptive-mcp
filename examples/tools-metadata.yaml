@@ -1,0 +1,20 @@
+version: 0.1.0
+generated_at: '2026-07-19T01:45:53.585Z'
+tools:
+  - name: deploy_service
+    server: demo
+    annotation: {}
+    insights:
+      avg_duration_ms:
+        value: 900
+        confidence: 0.6
+        source: telemetry
+    recommendations: []
+    stats:
+      invocations: 20
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 900
+      total_cost: 0.04000000000000002
+      last_observed_at: '2026-07-19T01:45:53.584Z'
+    updated_at: '2026-07-19T01:45:53.585Z'

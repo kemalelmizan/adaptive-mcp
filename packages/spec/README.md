@@ -7,8 +7,8 @@ package builds on. It owns the canonical identifiers (the SEP-2133
 `dev.adaptivemcp/` namespace), the `ToolExecutionEvent` observation schema, and
 the shared `ToolRecord` / `Insight` / `Recommendation` / `Annotation` types.
 
-> MCP standardizes capabilities. Adaptive MCP learns behavior. `spec` defines
-> the vocabulary both sides speak.
+> MCP sets the contract; Adaptive MCP learns the behavior. `spec` defines the
+> vocabulary both sides speak.
 
 ## Install
 
