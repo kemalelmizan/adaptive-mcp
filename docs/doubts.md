@@ -387,12 +387,24 @@ metadata at #1649 (Layer 3) — without waiting on #1649 to ship.
 - [ ] `budget`/`require_approval` still not emitted by reference impl (§8 gap #1) — the
       precedence rule is currently theoretical for those fields until they ship.
 
-## 12. Next milestone: extensible middleware (2026-07-19)
+## 12. Next milestone: extensible middleware (updated 2026-07-21)
 
 **Goal:** make the middleware layer pluggable so external integrations — **rtk**
 (rtk-ai.app, CLI-output compression), **headroom** (headroom-docs, generic
 content compression), and a later **client OAuth delegation** flow — can attach to
 `AdaptiveRuntime` and/or `ThinClient` without forking the core packages.
+
+**Integration model (decided, 2026-07-21): middleware chains MCP servers, not
+binaries directly.** Research showed headroom already ships an MCP server
+(`headroom mcp serve` → `headroom_compress` / `headroom_retrieve` /
+`headroom_stats`) and a TS SDK `compress()`; rtk has **no** MCP server (it is a
+CLI proxy / PreToolUse hook on shell commands — only an open interest issue #1442
+exists). So:
+- **headroom** is chained directly (it already exposes an MCP server).
+- **rtk** is wrapped into an MCP server by a new `@adaptivemcp/mcp-binary` package,
+  then chained like any other MCP-backed middleware. This keeps shelling out
+  confined to the integration layer (the sanctioned shell-out boundary) and gives
+  rtk a first-class place in the chain instead of being stuck at the host layer.
 
 ### 12a. Current state (why this is needed)
 
@@ -409,31 +421,49 @@ content compression), and a later **client OAuth delegation** flow — can attac
   place for middleware contributions.
 - The one clean boundary already extracted is the `Store` interface in `spec`;
   middleware must depend only on that, not on `MemoryStore`.
+- **New (2026-07-21):** the integration seam is **MCP-chaining** — middleware
+  depends on an injected MCP client (or a `Compressor` abstraction backed by one),
+  never on a binary on PATH. Binaries are wrapped into MCP servers by
+  `@adaptivemcp/mcp-binary`, the only package permitted to shell out.
 
-### 12b. What rtk / headroom actually are (verified)
+### 12b. What rtk / headroom actually are (verified 2026-07-21)
 
 | | rtk | headroom |
 |---|---|---|
 | Core job | Compresses **CLI command output** before the context window (Rust binary, ~89% on `cargo test`/`git`/`grep`) | Compresses **any content an agent reads** — tool outputs, JSON, DB results, file reads, RAG, API responses |
-| Integration shape | **PreToolUse hook** in `settings.json` that rewrites Bash calls; `rtk gain` CLI | TS/Python `compress()` function, transparent **proxy**, or framework integrations (incl. **MCP**) |
-| Fit with the loop | Weak/orthogonal — operates on **shell commands**, not MCP tool calls | Strong — operates on **tool outputs**, exactly what the loop carries |
+| Integration shape | **PreToolUse hook** in `settings.json` that rewrites Bash calls; `rtk gain` CLI. **No MCP server** (issue #1442 is "gauging interest" only) | TS/Python `compress()` function, transparent **proxy**, framework integrations, **and a native MCP server** (`headroom mcp serve` → `headroom_compress`/`headroom_retrieve`/`headroom_stats`) |
+| MCP server? | **No** → wrapped by `@adaptivemcp/mcp-binary` | **Yes** (native) → chained directly |
+| Fit with the loop | Weak/orthogonal as a binary — but once wrapped into MCP it becomes a `command-output` middleware for shell-like MCP tools | Strong — operates on **tool outputs**, exactly what the loop carries |
 
-**Tension:** the design constraint "packages must not depend on shell/processes as
-first-class concepts" (`README.md`, `architecture.md`) applies to the **learning
-core**. rtk is fundamentally a shell-layer tool, so it likely lives **outside**
-the MCP-tool loop (host/agent layer), whereas headroom fits **inside** as an
-output-transform middleware. Integration middleware is allowed to break the
-no-shell rule — that is the point of isolating it in `@adaptivemcp/middleware`.
+**Tension resolved:** the design constraint "packages must not depend on
+shell/processes as first-class concepts" (`README.md`, `architecture.md`) applies
+to the **learning core**. rtk is fundamentally a shell-layer tool, so it must not
+shell out inside core. The fix is **not** to push rtk to the host layer (that
+forfeits composability) nor to shell out in core — it is to **wrap rtk into an MCP
+server** via `@adaptivemcp/mcp-binary` (the sanctioned shell-out layer) and then
+chain it like headroom. Integration middleware is allowed to break the no-shell
+rule — that is the point of isolating it in `@adaptivemcp/mcp-binary`.
 
 ### 12c. Chosen design (decided)
 
 - **Abstraction:** a `Middleware` **plugin interface** with optional lifecycle
   methods (`init`, `beforeCall`, `afterCall`, `onError`, `contributeView`).
-- **New package:** `@adaptivemcp/middleware` — depends only on `Store` from
+- **New package `@adaptivemcp/middleware`** — depends only on `Store` from
   `spec`; holds the `Middleware` interface + a `MiddlewareChain` that
   `AdaptiveRuntime` and `ThinClient` both invoke. Does **not** force a refactor of
   the 7 fixed fields; it adds the registration seam. Existing `ApprovalGate`/
   `Router`/`Orchestrator` can be wrapped as middleware or kept as today.
+- **`Compressor` abstraction (new):** transport-agnostic
+  `compress(content, opts) → { compressed, hash, savings_percent }`. Its default
+  implementation is **MCP-client backed** — it calls `headroom_compress` on an
+  injected MCP client. A lighter alternative implementation calls the headroom-ai
+  TS SDK `compress()` directly (no MCP server needed). Middleware depends on the
+  `Compressor` interface, never on a binary.
+- **New package `@adaptivemcp/mcp-binary` (NEW):** a generic **CLI-binary →
+  MCP-server wrapper** (stdio). This is the *only* sanctioned shell-out layer. It
+  maps a binary's CLI surface onto MCP tools (e.g. rtk → `rtk_exec(command)`), so
+  binaries like rtk become chainable through the same `MiddlewareChain` seam.
+  rtk is the reference binary (`RtkWrapper`).
 - **Capabilities (selected):** observe/record events, intercept/gate calls,
   transform I/O, inject auth/credentials.
 - **OAuth:** design the **hook point now**; specify the exact flow later.
@@ -447,77 +477,136 @@ export interface Middleware {
   onError?(err: unknown, call: PlannedCall, ctx: MiddlewareContext): void | Promise<void>;
   contributeView?(toolName: string, ctx: MiddlewareContext): unknown | void; // surface in YAML
 }
+
+/** Transport-agnostic compression seam. Impl is MCP-client backed (headroom_compress) or TS-SDK backed. */
+export interface Compressor {
+  compress(content: string, opts?: { model?: string; tokenBudget?: number }):
+    Promise<{ compressed: string; hash?: string; savingsPercent?: number }>;
+}
 ```
 
 ### 12d. Integration mapping
 
-- **headroom** → `afterCall` **Transform I/O** middleware: takes `result.output`,
-  calls `compress()`, replaces `result.output` before telemetry records it / the
-  model sees it. Clean fit; no shell coupling.
-- **rtk** → also **Transform I/O**, but for command-like tool outputs (logs, diffs,
-  test results). Because rtk is a Rust CLI, the middleware would shell out — only
-  acceptable if it lives in the integration layer, not the core. Prefer calling a
-  rtk library/API if one exists; otherwise ship as an **optional** middleware the
-  host wires.
+- **headroom** → `afterCall` **Transform I/O** middleware via `Compressor`: takes
+  `result.output`, calls `compress()`, replaces `result.output` before telemetry
+  records it / the model sees it. Recommended impl chains to the headroom MCP
+  server (`headroom_compress`); the headroom-ai TS SDK `compress()` is a lighter
+  non-MCP alternative. Surface `hash` + `savings_percent` via `contributeView`
+  so the agent can later call `headroom_retrieve` for the original. Clean fit; no
+  shell coupling in core.
+
+  ```mermaid
+  flowchart LR
+    A[Tool call] --> B[ThinClient / AdaptiveRuntime]
+    B --> C[MiddlewareChain.afterCall]
+    C --> D[Compressor.compress -> headroom MCP headroom_compress]
+    D --> E[compressed output recorded]
+    E --> F[agent may call headroom_retrieve hash]
+  ```
+
+- **rtk** → wrapped into an MCP server by `@adaptivemcp/mcp-binary` (stdio), then
+  chained as a `command-output` middleware (only for shell-like MCP tools, e.g. a
+  `run_shell_command` tool). No shelling inside core — the shell-out lives in
+  `mcp-binary`. If rtk later ships a native MCP server (issue #1442), the wrapper
+  becomes redundant and rtk is chained directly like headroom.
+
+  ```mermaid
+  flowchart LR
+    R[rtk binary] --> W[@adaptivemcp/mcp-binary stdio wrapper]
+    W --> T[rtk_exec MCP tool]
+    T --> M[MiddlewareChain command-output middleware]
+  ```
+
 - **client OAuth delegation** → `beforeCall` **inject-auth** middleware: a
   `CredentialProvider` resolves a token per `serverName`/`toolName` and sets
   `call.credentials`. Hook point only for now.
 
-### 12e. Open decisions + pros/cons (to confirm before implementation)
+### 12e. Open decisions + pros/cons (resolved 2026-07-21)
 
-**D1 — Output plumbing scope**
+**D1 — Output plumbing scope** → **decided: A (full output).**
 - *Option A: carry full `output` through the loop.* ✅ enables transform + richer
   telemetry; ❌ more memory per call, larger `ToolExecutionEvent`s.
 - *Option B: carry only a compressed/summarized form.* ✅ cheap; ❌ loses fidelity
   for non-compression middleware, defeats the point of headroom/rtk.
-- *Recommendation:* A (full output), since the whole milestone exists to transform it.
+- *Decision:* A, since the whole milestone exists to transform output.
 
-**D2 — Middleware registration**
+**D2 — Middleware registration** → **decided: A (explicit `use()` API).**
 - *Option A: explicit `runtime.use(mw)` / `thinClient.use(mw)` API.* ✅ simple,
   explicit, testable; ❌ caller must wire manually.
 - *Option B: auto-discovery via a registry / package convention.* ✅ zero-config;
   ❌ magic, harder to reason about order/side effects, harder to disable.
-- *Recommendation:* A (explicit), with an optional registry later.
+- *Decision:* A, with an optional registry later.
 
-**D3 — YAML contribution shape**
+**D3 — YAML contribution shape** → **decided: A (`middleware` map).**
 - *Option A: single `middleware: { <name>: {...} }` map in `ToolMetadataView`.*
   ✅ open-ended, no `view.ts` forking per integration; ❌ consumers must know names.
 - *Option B: typed top-level fields per middleware.* ✅ discoverable; ❌ `view.ts`
   changes for every new middleware, couples the view to integrations.
-- *Recommendation:* A (map keyed by middleware name).
+- *Decision:* A (map keyed by middleware name).
 
-**D4 — rtk placement**
-- *Option A: inside the MCP loop as output-transform.* ✅ unified seam; ❌ violates
-  the no-shell rule inside core unless isolated in the integration package.
-- *Option B: explicitly out-of-scope (host-layer only).* ✅ keeps core clean; ❌
-  rtk can't be composed with headroom/oauth in one chain.
-- *Recommendation:* A, but the rtk middleware lives in `@adaptivemcp/middleware`
-  (or a sub-package) and is the only place shelling out is permitted.
+**D4 — rtk placement** → **decided: wrapped into MCP (not host-layer only).**
+- *Option A: inside the MCP loop as output-transform (shell out in core).* ❌
+  violates the no-shell rule inside core.
+- *Option B: explicitly out-of-scope (host-layer only).* ❌ forfeits
+  composability with headroom/oauth in one chain.
+- *Option C (chosen): wrap rtk into an MCP server via `@adaptivemcp/mcp-binary`,
+  then chain as a `command-output` middleware.* ✅ composable, shell-out confined
+  to the sanctioned layer, no core coupling.
 
-**D5 — Ordering / error semantics**
+**D5 — Ordering / error semantics** → **decided: A (fixed order).**
 - *Option A: fixed order (beforeCall in registration order, afterCall reverse).*
   ✅ predictable; ❌ can't reorder without re-registering.
 - *Option B: priority field on each middleware.* ✅ flexible; ❌ more API surface.
-- *Recommendation:* A for v1, add priority later if needed.
+- *Decision:* A for v1, add priority later if needed.
 
-**D6 — Backward compatibility**
+**D6 — Backward compatibility** → **decided: A (built-ins kept alongside).**
 - *Option A: keep `ApprovalGate`/retry as built-in, add middleware seam alongside.*
   ✅ no breaking change to `AdaptiveRuntime`/`ThinClient` consumers; ❌ two paths
   (built-in + middleware) to maintain.
 - *Option B: refactor built-ins into middleware.* ✅ one model; ❌ breaking change
   for current consumers of `runtime.gate()` / `thinClient.run()`.
-- *Recommendation:* A for the milestone; B is a later cleanup (post-1.0).
+- *Decision:* A for the milestone; B is a later cleanup (post-1.0).
+
+**D7 — Compressor transport** → **decided: MCP-chaining recommended.**
+- *Option A: MCP-client backed (call `headroom_compress` on an injected MCP
+  client).* ✅ uniform "middleware chains MCP" model; reuses headroom's CCR
+  `headroom_retrieve`; works for any compressor that exposes an MCP server.
+- *Option B: headroom-ai TS SDK `compress()` directly.* ✅ lighter (no MCP server
+  process); ❌ couples to one vendor's SDK, no CCR tool surface.
+- *Decision:* A (MCP-chaining) as the default; B allowed as a lighter alternative
+  impl of the same `Compressor` interface.
+
+**D8 — CCR hash surfacing** → **decided: surface in YAML `middleware` map.**
+- *Decision:* `contributeView` returns `{ hash, savings_percent }` for compressed
+  tools so the agent can call `headroom_retrieve(hash)` to fetch originals. The
+  `middleware` map in `ToolMetadataView` carries it.
+
+**D9 — Availability / fallback** → **decided: passthrough on failure.**
+- *Decision:* if `compress()` throws or the compressor MCP is down, the middleware
+  passes the **original** output through and records a `contributeView` note. The
+  execution loop is never broken by compression. (Mirrors headroom's own
+  `fallback: true`.)
+
+**D10 — mcp-binary wrapper contract** → **decided: generic CLI→MCP wrapper.**
+- *Decision:* `@adaptivemcp/mcp-binary` is a generic stdio wrapper mapping a
+  binary's CLI onto MCP tools; rtk is the reference binary (`RtkWrapper`).
+  Shelling out is confined to this package only. In-scope binaries: CLI tools
+  whose output benefits from in-loop transformation (rtk first; others later).
 
 ### 12f. Code gaps to close (prerequisites)
 
 1. Carry `output` through `ToolHandler` → `ThinClient.run` → `record` →
-   `observeCompleted` → `ToolExecutionEvent.output`.
+   `observeCompleted` → `ToolExecutionEvent.output` (D1).
 2. Populate `ToolExecutionEvent.output` in `observeCompleted` (stop hardcoding
    `{ ok: true }`).
 3. Add a `middleware` map to `ToolMetadataView` + `toToolMetadataView` so
-   `contributeView` results surface in `tools-metadata.yaml`.
+   `contributeView` results surface in `tools-metadata.yaml` (D3/D8).
 4. `MiddlewareChain` invokes `beforeCall`/`afterCall`/`onError` around execution
-   in both `AdaptiveRuntime` and `ThinClient`.
+   in both `AdaptiveRuntime` and `ThinClient` (D2/D5).
+5. Add the `Compressor` abstraction + `HeadroomMiddleware` (MCP-client backed,
+   TS-SDK alt) (D7).
+6. Add `@adaptivemcp/mcp-binary` package + `RtkWrapper` reference; wire rtk as a
+   `command-output` middleware (D4/D10).
 
 **Status:** `open` / planned for next milestone. Decisions D1–D6 need user
 confirmation (recommendations noted above). Implementation blocked on D1–D6.

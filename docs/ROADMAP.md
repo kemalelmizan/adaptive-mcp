@@ -107,11 +107,20 @@ Make the middleware layer pluggable so external integrations — **rtk**
 (CLI-output compression), **headroom** (generic content compression), and a later
 **client OAuth delegation** flow — can attach to `AdaptiveRuntime` and/or
 `ThinClient` without forking the core packages. Full analysis, integration
-mapping, and open decisions (D1–D6, with pros/cons) live in `meta/doubts.md` §12.
+mapping, and open decisions (D1–D10, with pros/cons) live in `docs/doubts.md` §12.
 
+**Integration model (decided): middleware chains MCP servers, not binaries.**
 - `@adaptivemcp/middleware`: new package holding the `Middleware` plugin
   interface (`init` / `beforeCall` / `afterCall` / `onError` / `contributeView`)
   and a `MiddlewareChain`. Depends only on the `Store` interface from `spec`.
+  Adds a transport-agnostic `Compressor` abstraction (`compress(content, opts) →
+  { compressed, hash, savings_percent }`) whose implementation is **MCP-client
+  backed** (chains to a compressor MCP server).
+- `@adaptivemcp/mcp-binary` (NEW): a generic **CLI-binary → MCP-server wrapper**
+  (stdio). This is the *only* sanctioned shell-out layer (doubts.md §12b). It
+  exposes a binary's CLI as MCP tools (e.g. rtk → `rtk_exec(command)`), so
+  binaries like rtk become chainable through the same `MiddlewareChain` seam
+  instead of being stuck at the host layer or shelling out inside core.
 - `AdaptiveRuntime` and `ThinClient` each hold a `MiddlewareChain` and invoke it
   around execution. Existing `ApprovalGate`/`Router`/`Orchestrator` stay as
   built-ins (no breaking change) and may later be wrapped as middleware.
@@ -119,13 +128,21 @@ mapping, and open decisions (D1–D6, with pros/cons) live in `meta/doubts.md` �
   `ThinClient.run` → `record` → `observeCompleted` → `ToolExecutionEvent.output`);
   stop hardcoding `output: { ok: true }` in `observeCompleted`; add a `middleware`
   map to `ToolMetadataView` so `contributeView` results surface in
-  `tools-metadata.yaml`.
-- **Integrations:** headroom → `afterCall` output-transform; rtk → `afterCall`
-  output-transform (isolated in the integration layer; shelling out permitted
-  only there); client OAuth → `beforeCall` credential-injection hook point.
-- **Open decisions (confirm before implementation, see doubts.md §12e):** D1
-  output-plumbing scope, D2 registration API vs auto-discovery, D3 YAML
-  contribution shape, D4 rtk placement, D5 ordering semantics, D6 backward
-  compatibility.
+  `tools-metadata.yaml`; add the `Compressor` abstraction + `HeadroomMiddleware`
+  (MCP or SDK backed) and the `@adaptivemcp/mcp-binary` package + `RtkWrapper`.
+- **Integrations:**
+  - **headroom** → `afterCall` Transform I/O middleware via `Compressor`
+    (recommended: MCP-client to `headroom_compress`; lighter alt: headroom-ai TS
+    SDK `compress()`). Surface `hash` + `savings_percent` via `contributeView` so
+    the agent can later call `headroom_retrieve` for originals.
+  - **rtk** → wrapped into an MCP server by `@adaptivemcp/mcp-binary`, then
+    chained as a `command-output` middleware (only for shell-like MCP tools, e.g.
+    a `run_shell_command` tool). No shelling inside core.
+  - **client OAuth** → `beforeCall` credential-injection hook point.
+- **Resolved decisions (see doubts.md §12e):** D1 full output plumbing, D2 explicit
+  `use()` API, D3 `middleware` YAML map, D4 rtk wrapped into MCP (not host-layer
+  only), D5 fixed ordering, D6 built-ins kept alongside, D7 Compressor via
+  MCP-chaining, D8 CCR hash surfaced in YAML, D9 passthrough on compress failure,
+  D10 generic CLI→MCP wrapper contract.
 
 
