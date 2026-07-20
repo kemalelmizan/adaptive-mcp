@@ -29,7 +29,8 @@
     "@adaptivemcp/extension": "workspace:*",
     "@adaptivemcp/routing": "workspace:*",
     "@adaptivemcp/orchestration": "workspace:*",
-    "@adaptivemcp/approval": "workspace:*"
+    "@adaptivemcp/approval": "workspace:*",
+    "@adaptivemcp/middleware": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

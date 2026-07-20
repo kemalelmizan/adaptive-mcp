@@ -1,9 +1,10 @@
 import type { Store } from "@adaptivemcp/spec";
 import type { ApprovalGate, ApprovalDecision } from "@adaptivemcp/approval";
 import type { RetryPolicy } from "@adaptivemcp/orchestration";
+import { MiddlewareChain, type Middleware, type PlannedCall } from "@adaptivemcp/middleware";
 
 export interface ToolHandler {
-  (input: unknown): Promise<{ ok: boolean; error?: string }>;
+  (input: unknown): Promise<{ ok: boolean; error?: string; output?: unknown }>;
 }
 
 export interface ThinClientOptions {
@@ -17,6 +18,8 @@ export interface ThinClientOptions {
   requestApproval?: (toolName: string) => boolean | Promise<boolean>;
   /** Default retry policy if none is suggested for a tool. */
   defaultRetry?: RetryPolicy;
+  /** Middleware registered up-front (D2: explicit `use()`). */
+  middleware?: Middleware[];
 }
 
 /**
@@ -39,6 +42,7 @@ export class ThinClient {
   private gate: ApprovalGate;
   private requestApproval: (toolName: string) => boolean | Promise<boolean>;
   private defaultRetry: RetryPolicy;
+  private chain: MiddlewareChain;
 
   constructor(options: ThinClientOptions) {
     this.memory = options.memory;
@@ -49,18 +53,31 @@ export class ThinClient {
       baseDelayMs: 0,
       enabled: false,
     };
+    this.chain = new MiddlewareChain({ store: this.memory, toolName: "" });
+    for (const mw of options.middleware ?? []) {
+      this.chain.use(mw);
+    }
   }
 
   /**
-   * Plan + execute a single tool call through the approval gate and retry loop.
-   * Returns the decision and whether the tool actually ran.
+   * Register middleware (D2: explicit `use()` API). Returns `this` for chaining.
+   */
+  use(mw: Middleware): this {
+    this.chain.use(mw);
+    return this;
+  }
+
+  /**
+   * Plan + execute a single tool call through the approval gate, middleware
+   * chain, and retry loop. Returns the decision, whether the tool ran, and the
+   * (possibly middleware-transformed) output.
    */
   async run(
     toolName: string,
     handler: ToolHandler,
     input: unknown,
-    record: (ok: boolean, error?: string) => void,
-  ): Promise<{ decision: ApprovalDecision; executed: boolean }> {
+    record: (ok: boolean, error?: string, output?: unknown) => void,
+  ): Promise<{ decision: ApprovalDecision; executed: boolean; output?: unknown }> {
     const decision = this.gate.gate(toolName);
     if (decision === "deny") {
       return { decision, executed: false };
@@ -73,10 +90,16 @@ export class ThinClient {
       }
     }
 
+    const call: PlannedCall = { toolName, input };
+    await this.chain.runBefore(call);
+
     const policy = this.retryPolicyFor(toolName);
-    const result = await this.executeWithRetry(handler, input, policy);
-    record(result.ok, result.error);
-    return { decision, executed: true };
+    const result = await this.executeWithRetry(handler, call, policy);
+    call.output = result.output;
+    await this.chain.runAfter(result, call);
+
+    record(result.ok, result.error, call.output);
+    return { decision, executed: true, output: call.output };
   }
 
   /** Read the suggested retry policy from the store, else fall back to default. */
@@ -94,13 +117,13 @@ export class ThinClient {
 
   private async executeWithRetry(
     handler: ToolHandler,
-    input: unknown,
+    call: PlannedCall,
     policy: RetryPolicy,
-  ): Promise<{ ok: boolean; error?: string }> {
+  ): Promise<{ ok: boolean; error?: string; output?: unknown }> {
     const attempts = policy.enabled ? Math.max(1, policy.maxAttempts) : 1;
-    let last: { ok: boolean; error?: string } = { ok: false, error: "no attempt" };
+    let last: { ok: boolean; error?: string; output?: unknown } = { ok: false, error: "no attempt" };
     for (let attempt = 0; attempt < attempts; attempt++) {
-      last = await handler(input);
+      last = await handler(call.input);
       if (last.ok) return last;
       if (attempt < attempts - 1 && policy.baseDelayMs > 0) {
         await delay(policy.baseDelayMs * 2 ** attempt);

@@ -1,0 +1,25 @@
+version: 0.1.0
+etag: 8c54c48b5bd62b1833e179974d98aa6a32581ccf
+generated_at: 2026-07-20T23:28:36.997Z
+tools:
+  - name: summarize
+    server: crm
+    annotation: {}
+    insights: {}
+    recommendations:
+      - type: approval
+        payload:
+          decision: allow
+        rationale: Tool is safe to run autonomously.
+    stats:
+      invocations: 1
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 120
+      total_cost: 0
+      last_observed_at: 2026-07-20T23:28:36.997Z
+    middleware:
+      headroom:
+        hash: ccr:200
+        savingsPercent: 0.5
+    updated_at: 2026-07-20T23:28:36.997Z

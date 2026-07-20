@@ -38,10 +38,20 @@ export interface ToolMetadataView {
     total_cost: number;
     last_observed_at: string | null;
   };
+  /**
+   * Per-middleware contributions (D3: the YAML `middleware` map). Each key is a
+   * middleware name (e.g. "headroom") and the value is whatever that middleware
+   * chose to surface via `contributeView` — e.g. a CCR hash, savings percent,
+   * or a skip/error marker. Absent when no middleware is registered.
+   */
+  middleware?: Record<string, unknown>;
   updated_at: string;
 }
 
-export function toToolMetadataView(record: ToolRecord): ToolMetadataView {
+export function toToolMetadataView(
+  record: ToolRecord,
+  middleware?: Record<string, unknown>,
+): ToolMetadataView {
   const insights: ToolMetadataView["insights"] = {};
   for (const i of record.insights) {
     insights[i.key] = { value: i.value, confidence: i.confidence, source: i.source };
@@ -69,6 +79,7 @@ export function toToolMetadataView(record: ToolRecord): ToolMetadataView {
       total_cost: record.stats.totalCost,
       last_observed_at: record.stats.lastObservedAt,
     },
+    middleware: middleware && Object.keys(middleware).length > 0 ? middleware : undefined,
     updated_at: record.updatedAt,
   };
 }
@@ -84,8 +95,9 @@ export interface ToolsMetadataDocument {
 export function renderToolsMetadata(
   records: ToolRecord[],
   version: string,
+  middleware?: Record<string, unknown>,
 ): ToolsMetadataDocument {
-  const tools = records.map(toToolMetadataView);
+  const tools = records.map((r) => toToolMetadataView(r, middleware));
   const generated_at = new Date().toISOString();
   // etag is a stable hash of the *meaningful* content (version + tools), NOT
   // including the volatile generated_at timestamp. Two renders of an unchanged

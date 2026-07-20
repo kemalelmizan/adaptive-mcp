@@ -1,7 +1,7 @@
 {
-  "name": "@adaptivemcp/thin-client",
-  "version": "0.2.2",
-  "description": "Minimal client-side execution loop for Adaptive MCP.",
+  "name": "@adaptivemcp/middleware",
+  "version": "0.1.0",
+  "description": "Pluggable middleware chain for Adaptive MCP (Transform I/O, gate, inject-auth, observe).",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,13 +20,10 @@
     "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
-    "@adaptivemcp/spec": "workspace:*",
-    "@adaptivemcp/memory": "workspace:*",
-    "@adaptivemcp/approval": "workspace:*",
-    "@adaptivemcp/orchestration": "workspace:*",
-    "@adaptivemcp/middleware": "workspace:*"
+    "@adaptivemcp/spec": "workspace:*"
   },
   "devDependencies": {
+    "@adaptivemcp/memory": "workspace:*",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

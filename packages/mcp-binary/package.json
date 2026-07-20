@@ -1,7 +1,7 @@
 {
-  "name": "@adaptivemcp/thin-client",
-  "version": "0.2.2",
-  "description": "Minimal client-side execution loop for Adaptive MCP.",
+  "name": "@adaptivemcp/mcp-binary",
+  "version": "0.1.0",
+  "description": "Generic CLI-binary -> MCP-server stdio wrapper (the only sanctioned shell-out layer).",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,10 +21,8 @@
   },
   "dependencies": {
     "@adaptivemcp/spec": "workspace:*",
-    "@adaptivemcp/memory": "workspace:*",
-    "@adaptivemcp/approval": "workspace:*",
-    "@adaptivemcp/orchestration": "workspace:*",
-    "@adaptivemcp/middleware": "workspace:*"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

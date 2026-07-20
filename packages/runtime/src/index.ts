@@ -8,6 +8,7 @@ import { ExtensionController } from "@adaptivemcp/extension";
 import { Router } from "@adaptivemcp/routing";
 import { Orchestrator } from "@adaptivemcp/orchestration";
 import { ApprovalGate, type ApprovalDecision } from "@adaptivemcp/approval";
+import { MiddlewareChain, type Middleware } from "@adaptivemcp/middleware";
 import type { Store } from "@adaptivemcp/spec";
 
 export interface AdaptiveRuntimeOptions {
@@ -21,6 +22,8 @@ export interface AdaptiveRuntimeOptions {
   dbPath?: string;
   /** Where the derived YAML view is written. */
   yamlPath?: string;
+  /** Middleware registered up-front (D2: explicit `use()`). */
+  middleware?: Middleware[];
 }
 
 /**
@@ -44,6 +47,7 @@ export class AdaptiveRuntime {
   readonly router: Router;
   readonly orchestrator: Orchestrator;
   readonly approval: ApprovalGate;
+  readonly middleware: MiddlewareChain;
 
   constructor(options: AdaptiveRuntimeOptions = {}) {
     this.memory = options.store ?? new MemoryStore({ path: options.dbPath ?? ":memory:" });
@@ -58,6 +62,18 @@ export class AdaptiveRuntime {
     this.router = new Router({ memory: this.memory });
     this.orchestrator = new Orchestrator({ memory: this.memory });
     this.approval = new ApprovalGate({ memory: this.memory });
+    this.middleware = new MiddlewareChain({ store: this.memory, toolName: "" });
+    for (const mw of options.middleware ?? []) {
+      this.middleware.use(mw);
+    }
+  }
+
+  /**
+   * Register middleware (D2: explicit `use()` API). Returns `this` for chaining.
+   */
+  use(mw: Middleware): this {
+    this.middleware.use(mw);
+    return this;
   }
 
   /**
@@ -78,17 +94,21 @@ export class AdaptiveRuntime {
     model?: string;
     cost?: { amount: number; currency?: string };
     error?: { message: string };
+    /** The tool's output, if available. Carried into the event (D1). */
+    output?: unknown;
   }): void {
     this.telemetry.complete(
       { toolName: input.toolName, serverName: input.serverName, model: input.model },
       {
         durationMs: input.durationMs,
         cost: input.cost ? { amount: input.cost.amount, currency: input.cost.currency } : undefined,
-        output: input.status === "completed" ? { ok: true } : undefined,
+        output: input.output ?? (input.status === "completed" ? { ok: true } : undefined),
       },
       { status: input.status, error: input.error },
     );
     this.evaluator.evaluateAll();
+    // Surface middleware contributions (D3: YAML `middleware` map).
+    this.extension.setMiddlewareView(this.middleware.contributeView());
     this.extension.sync();
   }
 

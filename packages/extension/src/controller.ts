@@ -30,15 +30,27 @@ export interface ExtensionControllerOptions {
 export class ExtensionController {
   private memory: Store;
   private yamlPath?: string;
+  /**
+   * Global middleware contributions (D3: the YAML `middleware` map). Set by the
+   * runtime via `setMiddlewareView` so `contributeView` results from the
+   * registered `MiddlewareChain` surface in `tools-metadata.yaml`. Keyed by
+   * middleware name (e.g. "headroom" -> { hash, savingsPercent }).
+   */
+  private middlewareView?: Record<string, unknown>;
 
   constructor(options: ExtensionControllerOptions) {
     this.memory = options.memory;
     this.yamlPath = options.yamlPath;
   }
 
+  /** Provide the aggregated middleware `contributeView` map for the YAML view. */
+  setMiddlewareView(view?: Record<string, unknown>): void {
+    this.middlewareView = view;
+  }
+
   /** Recompute the view from the store and (optionally) persist it as YAML. */
   sync(): ToolsMetadataDocument {
-    const doc = renderToolsMetadata(this.memory.allTools(), SPEC_VERSION);
+    const doc = renderToolsMetadata(this.memory.allTools(), SPEC_VERSION, this.middlewareView);
     if (this.yamlPath) {
       mkdirSync(dirname(this.yamlPath), { recursive: true });
       writeFileSync(this.yamlPath, toYaml(doc), "utf8");
@@ -48,7 +60,7 @@ export class ExtensionController {
 
   /** Read the current view without writing to disk. */
   view(): ToolsMetadataDocument {
-    return renderToolsMetadata(this.memory.allTools(), SPEC_VERSION);
+    return renderToolsMetadata(this.memory.allTools(), SPEC_VERSION, this.middlewareView);
   }
 
   /** MCP resource URI for the derived tools-metadata view (`dev.adaptivemcp://tools-metadata`). */
