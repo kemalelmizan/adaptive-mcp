@@ -101,4 +101,31 @@ stdio server/client example. The YAML view evolves automatically; the human
   capabilities (the `@modelcontextprotocol/sdk` already includes `extensions` in
   its `ServerCapabilities` schema).
 
+## Phase 5: Extensible middleware (planned)
+
+Make the middleware layer pluggable so external integrations — **rtk**
+(CLI-output compression), **headroom** (generic content compression), and a later
+**client OAuth delegation** flow — can attach to `AdaptiveRuntime` and/or
+`ThinClient` without forking the core packages. Full analysis, integration
+mapping, and open decisions (D1–D6, with pros/cons) live in `meta/doubts.md` §12.
+
+- `@adaptivemcp/middleware`: new package holding the `Middleware` plugin
+  interface (`init` / `beforeCall` / `afterCall` / `onError` / `contributeView`)
+  and a `MiddlewareChain`. Depends only on the `Store` interface from `spec`.
+- `AdaptiveRuntime` and `ThinClient` each hold a `MiddlewareChain` and invoke it
+  around execution. Existing `ApprovalGate`/`Router`/`Orchestrator` stay as
+  built-ins (no breaking change) and may later be wrapped as middleware.
+- **Prerequisite code gaps:** carry `output` through the loop (`ToolHandler` →
+  `ThinClient.run` → `record` → `observeCompleted` → `ToolExecutionEvent.output`);
+  stop hardcoding `output: { ok: true }` in `observeCompleted`; add a `middleware`
+  map to `ToolMetadataView` so `contributeView` results surface in
+  `tools-metadata.yaml`.
+- **Integrations:** headroom → `afterCall` output-transform; rtk → `afterCall`
+  output-transform (isolated in the integration layer; shelling out permitted
+  only there); client OAuth → `beforeCall` credential-injection hook point.
+- **Open decisions (confirm before implementation, see doubts.md §12e):** D1
+  output-plumbing scope, D2 registration API vs auto-discovery, D3 YAML
+  contribution shape, D4 rtk placement, D5 ordering semantics, D6 backward
+  compatibility.
+
 
