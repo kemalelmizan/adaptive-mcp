@@ -1,31 +1,16 @@
 # Adaptive MCP
 
-Turn MCP usage into learned metadata, so clients adapt instead of guessing.
-
-Adaptive MCP is a runtime ecosystem that learns how MCP tools are actually used
-and helps runtimes adapt to that behavior over time. It does **not** replace MCP,
-redefine tools, or introduce new protocol abstractions. Instead it observes tool
-usage, attaches learned metadata to existing MCP primitives, and lets clients
-govern themselves from real signal.
-
 > **Status:** experimental. The packages are published, but the API may shift
 > before 1.0.
+
+Adaptive MCP is a runtime ecosystem that learns how MCP tools are actually used
+and helps runtimes adapt to that behavior over time. It observes tool
+usage, attaches learned metadata to existing MCP primitives, and lets clients
+govern themselves from real signal.
 
 > I introduced this project in the talk session
 > *"Self-Improving MCP Agents"* at the [MCP Dev Summit in Seoul (2026)](https://events.linuxfoundation.org/mcp-dev-summit-seoul/).
 > [Check session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
-
-**What it is**
-
-- A learning layer over MCP primitives (tools, resources)
-- A derived `tools-metadata.yaml` view, recomputed from a SQLite source of truth
-- An unofficial, server-governed resource: clients read it and report observations back
-
-**What it is not**
-
-- Not a new protocol, and not a replacement for MCP tools
-- Not a fork of the MCP SDK
-- Not an official MCP extension
 
 ## Quick start
 

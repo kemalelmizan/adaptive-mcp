@@ -26,6 +26,24 @@ SQLite store.
 > The YAML is a **derived projection** of the SQLite store. Nobody edits it by
 > hand. Adaptive MCP recomputes it whenever metadata changes.
 
+> **Server-side vs. client-side**
+>
+> It's tempting to assume `@adaptivemcp/extension` is "the server half" and
+> `@adaptivemcp/runtime` is "the client half," since one sounds like a server
+> plugin and the other sounds like a client runtime. That's not the split:
+>
+> - `@adaptivemcp/extension` **is** server-side: it derives `tools-metadata.yaml`
+>   from the store and serves it as an MCP resource (Walkthrough 1).
+> - `@adaptivemcp/runtime` (`AdaptiveRuntime`) is a **transport-agnostic bundle**
+>   that wires telemetry, evaluation, routing, orchestration, approval, and the
+>   extension together. In these examples it's used server-side (Walkthrough 1)
+>   and standalone, with no server or client at all (Walkthrough 3). It is not
+>   "the client."
+> - The actual client-side package is `@adaptivemcp/thin-client` (`ThinClient`):
+>   it owns the execution lifecycle on the client — consulting the approval
+>   gate and applying the store-derived retry policy before calling a tool. See
+>   `dist/scenarios/adaptive.js`.
+
 ## Prerequisites
 
 - **Node 22+** (Node 26 recommended)
@@ -127,11 +145,18 @@ The client connects over stdio, calls the tools, and reads the
 `dev.adaptivemcp/tools-metadata` resource. The YAML it receives is computed from
 the server's SQLite store. The client never writes metadata.
 
+This walkthrough's client is deliberately "dumb": it doesn't consult any
+Adaptive MCP package at all, just the plain MCP SDK. (`examples/src/client.ts`
+also exports a `runLocalLoop()` that uses `AdaptiveRuntime` standalone — that's
+Walkthrough 3, not this one, and it isn't "the client's" logic.) A client that
+actually *acts* on the adaptive signal — gating on approval, retrying per the
+learned policy — would drive its calls through `@adaptivemcp/thin-client`'s
+`ThinClient` instead; see `dist/scenarios/adaptive.js`.
+
 ```ts
 // examples/src/client.ts (abridged)
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 
 export async function runClient() {
   const transport = new StdioClientTransport({
