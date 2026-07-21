@@ -2,7 +2,6 @@ import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 import { ThinClient } from "@adaptivemcp/thin-client";
 import {
   HeadroomMiddleware,
-  McpHeadroomCompressor,
   type Compressor,
   type Middleware,
   type PlannedCall,
