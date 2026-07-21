@@ -11,5 +11,5 @@
  */
 export { BinaryMcpServer } from "./server.js";
 export type { BinaryMcpServerOptions, BinaryToolSpec } from "./server.js";
-export { createRtkWrapper, RTK_TOOLS } from "./rtk.js";
-export type { RtkWrapperOptions } from "./rtk.js";
+export { createRtkWrapper, RTK_TOOLS, resolveRtkCommand } from "./rtk.js";
+export type { RtkWrapperOptions, RtkResolution } from "./rtk.js";

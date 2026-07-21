@@ -3,7 +3,7 @@ import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { BinaryMcpServer } from "./server.js";
-import { createRtkWrapper, RTK_TOOLS } from "./rtk.js";
+import { createRtkWrapper, RTK_TOOLS, resolveRtkCommand } from "./rtk.js";
 
 // A tiny fake "binary" implemented as a node `-e` script: it echoes the
 // subcommand and the rendered args as JSON on stdout. This lets us exercise the
@@ -81,5 +81,30 @@ describe("@adaptivemcp/mcp-binary", () => {
       const text = (res.content[0] as { text: string }).text;
       expect(JSON.parse(text)).toEqual({ sub: "flags", rest: ["--a", "1", "--b", "2"] });
     });
+  });
+
+  it("createRtkWrapper marks the server unavailable when rtk is not found", () => {
+    // `node` is on PATH but is not rtk-ai, so resolution reports wrong-package
+    // and the server degrades gracefully (still constructs, just unavailable).
+    const srv = createRtkWrapper({ command: FAKE_BIN } as never);
+    expect(srv).toBeInstanceOf(BinaryMcpServer);
+    expect(srv.available).toBe(false);
+    expect(srv.toolNames()).toContain("rtk_exec");
+  });
+
+  it("returns a clear setup message instead of spawning a missing binary", async () => {
+    const srv = createRtkWrapper({ command: FAKE_BIN } as never);
+    await withClient(srv, async (client) => {
+      const res = await client.callTool({ name: "rtk_exec", arguments: { command: "git status" } });
+      expect((res as { isError?: boolean }).isError).toBe(true);
+      const text = (res.content[0] as { text: string }).text;
+      expect(text).toMatch(/rtk/i);
+    });
+  });
+
+  it("resolveRtkCommand reports a non-found status for an unusable explicit path", () => {
+    const res = resolveRtkCommand("/nonexistent/rtk-binary-xyz");
+    expect(res.status === "missing" || res.status === "wrong-package").toBe(true);
+    expect(res.command).toBeUndefined();
   });
 });

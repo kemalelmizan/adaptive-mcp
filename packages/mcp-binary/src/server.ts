@@ -40,6 +40,13 @@ export interface BinaryMcpServerOptions {
   tools: BinaryToolSpec[];
   /** Shell out timeout in ms (per invocation). Defaults to 30s. */
   timeoutMs?: number;
+  /**
+   * When set, the binary could not be located/verified (e.g. rtk not installed,
+   * or the `rtk` name collides with another package). The server still registers
+   * its tools, but each invocation returns this message instead of spawning a
+   * missing binary. Lets the chain degrade gracefully rather than erroring.
+   */
+  unavailable?: string;
 }
 
 /**
@@ -74,12 +81,23 @@ export class BinaryMcpServer {
         inputSchema: tool.inputSchema,
       },
       async (args: Record<string, unknown>) => {
+        if (this.opts.unavailable) {
+          return {
+            content: [{ type: "text", text: this.opts.unavailable }],
+            isError: true,
+          };
+        }
         const out = await this.run(tool.subcommand, args, tool.argStyle ?? "flags");
         return {
           content: [{ type: "text", text: out }],
         };
       },
     );
+  }
+
+  /** Whether the wrapped binary was located and verified at construction. */
+  get available(): boolean {
+    return !this.opts.unavailable;
   }
 
   /** Server identity advertised in `initialize`. */

@@ -444,6 +444,23 @@ server** via `@adaptivemcp/mcp-binary` (the sanctioned shell-out layer) and then
 chain it like headroom. Integration middleware is allowed to break the no-shell
 rule — that is the point of isolating it in `@adaptivemcp/mcp-binary`.
 
+**Two layers, not one (important for coexistence):** rtk's value comes from its
+*PreToolUse hook* (`rtk init -g`), which rewrites an agent's Bash calls
+(`git status` → `rtk git status`) **before** they execute — that is the agent's
+**shell layer**. Our `rtk_exec` middleware is a **different layer**: it spawns
+`rtk gain <cmd>` **after** a tool returns, compressing what the MCP result
+carries back. The two compose rather than conflict, and Adaptive MCP never
+installs, enables, or disables the rtk hook — it only reuses the rtk binary if
+already present.
+
+**Graceful coexistence when rtk is already installed:** `resolveRtkCommand()`
+does read-only discovery on `PATH` (never installs a second copy), verifies the
+binary is rtk-ai via `rtk --version` (guarding the unrelated Rust *Type Kit*
+crate that also ships a `rtk` binary), and if missing/wrong reports
+`missing`/`wrong-package` so the wrapper degrades to a clear setup message
+instead of spawning a missing binary. Adaptive MCP is **not a nuisance** to other
+MCPs: it chains via MCP and leaves the user's shell and other servers alone.
+
 ### 12c. Chosen design (decided)
 
 - **Abstraction:** a `Middleware` **plugin interface** with optional lifecycle
@@ -510,11 +527,21 @@ export interface Compressor {
   `mcp-binary`. If rtk later ships a native MCP server (issue #1442), the wrapper
   becomes redundant and rtk is chained directly like headroom.
 
+  Note the two layers: rtk's *hook* rewrites Bash at the agent shell layer; our
+  *wrapper* compresses MCP tool output at the middleware layer. They compose.
+
   ```mermaid
-  flowchart LR
-    R[rtk binary] --> W[@adaptivemcp/mcp-binary stdio wrapper]
-    W --> T[rtk_exec MCP tool]
-    T --> M[MiddlewareChain command-output middleware]
+  flowchart TD
+    subgraph Shell["Agent Bash layer (rtk's own hook, optional)"]
+      H[rtk init -g hook rewrites git status -> rtk git status]
+    end
+    subgraph MCP["MCP tool-output layer (Adaptive MCP)"]
+      R[rtk binary] --> W[@adaptivemcp/mcp-binary stdio wrapper]
+      W --> T[rtk_exec MCP tool]
+      T --> M[MiddlewareChain command-output middleware]
+    end
+    Shell -.compresses what agent sends to shell.-> Shell
+    MCP -.compresses what tool result carries back.-> MCP
   ```
 
 - **client OAuth delegation** → `beforeCall` **inject-auth** middleware: a

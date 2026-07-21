@@ -145,4 +145,33 @@ mapping, and open decisions (D1–D10, with pros/cons) live in `docs/doubts.md` 
   MCP-chaining, D8 CCR hash surfaced in YAML, D9 passthrough on compress failure,
   D10 generic CLI→MCP wrapper contract.
 
+### How MCP chaining actually works (clarity)
+
+**We chain MCP servers, not binaries.** A `MiddlewareChain` is a list of
+`Middleware` plugins invoked around a tool call: `beforeCall` in registration
+order, `afterCall` in reverse. Each middleware sees the output the previous one
+produced. The binary wrapper is just *one* node that turns a CLI subprocess into
+an MCP tool so it can sit in that chain. Adding rtk to the chain does **not**
+inject rtk into every other tool — only the tools you explicitly route through
+the rtk middleware are affected.
+
+**Two distinct layers for rtk:**
+- *Agent Bash layer* — rtk's own PreToolUse hook (`rtk init -g`) rewrites Bash
+  calls like `git status` → `rtk git status` *before* they run. This is rtk's
+  feature, not ours.
+- *MCP tool-output layer* — our `rtk_exec` middleware spawns `rtk gain <cmd>`
+  *after* a tool returns, compressing what the result carries back.
+
+These compose rather than conflict. Adaptive MCP never installs, enables, or
+disables the rtk hook; it only reuses the rtk binary if already present.
+
+**Graceful coexistence when rtk is already installed:** `resolveRtkCommand()`
+looks up the user's existing `rtk` on `PATH` (read-only, never installs a second
+copy), verifies it is rtk-ai via `rtk --version` (guarding against the unrelated
+Rust *Type Kit* crate that also ships a `rtk` binary), and if missing/wrong
+reports `missing`/`wrong-package` so the wrapper degrades to a clear setup
+message instead of spawning a missing binary. Adaptive MCP is therefore **not a
+nuisance** to other MCPs: it chains via MCP and leaves the user's shell and other
+servers alone. See `packages/mcp-binary/README.md`.
+
 
