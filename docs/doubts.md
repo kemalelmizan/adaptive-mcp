@@ -35,6 +35,56 @@ content negotiation), package coupling (`Store` interface), Node 22 vs 26 (engin
 `>=22`, "Node 22+ (Node 26 recommended)"), thin-client reality (4 stubs promoted to
 `0.1.0`). See §1b for the SEP-critique resolutions.
 
+### 1c. New doubt: does `AdaptiveRuntime` deserve to be one package? (2026-07-21)
+
+Surfaced while fixing `examples/README.md`'s Walkthrough 2 (a reader assumed
+`@adaptivemcp/extension` = server-side, `@adaptivemcp/runtime` = client-side —
+reasonable guess from the names, and wrong). The doc fix patched the
+symptom; the underlying naming/boundary question is still open.
+
+- [ ] **`AdaptiveRuntime` bundles two different "sides" under one name.** `open`
+  Today `AdaptiveRuntime` (`packages/runtime/src/index.ts`) wires telemetry,
+  evaluation, `extension`, routing, orchestration, and approval into one
+  object — and per §1's two-store model, the whole thing is **client-owned**
+  (a stateless server just publishes static `annotation`; the client is where
+  the learning Store actually lives). So `AdaptiveRuntime` is not
+  "server-side" in the deployment sense, but it also isn't "the client
+  package" — that's `@adaptivemcp/thin-client` (`ThinClient`), which owns the
+  *execution lifecycle* (approval gate + retry) and is explicitly documented
+  as "the operational machinery that runs on the client side."
+  Two different things currently both look client-adjacent:
+  - `AdaptiveRuntime` — the **learning loop** (telemetry → evaluation →
+    extension/routing/orchestration/approval writes). Runs wherever the
+    client-owned Store lives; in the examples it's also demoed fully
+    standalone with no MCP transport at all (Walkthrough 3).
+  - `ThinClient` — the **execution loop** (gate → call → retry → record).
+    Actually drives MCP tool calls.
+  Nothing stops someone from wiring `AdaptiveRuntime` into a server process
+  today (the examples literally do, for the `extension`'s resource-serving
+  half) even though the two-store model says the *learning* Store should be
+  client-owned. That's a real ambiguity, not just a naming nit: **is
+  `AdaptiveRuntime` "the client's learning loop," or is it "a generic bundle
+  that happens to include the extension, which is server-side"?** Right now
+  it's the latter in practice, which is what caused the doc confusion.
+  **Options to resolve (not decided):**
+  1. Split `AdaptiveRuntime` into a client-facing `LearningRuntime` (telemetry/
+     evaluation/routing/orchestration/approval — no `extension`) and keep
+     `extension` wiring server-side only (`server.ts` composes them itself).
+     ✅ names match deployment reality; ❌ breaking change, more wiring
+     boilerplate in every server example.
+  2. Keep one `AdaptiveRuntime` package but rename it to something
+     transport/side-neutral (e.g. `@adaptivemcp/loop` or `@adaptivemcp/core`)
+     so it stops implying "runtime = the thing that runs on the client,
+     opposite of the server's extension."
+  3. Leave the package as-is; fix documentation only (done for
+     `examples/README.md`; would need the same pass over `docs/architecture.md`
+     and the top-level `README.md` if they make the same server/client
+     implication).
+  Leaning toward (3) short-term (cheapest, already partly done) with (2) as a
+  cheap follow-up if the confusion recurs; (1) only if the two-store model
+  in §1 hardens into an actual deployment requirement (e.g. a server MUST NOT
+  hold the learning Store) rather than today's "MAY fold reports" framing.
+
 ### 1b. New doubts from SEP critique (2026-07-19)
 
 **Open:**
