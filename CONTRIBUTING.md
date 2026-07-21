@@ -22,7 +22,7 @@ pnpm test
 Requirements:
 
 - **Node 22+** (Node 26 recommended; the built-in `node:sqlite` module is used without a flag).
-- **pnpm 11.14.0** (pinned via the repo `packageManager` field).
+- **pnpm 11+** (pinned via the repo `packageManager` field).
 
 Run the examples from the repo root:
 

@@ -67,7 +67,7 @@ commit that contains the version bump.
 
 - **Node 22+** (Node 26 recommended; the built-in `node:sqlite` needs it; `node script.ts` uses native
   type stripping). Use `eval "$(fnm env)" && fnm use 26`.
-- **pnpm 11.14.0** (pinned via the repo `packageManager` field; don't use a
+- **pnpm 11+** (pinned via the repo `packageManager` field; don't use a
   different pnpm).
 - An npm account in the **`@adaptivemcp`** org with publish rights
   (`https://www.npmjs.com/org/adaptivemcp`).
@@ -405,4 +405,4 @@ node scripts/release.ts --packages extension,runtime --otp <CODE>
 | `release.ts` published nothing | No pending changesets | Author a changeset, or pass `--no-version` to republish all publishable packages. |
 | npm page shows no README | `README.md` missing from `files` | Add `"README.md"` to the package's `files` allowlist, rebuild, republish. |
 | Tag exists but version missing on npm | Pushed before publish finished | Publish succeeded? If not, publish then re-tag (delete + recreate tag). |
-| `pnpm: command not found` / wrong version | pnpm not pinned | `eval "$(fnm env)" && fnm use 26`; use the pinned pnpm 11.14.0. |
+| `pnpm: command not found` / wrong version | pnpm not pinned | `eval "$(fnm env)" && fnm use 26`; use the pinned pnpm 11+. |

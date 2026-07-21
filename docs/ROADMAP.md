@@ -6,7 +6,7 @@ plan: each phase is validated by runnable examples before the next begins.
 ## Guiding constraints
 
 - **Node 22+** (Node 26 recommended)
-- **pnpm 11.14.0** (pinned via the repo's `packageManager` field).
+- **pnpm 11+** (pinned via the repo's `packageManager` field).
 - **SQLite is the store.** The `tools-metadata.yaml`
   file is a *derived view* of the SQLite store, never edited directly.
 - **Adaptive MCP computes and writes the YAML.** MCP clients read the YAML as a

@@ -29,7 +29,7 @@ govern themselves from real signal.
 
 ## Quick start
 
-Requires **Node 22+** (Node 26 recommended) and **pnpm 11.14.0**
+Requires **Node 22+** (Node 26 recommended) and **pnpm 11+**
 
 ```bash
 git clone https://github.com/kemalelmizan/adaptive-mcp
@@ -362,7 +362,7 @@ live npm badge.
 ## How to build, test, and run
 
 Requires **Node 22+** (Node 26 recommended; the `node:sqlite` module is available without the
-`--experimental-sqlite` flag) and **pnpm 11.14.0**.
+`--experimental-sqlite` flag) and **pnpm 11+**.
 
 ```bash
 pnpm install
