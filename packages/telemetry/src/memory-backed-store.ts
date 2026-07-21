@@ -23,8 +23,10 @@ export class MemoryBackedTelemetryStore implements TelemetryStore {
     return this.events.get(id);
   }
 
-  byTool(toolName: string): ToolExecutionEvent[] {
-    return this.all().filter((e) => e.toolName === toolName);
+  byTool(toolName: string, serverName?: string): ToolExecutionEvent[] {
+    return this.all().filter(
+      (e) => e.toolName === toolName && (serverName === undefined || e.serverName === serverName),
+    );
   }
 
   all(): ToolExecutionEvent[] {

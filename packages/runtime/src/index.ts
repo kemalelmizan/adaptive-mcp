@@ -113,8 +113,8 @@ export class AdaptiveRuntime {
   }
 
   /** Enforcement hook: decide whether a planned tool call may proceed. */
-  gate(toolName: string): ApprovalDecision {
-    return this.approval.gate(toolName);
+  gate(toolName: string, serverName?: string): ApprovalDecision {
+    return this.approval.gate(toolName, serverName);
   }
 
   close(): void {

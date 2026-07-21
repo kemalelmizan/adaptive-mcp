@@ -85,6 +85,32 @@ describe("@adaptivemcp/memory", () => {
     expect(recs[0].type).toBe("model");
   });
 
+  it("keeps separate records for the same tool name on different servers", () => {
+    store.ensureTool("search", "crm-server");
+    store.ensureTool("search", "docs-server");
+    expect(store.allTools()).toHaveLength(2);
+
+    store.setAnnotation({ toolName: "search", serverName: "crm-server", risk: "high" });
+    store.setAnnotation({ toolName: "search", serverName: "docs-server", risk: "low" });
+    expect(store.getTool("search", "crm-server")?.annotation.risk).toBe("high");
+    expect(store.getTool("search", "docs-server")?.annotation.risk).toBe("low");
+  });
+
+  it("claims an unclaimed record instead of fragmenting it once the server is known", () => {
+    store.setAnnotation({ toolName: "deploy_service", risk: "high" });
+    store.recordExecution({
+      id: "e1",
+      toolName: "deploy_service",
+      serverName: "srv",
+      timestamp: new Date().toISOString(),
+      status: "completed",
+    });
+    expect(store.allTools()).toHaveLength(1);
+    const record = store.getTool("deploy_service", "srv");
+    expect(record?.annotation.risk).toBe("high");
+    expect(record?.stats.invocations).toBe(1);
+  });
+
   it("recordExecution folds events into stats", () => {
     store.ensureTool("deploy_service", "srv");
     const base: Omit<ToolExecutionEvent, "status"> = {

@@ -49,6 +49,7 @@ export type InsightSource = "telemetry" | "evaluation" | "human" | "memory";
  */
 export interface Insight {
   toolName: string;
+  serverName?: string;
   key: string;
   value: unknown;
   confidence: number;
@@ -106,6 +107,7 @@ export function riskToToolAnnotations(risk?: RiskLevel): ToolAnnotationsLike {
  */
 export interface Annotation {
   toolName: string;
+  serverName?: string;
   risk?: RiskLevel;
   owner?: string;
   tags?: string[];
@@ -120,6 +122,7 @@ export type RecommendationType = "model" | "approval" | "workflow" | "routing";
  */
 export interface Recommendation {
   toolName: string;
+  serverName?: string;
   type: RecommendationType;
   payload: unknown;
   rationale: string;
@@ -157,6 +160,14 @@ export interface ToolStats {
  * backend (SQLite, Postgres, in-memory, remote) can be swapped without touching
  * the middleware. `MemoryStore` in `@adaptivemcp/memory` is the reference
  * implementation.
+ *
+ * Records are identified by the `(toolName, serverName)` pair, not `toolName`
+ * alone: two different MCP servers may expose a tool with the same name, and
+ * without the server in the key their records would collide. `serverName` is
+ * optional on read/write because not every call site knows which server it's
+ * dealing with; when omitted, lookups fall back to the most recently updated
+ * record with that `toolName` (ambiguous only if the same tool name is in use
+ * across multiple servers).
  */
 export interface Store {
   /** Close the underlying backend and release resources. */
@@ -165,10 +176,14 @@ export interface Store {
   /** Ensure a tool record exists, seeding it with an empty annotation. */
   ensureTool(toolName: string, serverName?: string): ToolRecord;
 
-  /** Read a single tool record, or `undefined` if it has never been observed. */
-  getTool(toolName: string): ToolRecord | undefined;
+  /**
+   * Read a single tool record, or `undefined` if it has never been observed.
+   * Pass `serverName` to disambiguate when the same tool name may exist on
+   * multiple servers; otherwise the most recently updated match is returned.
+   */
+  getTool(toolName: string, serverName?: string): ToolRecord | undefined;
 
-  /** Read every tool record, ordered by tool name. */
+  /** Read every tool record, ordered by tool name then server name. */
   allTools(): ToolRecord[];
 
   /** Persist a human-written annotation (the static metadata layer). */
@@ -185,7 +200,7 @@ export interface Store {
    * orchestration, and approval packages so each adaptation pass recomputes its
    * own recommendations instead of appending duplicates on every observation.
    */
-  clearRecommendations(toolName: string, type: RecommendationType): ToolRecord;
+  clearRecommendations(toolName: string, type: RecommendationType, serverName?: string): ToolRecord;
 
   /** Fold a tool execution event into the persisted stats. */
   recordExecution(event: ToolExecutionEvent): ToolRecord;

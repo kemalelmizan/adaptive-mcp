@@ -167,12 +167,15 @@ the **existing** MCP primitives. Concretely:
 ## Data model
 
 All metadata is persisted in a SQLite store (`node:sqlite`). The schema is a
-single `tools` table keyed by `tool_name`:
+single `tools` table keyed by the composite `(tool_name, server_name)` pair —
+not `tool_name` alone, since two different MCP servers can expose a tool with
+the same name, and a `tool_name`-only key would let one server's record
+silently overwrite the other's:
 
 | Column | Type | Contents |
 | --- | --- | --- |
 | `tool_name` | TEXT (PK) | Tool identifier |
-| `server_name` | TEXT | Originating MCP server |
+| `server_name` | TEXT (PK) | Originating MCP server (`''` if unknown) |
 | `annotation` | JSON | Static, human-written `Annotation` |
 | `insights` | JSON | Learned `Insight[]` |
 | `recommendations` | JSON | Suggested `Recommendation[]` |

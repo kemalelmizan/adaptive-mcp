@@ -26,8 +26,8 @@ export class Evaluator {
   }
 
   /** Evaluate a single tool and persist any derived insights. */
-  evaluateTool(toolName: string): Insight[] {
-    const record = this.memory.getTool(toolName);
+  evaluateTool(toolName: string, serverName?: string): Insight[] {
+    const record = this.memory.getTool(toolName, serverName);
     if (!record) return [];
     return this.evaluateRecord(record);
   }
@@ -47,6 +47,7 @@ export class Evaluator {
     if (stats.failureRate >= this.failureRateThreshold) {
       insights.push({
         toolName: record.toolName,
+        serverName: record.serverName,
         key: "observed_failure_rate",
         value: Number(stats.failureRate.toFixed(4)),
         confidence: confidenceFor(stats.invocations),
@@ -59,6 +60,7 @@ export class Evaluator {
     if (stats.avgDurationMs != null) {
       insights.push({
         toolName: record.toolName,
+        serverName: record.serverName,
         key: "avg_duration_ms",
         value: Math.round(stats.avgDurationMs),
         confidence: confidenceFor(stats.invocations),

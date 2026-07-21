@@ -55,18 +55,18 @@ export class Router {
   /** Evaluate every known tool and persist routing recommendations. */
   routeAll(): void {
     for (const record of this.memory.allTools()) {
-      this.routeTool(record.toolName);
+      this.routeTool(record.toolName, record.serverName);
     }
   }
 
   /** Evaluate a single tool, writing `model` + `routing` recommendations. */
-  routeTool(toolName: string): void {
-    const record = this.memory.getTool(toolName);
+  routeTool(toolName: string, serverName?: string): void {
+    const record = this.memory.getTool(toolName, serverName);
     if (!record) return;
     if (record.stats.invocations < this.minInvocations) return;
 
-    this.memory.clearRecommendations(toolName, "model");
-    this.memory.clearRecommendations(toolName, "routing");
+    this.memory.clearRecommendations(toolName, "model", serverName);
+    this.memory.clearRecommendations(toolName, "routing", serverName);
 
     const model = this.selectModel(record);
     if (model) {
@@ -77,6 +77,7 @@ export class Router {
           : `Cheapest model for fast tool (avg ${avg}ms, failure rate ${record.stats.failureRate.toFixed(2)}).`;
       this.memory.addRecommendation({
         toolName,
+        serverName,
         type: "model",
         payload: { model: model.id },
         rationale,
@@ -113,6 +114,7 @@ export class Router {
     const over = spent >= limit;
     return {
       toolName: record.toolName,
+      serverName: record.serverName,
       type: "routing",
       payload: {
         perToolLimit: limit,

@@ -48,22 +48,23 @@ export class Orchestrator {
   /** Evaluate every known tool and persist retry-policy recommendations. */
   planAll(): void {
     for (const record of this.memory.allTools()) {
-      this.planTool(record.toolName);
+      this.planTool(record.toolName, record.serverName);
     }
   }
 
   /** Evaluate a single tool, writing a `workflow` recommendation if flaky. */
-  planTool(toolName: string): void {
-    const record = this.memory.getTool(toolName);
+  planTool(toolName: string, serverName?: string): void {
+    const record = this.memory.getTool(toolName, serverName);
     if (!record) return;
     if (record.stats.invocations < this.minInvocations) return;
 
-    this.memory.clearRecommendations(toolName, "workflow");
+    this.memory.clearRecommendations(toolName, "workflow", serverName);
 
     if (record.stats.failureRate >= this.flakyThreshold) {
       const policy = this.policyFor(record.stats.failureRate);
       this.memory.addRecommendation({
         toolName,
+        serverName,
         type: "workflow",
         payload: { retry: policy },
         rationale: `Observed failure rate ${record.stats.failureRate.toFixed(

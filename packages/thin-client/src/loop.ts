@@ -77,8 +77,9 @@ export class ThinClient {
     handler: ToolHandler,
     input: unknown,
     record: (ok: boolean, error?: string, output?: unknown) => void,
+    serverName?: string,
   ): Promise<{ decision: ApprovalDecision; executed: boolean; output?: unknown }> {
-    const decision = this.gate.gate(toolName);
+    const decision = this.gate.gate(toolName, serverName);
     if (decision === "deny") {
       return { decision, executed: false };
     }
@@ -90,10 +91,10 @@ export class ThinClient {
       }
     }
 
-    const call: PlannedCall = { toolName, input };
+    const call: PlannedCall = { toolName, serverName, input };
     await this.chain.runBefore(call);
 
-    const policy = this.retryPolicyFor(toolName);
+    const policy = this.retryPolicyFor(toolName, serverName);
     const result = await this.executeWithRetry(handler, call, policy);
     call.output = result.output;
     await this.chain.runAfter(result, call);
@@ -103,9 +104,9 @@ export class ThinClient {
   }
 
   /** Read the suggested retry policy from the store, else fall back to default. */
-  private retryPolicyFor(toolName: string): RetryPolicy {
+  private retryPolicyFor(toolName: string, serverName?: string): RetryPolicy {
     const rec = this.memory
-      .getTool(toolName)
+      .getTool(toolName, serverName)
       ?.recommendations.find(
         (r) => r.type === "workflow" && r.payload != null && typeof r.payload === "object" && "retry" in r.payload,
       );
