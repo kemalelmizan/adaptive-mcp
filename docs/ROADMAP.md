@@ -181,48 +181,39 @@ message instead of spawning a missing binary. Adaptive MCP is therefore **not a
 nuisance** to other MCPs: it chains via MCP and leaves the user's shell and other
 servers alone. See `packages/mcp-binary/README.md`.
 
-## Phase 6: Lessons from host harnesses (planned, 2026-07-22)
+## Phase 6: Lessons from OpenCode (planned, 2026-07-22)
 
 Prompted by a review of [OpenCode](https://github.com/anomalyco/opencode)
 (opencode.ai) — a mature, static-config coding-agent harness. OpenCode has no
 learning loop (its permission rules are hand-written), but its host-level
 concepts expose gaps in what Adaptive MCP currently observes and models. Each
-item below is independent and can ship on its own.
+item below is independent and can ship on its own. **Ordered low risk/low
+effort → high risk/high effort**, so the cheap, self-contained wins land
+before the item that depends on an unverified external API.
 
-### 6a. Host adapter: prove the loop on a real harness
+| # | Item | Risk | Effort | Payoff |
+| --- | --- | --- | --- | --- |
+| 6a | Pattern matching in `ApprovalPolicy` | Low — isolated to `approval`, precedence order unchanged | Low — matcher + tests | Medium — ergonomic, immediate |
+| 6b | Context-cost tracked dimension | Low — additive field, no external dependency | Low — extend fold + threshold insight | Medium — unlocks a recommendation type, but needs a real token/byte source to be useful |
+| 6c | `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Medium — sequence detection is new logic, not a fold-in-place stat | Medium/High — new capability, feeds `ApprovalGate` |
+| 6d | Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures, only known from docs, not verified against real code | High — new package, needs real-world validation | High — proves the loop on a real, popular agent instead of only synthetic demos |
+| 6e | Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation`; co-occurrence shape still TBD | High — design pass required before implementation | Medium — research-oriented (AGENTS.md open question), less immediately actionable |
 
-Everything so far is validated by `examples/` scenarios (synthetic telemetry),
-never by a real agent host. OpenCode's plugin system already exposes the hook
-shape Adaptive MCP's `@adaptivemcp/middleware` `Middleware` interface mirrors
-(`beforeCall`/`afterCall` ≈ OpenCode's `tool.execute.before`/`tool.execute.after`),
-loaded from `.opencode/plugins/` or an npm package.
+### 6a. Pattern matching in `ApprovalPolicy`
 
-- New package: `@adaptivemcp/opencode-plugin` — maps OpenCode's
-  `tool.execute.before`/`tool.execute.after` hooks onto
-  `TelemetryRecorder`/`MiddlewareChain`, and `session.*` hooks onto the
-  session-tagging work in 6e.
-- Follows the mcp-binary precedent: a thin, sanctioned adapter at the edge: no
-  core package depends on it.
-- This is the highest-leverage item: it is the difference between "library with
-  good internal design" and something that learns from a real, popular agent
-  instead of only local demos.
+`ApprovalPolicy.denyTools` / `confirmRiskLevels` (`packages/approval/src/gate.ts`)
+match exact tool names only. OpenCode's permission config matches tool/command
+*patterns* with last-match-wins (`"git *": "allow"`, `"rm *": "deny"`), and its
+MCP tool-disabling config uses the same glob approach per server namespace
+(`"my-mcp*": false`).
 
-### 6b. `repetition_detected` insight (doom-loop, but learned)
+- Add glob matching to `denyTools` (and optionally `confirmRiskLevels`) so one
+  entry can cover a whole noisy server (e.g. `"flaky-server/*"`) instead of
+  enumerating every tool name.
+- Keep `ApprovalGate.gate()`'s existing precedence order (deny → risk annotation
+  → learned failure rate → allow); only the matching mechanism changes.
 
-OpenCode's `doom_loop` guard is a static heuristic: N identical calls in a row
-→ `ask`/`deny`. `@adaptivemcp/evaluation` currently only derives
-`observed_failure_rate` / `avg_duration_ms` from aggregate `ToolStats`, nothing
-from event *sequences*.
-
-- Add a `repetition_detected` `Insight` computed from consecutive identical
-  `(toolName, serverName, input-hash)` events in the telemetry stream, not just
-  aggregate counters.
-- Feeds `ApprovalGate` the same way `failureRate` does today: cross a
-  threshold → `require_confirmation`.
-- Directly serves the AGENTS.md open question *"can workflows emerge from
-  telemetry?"*
-
-### 6c. Context-cost as a tracked dimension
+### 6b. Context-cost as a tracked dimension
 
 OpenCode explicitly warns that MCP servers "add to context" and lets users
 disable whole tool namespaces to control it. `ToolStats` tracks `totalCost`
@@ -238,19 +229,40 @@ disable it," the thing OpenCode users do by hand today via
 - Pairs naturally with the ROADMAP's existing "cost drift" idea (see What's
   Next in the README).
 
-### 6d. Pattern matching in `ApprovalPolicy`
+### 6c. `repetition_detected` insight (doom-loop, but learned)
 
-`ApprovalPolicy.denyTools` / `confirmRiskLevels` (`packages/approval/src/gate.ts`)
-match exact tool names only. OpenCode's permission config matches tool/command
-*patterns* with last-match-wins (`"git *": "allow"`, `"rm *": "deny"`), and its
-MCP tool-disabling config uses the same glob approach per server namespace
-(`"my-mcp*": false`).
+OpenCode's `doom_loop` guard is a static heuristic: N identical calls in a row
+→ `ask`/`deny`. `@adaptivemcp/evaluation` currently only derives
+`observed_failure_rate` / `avg_duration_ms` from aggregate `ToolStats`, nothing
+from event *sequences*.
 
-- Add glob matching to `denyTools` (and optionally `confirmRiskLevels`) so one
-  entry can cover a whole noisy server (e.g. `"flaky-server/*"`) instead of
-  enumerating every tool name.
-- Keep `ApprovalGate.gate()`'s existing precedence order (deny → risk annotation
-  → learned failure rate → allow); only the matching mechanism changes.
+- Add a `repetition_detected` `Insight` computed from consecutive identical
+  `(toolName, serverName, input-hash)` events in the telemetry stream, not just
+  aggregate counters.
+- Feeds `ApprovalGate` the same way `failureRate` does today: cross a
+  threshold → `require_confirmation`.
+- Directly serves the AGENTS.md open question *"can workflows emerge from
+  telemetry?"*
+
+### 6d. Host adapter: prove the loop on a real harness
+
+Everything so far is validated by `examples/` scenarios (synthetic telemetry),
+never by a real agent host. OpenCode's plugin system already exposes the hook
+shape Adaptive MCP's `@adaptivemcp/middleware` `Middleware` interface mirrors
+(`beforeCall`/`afterCall` ≈ OpenCode's `tool.execute.before`/`tool.execute.after`),
+loaded from `.opencode/plugins/` or an npm package.
+
+- New package: `@adaptivemcp/opencode-plugin` — maps OpenCode's
+  `tool.execute.before`/`tool.execute.after` hooks onto
+  `TelemetryRecorder`/`MiddlewareChain`, and `session.*` hooks onto the
+  session-tagging work in 6e.
+- Follows the mcp-binary precedent: a thin, sanctioned adapter at the edge: no
+  core package depends on it.
+- Highest ceiling of any Phase 6 item — the difference between "library with
+  good internal design" and something that learns from a real, popular agent
+  instead of only local demos — but graded medium/high risk+effort here because
+  it is the only item resting on an external API only seen through docs, not
+  verified against OpenCode's actual source.
 
 ### 6e. Session-scoped telemetry
 
@@ -265,7 +277,7 @@ needed to compute co-occurrence doesn't exist yet.
 - New evaluation pass: co-occurrence of tools within the same `sessionId`,
   surfaced as a `Recommendation` (`type: "workflow"`?) or a new insight —
   exact shape TBD, needs a design pass before implementation.
-- Depends on 6a for a real source of session boundaries (OpenCode's
+- Depends on 6d for a real source of session boundaries (OpenCode's
   `session.*` hooks); the synthetic examples have no session concept to hang
   this off of otherwise.
 
