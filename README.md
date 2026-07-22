@@ -403,9 +403,9 @@ at the [MCP Dev Summit Seoul 2026](https://mcpseoul2026.sched.com/event/2PYdz/se
 
 ### What's next
 
-- Multi-server aggregation: merge `tools-metadata` across servers into one view.
-- More insight types: cost drift, latency regression, and approval friction.
-- Conformance scenarios so hosts can verify graceful degradation.
+See `docs/ROADMAP.md` Phase 6 for the full, risk/effort-ordered list of planned
+work (new insight types, multi-server aggregation, conformance scenarios, a
+real-host adapter, and more).
 
 ## License
 

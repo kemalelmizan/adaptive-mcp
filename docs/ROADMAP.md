@@ -108,6 +108,11 @@ stdio server/client example. The YAML view evolves automatically; the human
   capabilities (the `@modelcontextprotocol/sdk` already includes `extensions` in
   its `ServerCapabilities` schema).
 
+> Two follow-ups from this phase are still open and tracked in Phase 6: the
+> reference impl doesn't yet emit `budget`/`require_approval` (6f), and
+> graduating the SEP to Final is blocked on an upstream SDK PR (see
+> "Blocked / external dependency" at the end of Phase 6).
+
 ## Phase 5: Extensible middleware (complete)
 
 Make the middleware layer pluggable so external integrations — **rtk**
@@ -152,6 +157,11 @@ mapping, and open decisions (D1–D10, with pros/cons) live in `docs/doubts.md` 
   MCP-chaining, D8 CCR hash surfaced in YAML, D9 passthrough on compress failure,
   D10 generic CLI→MCP wrapper contract.
 
+> The **client OAuth delegation** flow above only got the hook point (the
+> `beforeCall` credential-injection seam); the actual flow was deliberately
+> deferred ("design the hook point now, specify the exact flow later" —
+> doubts.md §12). That flow is now tracked as Phase 6, item 6h.
+
 ### How MCP chaining actually works (clarity)
 
 **We chain MCP servers, not binaries.** A `MiddlewareChain` is a list of
@@ -181,23 +191,34 @@ message instead of spawning a missing binary. Adaptive MCP is therefore **not a
 nuisance** to other MCPs: it chains via MCP and leaves the user's shell and other
 servers alone. See `packages/mcp-binary/README.md`.
 
-## Phase 6: Lessons from OpenCode (planned, 2026-07-22)
+## Phase 6: All remaining planned work (ordered by risk/effort, 2026-07-22)
 
-Prompted by a review of [OpenCode](https://github.com/anomalyco/opencode)
-(opencode.ai) — a mature, static-config coding-agent harness. OpenCode has no
-learning loop (its permission rules are hand-written), but its host-level
-concepts expose gaps in what Adaptive MCP currently observes and models. Each
-item below is independent and can ship on its own. **Ordered low risk/low
-effort → high risk/high effort**, so the cheap, self-contained wins land
-before the item that depends on an unverified external API.
+This phase consolidates **every incomplete item scattered across this repo** —
+the OpenCode-inspired gaps below, README's old "What's next" list, and the
+deferred sub-items inside Phase 4/5 — into one place, so nothing incomplete is
+tracked in three different documents. Five items (6a–6e) came from a review of
+[OpenCode](https://github.com/anomalyco/opencode) (opencode.ai), a mature,
+static-config coding-agent harness with no learning loop of its own but whose
+host-level concepts expose gaps in what Adaptive MCP observes and models. The
+rest (6f–6j) were already-known gaps that had no single home. Each item is
+independent and can ship on its own unless a dependency is called out.
+
+**Ordered low risk/low effort → high risk/high effort**, so the cheap,
+self-contained wins land first. A separate "Blocked / external dependency"
+list at the end holds items that cannot be scheduled by our own effort at all.
 
 | # | Item | Risk | Effort | Payoff |
 | --- | --- | --- | --- | --- |
 | 6a | Pattern matching in `ApprovalPolicy` | Low — isolated to `approval`, precedence order unchanged | Low — matcher + tests | Medium — ergonomic, immediate |
 | 6b | Context-cost tracked dimension | Low — additive field, no external dependency | Low — extend fold + threshold insight | Medium — unlocks a recommendation type, but needs a real token/byte source to be useful |
-| 6c | `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Medium — sequence detection is new logic, not a fold-in-place stat | Medium/High — new capability, feeds `ApprovalGate` |
-| 6d | Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures, only known from docs, not verified against real code | High — new package, needs real-world validation | High — proves the loop on a real, popular agent instead of only synthetic demos |
-| 6e | Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation`; co-occurrence shape still TBD | High — design pass required before implementation | Medium — research-oriented (AGENTS.md open question), less immediately actionable |
+| 6c | More insight types: cost drift, latency regression, approval friction | Low — additive, same shape as existing insights | Low/Medium — one evaluator pass per insight | Medium — broadens what the YAML surfaces, no new package |
+| 6d | `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Medium — sequence detection is new logic, not a fold-in-place stat | Medium/High — new capability, feeds `ApprovalGate` |
+| 6e | Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Medium — need scenarios simulating hosts that ignore the extension | Medium — confidence/trust, not new capability |
+| 6f | Emit `budget` / `require_approval` in the reference impl | Medium — touches the wire schema tracked for SEP graduation | Medium — extend `ExtensionController` view + `spec` types | High — unblocks the SEP stabilization gate (see Blocked list) |
+| 6g | Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Medium/High | Medium/High — real multi-server hosts need this |
+| 6h | Client OAuth delegation flow | Medium — credential handling is security-sensitive | Medium/High — the hook point exists (Phase 5); the flow itself doesn't | Medium — unblocks one integration, not the core loop |
+| 6i | Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures, only known from docs, not verified against real code | High — new package, needs real-world validation | High — proves the loop on a real, popular agent instead of only synthetic demos |
+| 6j | Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation`; co-occurrence shape still TBD | High — design pass required before implementation | Medium — research-oriented (AGENTS.md open question), less immediately actionable; **depends on 6i** for real session boundaries |
 
 ### 6a. Pattern matching in `ApprovalPolicy`
 
@@ -226,10 +247,24 @@ disable it," the thing OpenCode users do by hand today via
   `avgOutputTokens` or `avgOutputBytes`).
 - New evaluation insight: `context_cost_high` once a tool's average output
   crosses a configurable threshold.
-- Pairs naturally with the ROADMAP's existing "cost drift" idea (see What's
-  Next in the README).
+- Pairs naturally with 6c's "cost drift" idea below.
 
-### 6c. `repetition_detected` insight (doom-loop, but learned)
+### 6c. More insight types: cost drift, latency regression, approval friction
+
+Formerly README's "What's next" list (now folded in here so planned work lives
+in one document). Same shape as existing insights (`observed_failure_rate` /
+`avg_duration_ms`) — trend/derived signals rather than new subsystems.
+
+- **Cost drift**: flag a tool whose `totalCost`/invocation is trending up
+  over a rolling window, not just its absolute value.
+- **Latency regression**: flag a tool whose `avgDurationMs` has regressed
+  vs. an earlier baseline window (distinct from the existing flat-average
+  insight).
+- **Approval friction**: track how often `ApprovalGate.gate()` returns
+  `require_confirmation`/`deny` for a tool, surfaced as its own insight so
+  the YAML shows not just "is this flaky" but "is this annoying to run."
+
+### 6d. `repetition_detected` insight (doom-loop, but learned)
 
 OpenCode's `doom_loop` guard is a static heuristic: N identical calls in a row
 → `ask`/`deny`. `@adaptivemcp/evaluation` currently only derives
@@ -244,7 +279,59 @@ from event *sequences*.
 - Directly serves the AGENTS.md open question *"can workflows emerge from
   telemetry?"*
 
-### 6d. Host adapter: prove the loop on a real harness
+### 6e. Conformance scenarios (graceful degradation)
+
+Formerly README's "What's next" list. No host is required to understand the
+`dev.adaptivemcp/tools-metadata` resource or the `report_observation` tool —
+the whole design bets on graceful degradation for hosts that ignore unknown
+resources. That claim is currently untested.
+
+- Add `examples/src/scenarios/conformance.js`-style scenarios that simulate a
+  host ignoring the extension entirely (resource never read, tool never
+  called) and assert the base MCP server/client still work normally.
+- Doubles as groundwork for the SEP graduation conformance suite referenced in
+  doubts.md §6 (see the Blocked list below).
+
+### 6f. Emit `budget` / `require_approval` in the reference impl
+
+Known gap from doubts.md §8 / §11: the reference impl (`@adaptivemcp/extension`)
+does not yet emit the `budget` or `require_approval` fields in the
+`tools-metadata` view, even though the SEP draft and the precedence rule
+(host UI > suggestion > nothing) already assume they exist.
+
+- Extend `ExtensionController`'s view projection + the relevant `spec` types to
+  emit both fields once a `Router`/`ApprovalGate` recommendation exists for a
+  tool.
+- Until this ships, the precedence rule in `docs/sep-2133-tools-metadata.md`
+  §Security is theoretical for those two fields — this item is a prerequisite
+  for the upstream SDK PR gate (see Blocked list).
+
+### 6g. Multi-server aggregation
+
+Formerly README's "What's next" list. Today, `ExtensionController` derives one
+`tools-metadata.yaml` per store; there's no notion of merging views **across**
+multiple MCP servers into one aggregate a host could read in one place.
+
+- Design the merge/key-collision rule (recall the `(tool_name, server_name)`
+  composite key already exists specifically because two servers can expose a
+  same-named tool — the aggregation view needs to preserve that distinction,
+  not flatten it).
+- Likely lands as a new method on `ExtensionController` or a small aggregator
+  that composes multiple `Store`s, rather than a new package.
+
+### 6h. Client OAuth delegation flow
+
+Phase 5 shipped the `beforeCall` credential-injection **hook point** for
+middleware but deliberately deferred the actual OAuth flow ("design the hook
+point now, specify the exact flow later" — doubts.md §12).
+
+- Design and implement the flow itself: token acquisition, refresh, and
+  storage for a middleware that needs to inject credentials into a tool call.
+- Security-sensitive — this is the one item in Phase 6 that touches credential
+  handling directly, hence the elevated risk grade despite reusing an existing
+  hook point.
+
+### 6i. Host adapter: prove the loop on a real harness
 
 Everything so far is validated by `examples/` scenarios (synthetic telemetry),
 never by a real agent host. OpenCode's plugin system already exposes the hook
@@ -255,7 +342,7 @@ loaded from `.opencode/plugins/` or an npm package.
 - New package: `@adaptivemcp/opencode-plugin` — maps OpenCode's
   `tool.execute.before`/`tool.execute.after` hooks onto
   `TelemetryRecorder`/`MiddlewareChain`, and `session.*` hooks onto the
-  session-tagging work in 6e.
+  session-tagging work in 6j.
 - Follows the mcp-binary precedent: a thin, sanctioned adapter at the edge: no
   core package depends on it.
 - Highest ceiling of any Phase 6 item — the difference between "library with
@@ -264,7 +351,7 @@ loaded from `.opencode/plugins/` or an npm package.
   it is the only item resting on an external API only seen through docs, not
   verified against OpenCode's actual source.
 
-### 6e. Session-scoped telemetry
+### 6j. Session-scoped telemetry
 
 OpenCode treats sessions as first-class (`session.created` / `session.idle` /
 `session.compacted` / `session.deleted`). Adaptive MCP's telemetry is per-invocation
@@ -277,8 +364,26 @@ needed to compute co-occurrence doesn't exist yet.
 - New evaluation pass: co-occurrence of tools within the same `sessionId`,
   surfaced as a `Recommendation` (`type: "workflow"`?) or a new insight —
   exact shape TBD, needs a design pass before implementation.
-- Depends on 6d for a real source of session boundaries (OpenCode's
+- Depends on 6i for a real source of session boundaries (OpenCode's
   `session.*` hooks); the synthetic examples have no session concept to hang
   this off of otherwise.
 
+### Blocked / external dependency (not schedulable by our own effort)
+
+These can't be ordered by risk/effort like 6a–6j because progress depends on
+something outside this repo, not on engineering time spent here. Tracked in
+full in `docs/doubts.md`.
+
+- **Upstream SDK PR for SEP-2133 graduation** (doubts.md §6). Status:
+  `open`/`planned`, decision is to **wait** until the `report_observation`
+  handler and the resource shape have shipped in ≥ 2 published
+  `@adaptivemcp/extension` releases with no breaking wire-schema changes, and
+  at least one external consumer (or 4–6 weeks of real usage) exists — only
+  then open the PR to `modelcontextprotocol/typescript-sdk`. Drafting the
+  module skeleton now is fine; opening the PR early is not, since the SEP
+  can't graduate Final without it.
+- **Server Card #1649 dual-emit** (doubts.md §10/§11). The chosen hybrid
+  precedence strategy (host UI > suggestion > nothing) is implemented, but the
+  dual-emit of static risk once #1649 lands is blocked on that upstream issue
+  shipping — nothing to do here until #1649 moves out of Draft.
 
