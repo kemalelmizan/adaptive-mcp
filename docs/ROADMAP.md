@@ -43,8 +43,15 @@ pnpm --filter @adaptivemcp/examples client
 | `@adaptivemcp/orchestration` | Execution composition / retries | ✅ done |
 | `@adaptivemcp/approval` | Intent → plan → tool approval gate | ✅ done |
 | `@adaptivemcp/thin-client` | Client-side execution loop + middleware hooks | ✅ done |
+| `@adaptivemcp/middleware` | `Middleware` plugin interface + `MiddlewareChain` + `Compressor` abstraction | ✅ done |
+| `@adaptivemcp/mcp-binary` | Generic CLI-binary → MCP-server wrapper (rtk) | ✅ done |
 | `@adaptivemcp/runtime` | Batteries-included `AdaptiveRuntime` wiring all packages | ✅ done |
 | `examples` | Runnable server + client + scenarios | ✅ done |
+
+> Note (2026-07-22): `middleware` and `mcp-binary` are implemented, tested, and
+> wired into `AdaptiveRuntime`/`ThinClient` (see Phase 5), but are not yet in
+> `PUBLISHABLE_PACKAGES` (`scripts/lib/workspace.ts`) — add them there before the
+> next release.
 
 ## Phase 0: Foundation (complete)
 
@@ -101,7 +108,7 @@ stdio server/client example. The YAML view evolves automatically; the human
   capabilities (the `@modelcontextprotocol/sdk` already includes `extensions` in
   its `ServerCapabilities` schema).
 
-## Phase 5: Extensible middleware (planned)
+## Phase 5: Extensible middleware (complete)
 
 Make the middleware layer pluggable so external integrations — **rtk**
 (CLI-output compression), **headroom** (generic content compression), and a later
@@ -173,5 +180,93 @@ reports `missing`/`wrong-package` so the wrapper degrades to a clear setup
 message instead of spawning a missing binary. Adaptive MCP is therefore **not a
 nuisance** to other MCPs: it chains via MCP and leaves the user's shell and other
 servers alone. See `packages/mcp-binary/README.md`.
+
+## Phase 6: Lessons from host harnesses (planned, 2026-07-22)
+
+Prompted by a review of [OpenCode](https://github.com/anomalyco/opencode)
+(opencode.ai) — a mature, static-config coding-agent harness. OpenCode has no
+learning loop (its permission rules are hand-written), but its host-level
+concepts expose gaps in what Adaptive MCP currently observes and models. Each
+item below is independent and can ship on its own.
+
+### 6a. Host adapter: prove the loop on a real harness
+
+Everything so far is validated by `examples/` scenarios (synthetic telemetry),
+never by a real agent host. OpenCode's plugin system already exposes the hook
+shape Adaptive MCP's `@adaptivemcp/middleware` `Middleware` interface mirrors
+(`beforeCall`/`afterCall` ≈ OpenCode's `tool.execute.before`/`tool.execute.after`),
+loaded from `.opencode/plugins/` or an npm package.
+
+- New package: `@adaptivemcp/opencode-plugin` — maps OpenCode's
+  `tool.execute.before`/`tool.execute.after` hooks onto
+  `TelemetryRecorder`/`MiddlewareChain`, and `session.*` hooks onto the
+  session-tagging work in 6e.
+- Follows the mcp-binary precedent: a thin, sanctioned adapter at the edge: no
+  core package depends on it.
+- This is the highest-leverage item: it is the difference between "library with
+  good internal design" and something that learns from a real, popular agent
+  instead of only local demos.
+
+### 6b. `repetition_detected` insight (doom-loop, but learned)
+
+OpenCode's `doom_loop` guard is a static heuristic: N identical calls in a row
+→ `ask`/`deny`. `@adaptivemcp/evaluation` currently only derives
+`observed_failure_rate` / `avg_duration_ms` from aggregate `ToolStats`, nothing
+from event *sequences*.
+
+- Add a `repetition_detected` `Insight` computed from consecutive identical
+  `(toolName, serverName, input-hash)` events in the telemetry stream, not just
+  aggregate counters.
+- Feeds `ApprovalGate` the same way `failureRate` does today: cross a
+  threshold → `require_confirmation`.
+- Directly serves the AGENTS.md open question *"can workflows emerge from
+  telemetry?"*
+
+### 6c. Context-cost as a tracked dimension
+
+OpenCode explicitly warns that MCP servers "add to context" and lets users
+disable whole tool namespaces to control it. `ToolStats` tracks `totalCost`
+(money) and `avgDurationMs` but nothing about token/context size — so the
+derived YAML currently has no way to ever recommend "this tool is verbose,
+disable it," the thing OpenCode users do by hand today via
+`"tools": { "my-mcp*": false }`.
+
+- Extend `ToolStats` (`@adaptivemcp/spec`) with a context-size field (e.g.
+  `avgOutputTokens` or `avgOutputBytes`).
+- New evaluation insight: `context_cost_high` once a tool's average output
+  crosses a configurable threshold.
+- Pairs naturally with the ROADMAP's existing "cost drift" idea (see What's
+  Next in the README).
+
+### 6d. Pattern matching in `ApprovalPolicy`
+
+`ApprovalPolicy.denyTools` / `confirmRiskLevels` (`packages/approval/src/gate.ts`)
+match exact tool names only. OpenCode's permission config matches tool/command
+*patterns* with last-match-wins (`"git *": "allow"`, `"rm *": "deny"`), and its
+MCP tool-disabling config uses the same glob approach per server namespace
+(`"my-mcp*": false`).
+
+- Add glob matching to `denyTools` (and optionally `confirmRiskLevels`) so one
+  entry can cover a whole noisy server (e.g. `"flaky-server/*"`) instead of
+  enumerating every tool name.
+- Keep `ApprovalGate.gate()`'s existing precedence order (deny → risk annotation
+  → learned failure rate → allow); only the matching mechanism changes.
+
+### 6e. Session-scoped telemetry
+
+OpenCode treats sessions as first-class (`session.created` / `session.idle` /
+`session.compacted` / `session.deleted`). Adaptive MCP's telemetry is per-invocation
+with no session tag, so there is currently no data model to answer the
+AGENTS.md open question *"which tools naturally cluster together?"* — the data
+needed to compute co-occurrence doesn't exist yet.
+
+- Add an optional `sessionId` to `ToolExecutionEvent` (`@adaptivemcp/spec`) and
+  thread it through `TelemetryRecorder`.
+- New evaluation pass: co-occurrence of tools within the same `sessionId`,
+  surfaced as a `Recommendation` (`type: "workflow"`?) or a new insight —
+  exact shape TBD, needs a design pass before implementation.
+- Depends on 6a for a real source of session boundaries (OpenCode's
+  `session.*` hooks); the synthetic examples have no session concept to hang
+  this off of otherwise.
 
 
