@@ -294,4 +294,24 @@ export interface Store {
 
   /** Fold a tool execution event into the persisted stats. */
   recordExecution(event: ToolExecutionEvent): ToolRecord;
+
+  // Graph methods (optional - only implemented when graph tracking is enabled)
+  /** Record an execution node in the graph. */
+  recordExecutionNode?(node: ExecutionNode): ExecutionNode;
+  /** Get an execution node by ID. */
+  getExecutionNode?(id: string): ExecutionNode | undefined;
+  /** Get all nodes for a session. */
+  getNodesBySession?(sessionId: string): ExecutionNode[];
+  /** Get all nodes for a workflow (across sessions). */
+  getNodesByWorkflow?(workflowId: string): ExecutionNode[];
+  /** Get children of a node. */
+  getChildren?(parentId: string): ExecutionNode[];
+  /** Get parent of a node. */
+  getParent?(childId: string): ExecutionNode | undefined;
+  /** Get root nodes (no parent) for a session. */
+  getRootNodes?(sessionId: string): ExecutionNode[];
+  /** Get leaf nodes (no children) for a session. */
+  getLeafNodes?(sessionId: string): ExecutionNode[];
+  /** Update children IDs of a parent node. */
+  updateChildrenIds?(parentId: string, childrenIds: string[]): void;
 }

@@ -1,7 +1,8 @@
 import type { Store } from "@adaptivemcp/spec";
 import type { ApprovalGate, ApprovalDecision } from "@adaptivemcp/approval";
 import type { RetryPolicy } from "@adaptivemcp/orchestration";
-import { MiddlewareChain, type Middleware, type PlannedCall } from "@adaptivemcp/middleware";
+import { MiddlewareChain, type Middleware, type PlannedCall, type CallResult } from "@adaptivemcp/middleware";
+import { GraphTrackingMiddleware } from "./graph-middleware.js";
 
 export interface ToolHandler {
   (input: unknown): Promise<{ ok: boolean; error?: string; output?: unknown }>;
@@ -20,6 +21,8 @@ export interface ThinClientOptions {
   defaultRetry?: RetryPolicy;
   /** Middleware registered up-front (D2: explicit `use()`). */
   middleware?: Middleware[];
+  /** Optional graph tracking middleware for execution graph intelligence. */
+  graphTracking?: GraphTrackingMiddleware;
 }
 
 /**
@@ -43,6 +46,7 @@ export class ThinClient {
   private requestApproval: (toolName: string) => boolean | Promise<boolean>;
   private defaultRetry: RetryPolicy;
   private chain: MiddlewareChain;
+  private graphTracking?: GraphTrackingMiddleware;
 
   constructor(options: ThinClientOptions) {
     this.memory = options.memory;
@@ -57,6 +61,7 @@ export class ThinClient {
     for (const mw of options.middleware ?? []) {
       this.chain.use(mw);
     }
+    this.graphTracking = options.graphTracking;
   }
 
   /**
@@ -94,10 +99,27 @@ export class ThinClient {
     const call: PlannedCall = { toolName, serverName, input };
     await this.chain.runBefore(call);
 
+    // Start graph tracking if enabled
+    if (this.graphTracking) {
+      await this.graphTracking.beforeCall(call, { store: this.memory, toolName, serverName });
+    }
+
     const policy = this.retryPolicyFor(toolName, serverName);
+    const startTime = Date.now();
     const result = await this.executeWithRetry(handler, call, policy);
+    const durationMs = Date.now() - startTime;
     call.output = result.output;
     await this.chain.runAfter(result, call);
+
+    // Complete graph tracking if enabled
+    if (this.graphTracking) {
+      const callResult: CallResult = { ok: result.ok, error: result.error };
+      if (result.ok) {
+        await this.graphTracking.afterCall(callResult, call, { store: this.memory, toolName, serverName });
+      } else {
+        await this.graphTracking.onError(new Error(result.error ?? "Unknown error"), call, { store: this.memory, toolName, serverName });
+      }
+    }
 
     record(result.ok, result.error, call.output);
     return { decision, executed: true, output: call.output };

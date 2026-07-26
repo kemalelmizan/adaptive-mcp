@@ -90,7 +90,81 @@ export interface ToolsMetadataDocument {
   etag: string;
   generated_at: string;
   tools: ToolMetadataView[];
+  /** Graph insights aggregated across all tools. */
+  graphInsights?: {
+    workflows: Record<string, {
+      avgDurationMs: number;
+      successRate: number;
+      avgCost: number;
+      commonBottlenecks: string[];
+      typicalFanOut: number;
+      failureBlastRadius: number;
+    }>;
+  };
 }
+
+/** Execution graph document for a single session. */
+export interface ExecutionGraphDocument {
+  version: string;
+  etag: string;
+  generated_at: string;
+  session_id: string;
+  workflow_id?: string;
+  nodes: Array<{
+    id: string;
+    tool: string;
+    server?: string;
+    parent?: string;
+    children: string[];
+    timestamp: string;
+    duration_ms?: number;
+    status: string;
+    cost?: number;
+  }>;
+  edges: Array<{ from: string; to: string }>;
+}
+
+/** Workflow graph document (aggregated across sessions). */
+export interface WorkflowGraphDocument {
+  version: string;
+  etag: string;
+  generated_at: string;
+  workflow_id: string;
+  total_executions: number;
+  success_rate: number;
+  avg_duration_ms: number;
+  avg_cost: number;
+  common_patterns: Array<{
+    pattern: string;
+    frequency: number;
+    avg_duration_ms: number;
+    success_rate: number;
+  }>;
+  critical_path: Array<{
+    tool: string;
+    avg_duration_ms: number;
+    frequency: number;
+  }>;
+}
+
+/** Graph insights document for a session. */
+export interface GraphInsightsDocument {
+  version: string;
+  etag: string;
+  generated_at: string;
+  session_id: string;
+  workflow_id: string;
+  total_nodes: number;
+  total_duration_ms: number;
+  total_cost: number;
+  failed_nodes: number;
+  max_fan_out: number;
+  parallelizable_nodes: string[];
+  critical_path: string[];
+}
+
+/** Union of all document types for serialization. */
+export type AnyDocument = ToolsMetadataDocument | ExecutionGraphDocument | WorkflowGraphDocument | GraphInsightsDocument;
 
 export function renderToolsMetadata(
   records: ToolRecord[],
@@ -108,13 +182,13 @@ export function renderToolsMetadata(
   return { version, etag, generated_at, tools };
 }
 
-export function toYaml(doc: ToolsMetadataDocument): string {
+export function toYaml(doc: AnyDocument): string {
   // Strict dump: no custom tags, no object refs — safe to re-parse.
   return yaml.dump(doc, { lineWidth: 120, sortKeys: false, noRefs: true, schema: yaml.JSON_SCHEMA });
 }
 
 /** Serialize the document in the requested MIME type (YAML or JSON). */
-export function toDocument(doc: ToolsMetadataDocument, mimeType: string): string {
+export function toDocument(doc: AnyDocument, mimeType: string): string {
   if (mimeType === "application/json") {
     return JSON.stringify(doc, null, 2);
   }

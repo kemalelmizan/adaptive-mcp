@@ -1,12 +1,15 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { SPEC_VERSION, TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
-import type { Annotation, Store } from "@adaptivemcp/spec";
+import type { Annotation, Store, ExecutionNode } from "@adaptivemcp/spec";
 import {
   renderToolsMetadata,
   toDocument,
   toYaml,
   type ToolsMetadataDocument,
+  type ExecutionGraphDocument,
+  type WorkflowGraphDocument,
+  type GraphInsightsDocument,
 } from "./view.js";
 
 export interface ExtensionControllerOptions {
@@ -23,6 +26,7 @@ export interface ExtensionControllerOptions {
  *  - write it to disk (so out-of-band MCP clients can read it);
  *  - expose it as an MCP resource (`dev.adaptivemcp/tools-metadata`), serving
  *    both YAML and JSON via content negotiation.
+ *  - expose execution graph resources for workflow intelligence.
  *
  * The controller never treats the view as the source of truth. Any change to
  * tool metadata flows: event -> Store -> view.
@@ -71,6 +75,323 @@ export class ExtensionController {
   /** Serialize the view in the requested MIME type (YAML default, or JSON). */
   resourceText(mimeType = "application/yaml"): string {
     return toDocument(this.view(), mimeType);
+  }
+
+  /**
+   * Get the execution graph for a session as an MCP resource.
+   * URI: `dev.adaptivemcp/execution-graph/{sessionId}`
+   */
+  executionGraphResourceUri(sessionId: string): string {
+    return `dev.adaptivemcp/execution-graph/${sessionId}`;
+  }
+
+  /** Get the execution graph for a session in the requested format. */
+  executionGraphResourceText(sessionId: string, mimeType = "application/yaml"): string {
+    const graphStore = this.memory as Store & {
+      getNodesBySession?: (sessionId: string) => ExecutionNode[];
+      getRootNodes?: (sessionId: string) => ExecutionNode[];
+    };
+    
+    if (!graphStore.getNodesBySession || !graphStore.getRootNodes) {
+      const doc: ExecutionGraphDocument = {
+        version: SPEC_VERSION,
+        etag: "",
+        generated_at: new Date().toISOString(),
+        session_id: sessionId,
+        workflow_id: "unknown",
+        nodes: [],
+        edges: [],
+      };
+      return toDocument(doc, mimeType);
+    }
+
+    const nodes = graphStore.getNodesBySession(sessionId);
+    if (nodes.length === 0) {
+      const doc: ExecutionGraphDocument = {
+        version: SPEC_VERSION,
+        etag: "",
+        generated_at: new Date().toISOString(),
+        session_id: sessionId,
+        workflow_id: "unknown",
+        nodes: [],
+        edges: [],
+      };
+      return toDocument(doc, mimeType);
+    }
+
+    // Build graph document
+    const doc: ExecutionGraphDocument = {
+      version: SPEC_VERSION,
+      etag: "",
+      generated_at: new Date().toISOString(),
+      session_id: sessionId,
+      workflow_id: nodes[0]?.workflowId ?? "unknown",
+      nodes: nodes.map(n => ({
+        id: n.id,
+        tool: n.toolName,
+        server: n.serverName,
+        parent: n.parentId,
+        children: n.childrenIds,
+        timestamp: n.timestamp,
+        duration_ms: n.durationMs,
+        status: n.status,
+        cost: n.cost?.amount,
+        model: n.model,
+      })),
+      edges: nodes.flatMap(n => n.childrenIds.map(childId => ({ from: n.id, to: childId }))),
+    };
+
+    return toDocument(doc, mimeType);
+  }
+
+  /**
+   * Get the execution graph as Mermaid diagram.
+   * URI: `dev.adaptivemcp/execution-graph/{sessionId}/mermaid`
+   */
+  executionGraphMermaidResourceUri(sessionId: string): string {
+    return `dev.adaptivemcp/execution-graph/${sessionId}/mermaid`;
+  }
+
+  /** Get the execution graph as Mermaid diagram text. */
+  executionGraphMermaidResourceText(sessionId: string): string {
+    const graphStore = this.memory as Store & {
+      getNodesBySession?: (sessionId: string) => ExecutionNode[];
+      getRootNodes?: (sessionId: string) => ExecutionNode[];
+    };
+    
+    if (!graphStore.getNodesBySession || !graphStore.getRootNodes) {
+      return "graph TD\n  A[Graph tracking not enabled]";
+    }
+
+    const nodes = graphStore.getNodesBySession(sessionId);
+    if (nodes.length === 0) {
+      return "graph TD\n  A[Session not found]";
+    }
+
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    let mermaid = "graph TD\n";
+    
+    // Add nodes
+    for (const node of nodes) {
+      const label = `${node.toolName}\\n${node.durationMs ?? 0}ms`;
+      const status = node.status === "failed" ? ":::failed" : node.status === "completed" ? ":::completed" : ":::running";
+      mermaid += `  ${node.id.replace(/-/g, "_")}[${label}]${status}\n`;
+    }
+    
+    // Add edges
+    for (const node of nodes) {
+      for (const childId of node.childrenIds) {
+        mermaid += `  ${node.id.replace(/-/g, "_")} --> ${childId.replace(/-/g, "_")}\n`;
+      }
+    }
+    
+    // Add styles
+    mermaid += "  classDef failed fill:#ffcccc,stroke:#ff0000;\n";
+    mermaid += "  classDef completed fill:#ccffcc,stroke:#00ff00;\n";
+    mermaid += "  classDef running fill:#ffffcc,stroke:#ffaa00;\n";
+    
+    return mermaid;
+  }
+
+  /**
+   * Get workflow graph (aggregated across sessions).
+   * URI: `dev.adaptivemcp/workflow-graph/{workflowId}`
+   */
+  workflowGraphResourceUri(workflowId: string): string {
+    return `dev.adaptivemcp/workflow-graph/${workflowId}`;
+  }
+
+  /** Get the workflow graph in the requested format. */
+  workflowGraphResourceText(workflowId: string, mimeType = "application/yaml"): string {
+    const graphStore = this.memory as Store & {
+      getNodesByWorkflow?: (workflowId: string) => ExecutionNode[];
+    };
+    
+    if (!graphStore.getNodesByWorkflow) {
+      const doc: WorkflowGraphDocument = {
+        version: SPEC_VERSION,
+        etag: "",
+        generated_at: new Date().toISOString(),
+        workflow_id: workflowId,
+        total_executions: 0,
+        success_rate: 0,
+        avg_duration_ms: 0,
+        avg_cost: 0,
+        common_patterns: [],
+        critical_path: [],
+      };
+      return toDocument(doc, mimeType);
+    }
+
+    const nodes = graphStore.getNodesByWorkflow(workflowId);
+    if (nodes.length === 0) {
+      const doc: WorkflowGraphDocument = {
+        version: SPEC_VERSION,
+        etag: "",
+        generated_at: new Date().toISOString(),
+        workflow_id: workflowId,
+        total_executions: 0,
+        success_rate: 0,
+        avg_duration_ms: 0,
+        avg_cost: 0,
+        common_patterns: [],
+        critical_path: [],
+      };
+      return toDocument(doc, mimeType);
+    }
+
+    // Group by session
+    const sessions = new Map<string, ExecutionNode[]>();
+    for (const node of nodes) {
+      const sessionNodes = sessions.get(node.sessionId) ?? [];
+      sessionNodes.push(node);
+      sessions.set(node.sessionId, sessionNodes);
+    }
+
+    // Calculate aggregated stats
+    const sessionCount = sessions.size;
+    let totalDuration = 0;
+    let totalCost = 0;
+    let successCount = 0;
+
+    for (const [, sessionNodes] of sessions) {
+      const root = sessionNodes.find(n => !n.parentId);
+      if (root) {
+        totalDuration += root.durationMs ?? 0;
+        totalCost += sessionNodes.reduce((sum, n) => sum + (n.cost?.amount ?? 0), 0);
+        const hasFailure = sessionNodes.some(n => n.status === "failed");
+        if (!hasFailure) successCount++;
+      }
+    }
+
+const doc: WorkflowGraphDocument = {
+      version: SPEC_VERSION,
+      etag: "",
+      generated_at: new Date().toISOString(),
+      workflow_id: workflowId,
+      total_executions: sessionCount,
+      success_rate: sessionCount > 0 ? successCount / sessionCount : 0,
+      avg_duration_ms: sessionCount > 0 ? Math.round(totalDuration / sessionCount) : 0,
+      avg_cost: sessionCount > 0 ? totalCost / sessionCount : 0,
+      common_patterns: [],
+      critical_path: [],
+    };
+
+    return toDocument(doc, mimeType);
+  }
+
+  /**
+   * Get graph insights for a session.
+   * URI: `dev.adaptivemcp/graph-insights/{sessionId}`
+   */
+  graphInsightsResourceUri(sessionId: string): string {
+    return `dev.adaptivemcp/graph-insights/${sessionId}`;
+  }
+
+  /** Get graph insights for a session. */
+  graphInsightsResourceText(sessionId: string, mimeType = "application/yaml"): string {
+    // This would use GraphAnalyzer - for now return basic info
+    const graphStore = this.memory as Store & {
+      getNodesBySession?: (sessionId: string) => ExecutionNode[];
+      getRootNodes?: (sessionId: string) => ExecutionNode[];
+    };
+    
+    if (!graphStore.getNodesBySession || !graphStore.getRootNodes) {
+      const doc: GraphInsightsDocument = {
+        version: SPEC_VERSION,
+        etag: "",
+        generated_at: new Date().toISOString(),
+        session_id: sessionId,
+        workflow_id: "unknown",
+        total_nodes: 0,
+        total_duration_ms: 0,
+        total_cost: 0,
+        failed_nodes: 0,
+        max_fan_out: 0,
+        parallelizable_nodes: [],
+        critical_path: [],
+      };
+      return toDocument(doc, mimeType);
+    }
+
+    const nodes = graphStore.getNodesBySession(sessionId);
+    if (nodes.length === 0) {
+      const doc: GraphInsightsDocument = {
+        version: SPEC_VERSION,
+        etag: "",
+        generated_at: new Date().toISOString(),
+        session_id: sessionId,
+        workflow_id: "unknown",
+        total_nodes: 0,
+        total_duration_ms: 0,
+        total_cost: 0,
+        failed_nodes: 0,
+        max_fan_out: 0,
+        parallelizable_nodes: [],
+        critical_path: [],
+      };
+      return toDocument(doc, mimeType);
+    }
+
+    // Basic insights
+    const totalDuration = nodes.reduce((sum, n) => sum + (n.durationMs ?? 0), 0);
+    const totalCost = nodes.reduce((sum, n) => sum + (n.cost?.amount ?? 0), 0);
+    const failedNodes = nodes.filter(n => n.status === "failed");
+    const maxFanOut = Math.max(...nodes.map(n => n.childrenIds.length));
+    const parallelizableNodes = nodes.filter(n => n.childrenIds.length > 1);
+
+    const doc: GraphInsightsDocument = {
+      version: SPEC_VERSION,
+      etag: "",
+      generated_at: new Date().toISOString(),
+      session_id: sessionId,
+      workflow_id: nodes[0]?.workflowId ?? "unknown",
+      total_nodes: nodes.length,
+      total_duration_ms: totalDuration,
+      total_cost: totalCost,
+      failed_nodes: failedNodes.length,
+      max_fan_out: maxFanOut,
+      parallelizable_nodes: parallelizableNodes.map(n => n.toolName),
+      critical_path: this.getCriticalPath(nodes).map(n => n.toolName),
+    };
+
+    return toDocument(doc, mimeType);
+  }
+
+  private getCriticalPath(nodes: ExecutionNode[]): ExecutionNode[] {
+    if (nodes.length === 0) return [];
+    
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const roots = nodes.filter(n => !n.parentId);
+    
+    let maxDuration = 0;
+    let criticalPath: ExecutionNode[] = [];
+
+    function dfs(nodeId: string, currentPath: ExecutionNode[], currentDuration: number) {
+      const node = nodeMap.get(nodeId);
+      if (!node) return;
+
+      const newPath = [...currentPath, node];
+      const nodeDuration = node.durationMs ?? 0;
+      const newDuration = currentDuration + nodeDuration;
+
+      if (node.childrenIds.length === 0) {
+        if (newDuration > maxDuration) {
+          maxDuration = newDuration;
+          criticalPath = newPath;
+        }
+      } else {
+        for (const childId of node.childrenIds) {
+          dfs(childId, newPath, newDuration);
+        }
+      }
+    }
+
+    for (const root of roots) {
+      dfs(root.id, [], 0);
+    }
+
+    return criticalPath;
   }
 
   /**
