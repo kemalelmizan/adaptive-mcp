@@ -20,7 +20,7 @@ What does this PR change, and why?
 - [ ] `pnpm test` passes
 - [ ] No new first-class protocol concepts (`adaptiveTool`, `adaptiveSkill`,
       `adaptiveIntent`, `adaptiveWorkflow`)
-- [ ] YAML view remains a projection of the SQLite SSOT (not hand-edited)
+- [ ] YAML view remains a projection of the SQLite store (not hand-edited)
 
 ## Related issues
 

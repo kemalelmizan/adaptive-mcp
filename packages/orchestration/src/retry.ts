@@ -1,4 +1,4 @@
-import type { MemoryStore } from "@adaptivemcp/memory";
+import type { Store } from "@adaptivemcp/spec";
 
 export interface RetryPolicy {
   /** Maximum attempts (including the first). */
@@ -10,7 +10,7 @@ export interface RetryPolicy {
 }
 
 export interface OrchestrationOptions {
-  memory: MemoryStore;
+  memory: Store;
   /** Default retry policy applied to flaky tools. */
   defaultPolicy?: RetryPolicy;
   /** Failure rate at/above which a tool is considered flaky. */
@@ -22,14 +22,14 @@ export interface OrchestrationOptions {
 /**
  * Derives execution strategies (currently: retry policies) from observed
  * behavior. When a tool's observed failure rate crosses `flakyThreshold`, a
- * `workflow` recommendation suggesting a retry policy is written into the SSOT.
+ * `workflow` recommendation suggesting a retry policy is written into the store.
  *
  * The package is intentionally limited to *suggesting* strategies here; the
  * actual retry execution belongs to the caller (e.g. the thin client or an
  * agent loop), which can read the recommendation and act on it.
  */
 export class Orchestrator {
-  private memory: MemoryStore;
+  private memory: Store;
   private defaultPolicy: RetryPolicy;
   private flakyThreshold: number;
   private minInvocations: number;
@@ -48,22 +48,23 @@ export class Orchestrator {
   /** Evaluate every known tool and persist retry-policy recommendations. */
   planAll(): void {
     for (const record of this.memory.allTools()) {
-      this.planTool(record.toolName);
+      this.planTool(record.toolName, record.serverName);
     }
   }
 
   /** Evaluate a single tool, writing a `workflow` recommendation if flaky. */
-  planTool(toolName: string): void {
-    const record = this.memory.getTool(toolName);
+  planTool(toolName: string, serverName?: string): void {
+    const record = this.memory.getTool(toolName, serverName);
     if (!record) return;
     if (record.stats.invocations < this.minInvocations) return;
 
-    this.memory.clearRecommendations(toolName, "workflow");
+    this.memory.clearRecommendations(toolName, "workflow", serverName);
 
     if (record.stats.failureRate >= this.flakyThreshold) {
       const policy = this.policyFor(record.stats.failureRate);
       this.memory.addRecommendation({
         toolName,
+        serverName,
         type: "workflow",
         payload: { retry: policy },
         rationale: `Observed failure rate ${record.stats.failureRate.toFixed(

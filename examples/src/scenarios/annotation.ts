@@ -1,5 +1,5 @@
-import { AdaptiveRuntime } from "../runtime.js";
-import { runTool, section } from "./shared.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
+import { runTool, section, seedRandom } from "./shared.js";
 
 /**
  * Scenario: human annotation vs. learned insight.
@@ -8,13 +8,14 @@ import { runTool, section } from "./shared.js";
  *   - `@adaptivemcp/spec`: the `Annotation` type (risk/owner/tags/description) is
  *     the *static, human-written* layer.
  *   - `@adaptivemcp/extension`: `ExtensionController.annotate()` writes the
- *     annotation into the SSOT and re-syncs the YAML view.
+ *     annotation into the store and re-syncs the YAML view.
  *
  * The key teaching point: annotations and insights live side by side in the same
  * YAML view but come from different sources. Annotations never change on their
  * own; insights update automatically as behavior changes.
  */
 function main(): void {
+  seedRandom(20260719); // deterministic output so the narrative matches the print
   const runtime = new AdaptiveRuntime({ yamlPath: "tools-metadata.annotation.yaml" });
 
   section("1. Operator annotates deploy_service as high-risk BEFORE any usage");

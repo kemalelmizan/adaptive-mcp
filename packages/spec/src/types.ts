@@ -53,6 +53,7 @@ export type InsightSource = "telemetry" | "evaluation" | "human" | "memory";
  */
 export interface Insight {
   toolName: string;
+  serverName?: string;
   key: string;
   value: unknown;
   confidence: number;
@@ -64,10 +65,53 @@ export interface Insight {
 export type RiskLevel = "low" | "medium" | "high";
 
 /**
+ * Core MCP `ToolAnnotations` (the `annotations` object on a tool in
+ * `tools/list`). Adaptive MCP maps its *static* risk onto these native hints so
+ * hosts don't have to learn a parallel taxonomy. See `riskToToolAnnotations`.
+ */
+export interface ToolAnnotationsLike {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
+/**
+ * Map an Adaptive MCP static `risk` level onto core MCP `ToolAnnotations`.
+ *
+ * The MCP spec says clients MUST treat `ToolAnnotations` as untrusted unless
+ * from a trusted server, so this is advisory — but it rides the host's native,
+ * already-parsed risk signal (higher uptake than a custom `risk` field). The
+ * server-published tools-metadata resource keeps `risk` for the *learned/
+ * observed* dimension only (e.g. "observed flaky / costly in practice"), which
+ * core hints cannot express. See doubts.md §10/§11 (Strategy 2 of the hybrid).
+ */
+export function riskToToolAnnotations(risk?: RiskLevel): ToolAnnotationsLike {
+  switch (risk) {
+    case "high":
+      return { destructiveHint: true, openWorldHint: true };
+    case "medium":
+      return { idempotentHint: false, openWorldHint: true };
+    case "low":
+      return { readOnlyHint: true };
+    default:
+      return {};
+  }
+}
+
+/**
  * Written metadata attached to a tool by a human or operator.
+ *
+ * `risk` here is the *static* operator-assigned risk. Per the governance hybrid
+ * (doubts.md §11), static risk SHOULD be projected onto core `Tool.annotations`
+ * via `riskToToolAnnotations` rather than emitted in the resource; the resource's
+ * `annotation.risk` is reserved for learned/observed risk. `owner`/`tags`/
+ * `description` are non-governance metadata with no core-MCP equivalent.
  */
 export interface Annotation {
   toolName: string;
+  serverName?: string;
   risk?: RiskLevel;
   owner?: string;
   tags?: string[];
@@ -82,6 +126,7 @@ export type RecommendationType = "model" | "approval" | "workflow" | "routing";
  */
 export interface Recommendation {
   toolName: string;
+  serverName?: string;
   type: RecommendationType;
   payload: unknown;
   rationale: string;
@@ -90,7 +135,7 @@ export interface Recommendation {
 }
 
 /**
- * The single source of truth (SSOT) record for a tool, persisted in SQLite.
+ * The store record for a tool, persisted in SQLite.
  * The YAML tools-metadata view is derived from this record.
  */
 export interface ToolRecord {
@@ -196,4 +241,57 @@ export interface WorkflowPattern {
   frequency: number;
   avgDurationMs: number;
   successRate: number;
+}
+
+/**
+ * The persistence boundary for Adaptive MCP.
+ *
+ * Packages depend on this interface, not on the concrete `MemoryStore`, so the
+ * backend (SQLite, Postgres, in-memory, remote) can be swapped without touching
+ * the middleware. `MemoryStore` in `@adaptivemcp/memory` is the reference
+ * implementation.
+ *
+ * Records are identified by the `(toolName, serverName)` pair, not `toolName`
+ * alone: two different MCP servers may expose a tool with the same name, and
+ * without the server in the key their records would collide. `serverName` is
+ * optional on read/write because not every call site knows which server it's
+ * dealing with; when omitted, lookups fall back to the most recently updated
+ * record with that `toolName` (ambiguous only if the same tool name is in use
+ * across multiple servers).
+ */
+export interface Store {
+  /** Close the underlying backend and release resources. */
+  close(): void;
+
+  /** Ensure a tool record exists, seeding it with an empty annotation. */
+  ensureTool(toolName: string, serverName?: string): ToolRecord;
+
+  /**
+   * Read a single tool record, or `undefined` if it has never been observed.
+   * Pass `serverName` to disambiguate when the same tool name may exist on
+   * multiple servers; otherwise the most recently updated match is returned.
+   */
+  getTool(toolName: string, serverName?: string): ToolRecord | undefined;
+
+  /** Read every tool record, ordered by tool name then server name. */
+  allTools(): ToolRecord[];
+
+  /** Persist a human-written annotation (the static metadata layer). */
+  setAnnotation(annotation: Annotation): ToolRecord;
+
+  /** Record a learned insight derived from observed behavior. */
+  addInsight(insight: Insight): ToolRecord;
+
+  /** Store a suggested adaptation. */
+  addRecommendation(rec: Recommendation): ToolRecord;
+
+  /**
+   * Remove all recommendations of a given type for a tool. Used by the routing,
+   * orchestration, and approval packages so each adaptation pass recomputes its
+   * own recommendations instead of appending duplicates on every observation.
+   */
+  clearRecommendations(toolName: string, type: RecommendationType, serverName?: string): ToolRecord;
+
+  /** Fold a tool execution event into the persisted stats. */
+  recordExecution(event: ToolExecutionEvent): ToolRecord;
 }

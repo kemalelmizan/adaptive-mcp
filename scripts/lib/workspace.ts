@@ -21,6 +21,11 @@ export const PUBLISHABLE_PACKAGES = [
   "@adaptivemcp/telemetry",
   "@adaptivemcp/evaluation",
   "@adaptivemcp/extension",
+  "@adaptivemcp/runtime",
+  "@adaptivemcp/routing",
+  "@adaptivemcp/orchestration",
+  "@adaptivemcp/approval",
+  "@adaptivemcp/thin-client",
 ] as const;
 
 export type PackageJson = {
@@ -50,6 +55,22 @@ export function run(
 /** Run a pnpm workspace command from the repo root. */
 export function pnpm(args: string[], opts: { silent?: boolean } = {}): string {
   return run("pnpm", args, opts);
+}
+
+/**
+ * Run `changeset status`. Returns the output even when there are no pending
+ * changesets (changeset exits 1 in that case, which is not a failure for our
+ * dry-run gate — it just means there is nothing to release). Throws on any
+ * other non-zero exit so genuine configuration errors still surface.
+ */
+export function changesetStatus(): string {
+  try {
+    return run("pnpm", ["changeset", "status"], { silent: true });
+  } catch (err) {
+    const exit = (err as { status?: number }).status;
+    if (exit === 1) return ""; // no pending changesets — not an error
+    throw err;
+  }
 }
 
 /** Read and parse a package.json by workspace-relative path. */
@@ -86,6 +107,23 @@ export function isDirty(): boolean {
     return run("git", ["status", "--porcelain"], { silent: true }).trim().length > 0;
   } catch {
     return false;
+  }
+}
+
+/** List of uncommitted/untracked files, relative to the repo root. */
+export function dirtyFiles(): string[] {
+  try {
+    const out = run("git", ["status", "--porcelain"], { silent: true }).trim();
+    if (!out) return [];
+    return out
+      .split("\n")
+      // Porcelain format is "XY path" (2 status chars + 1 space + path).
+      // Skip the 2 status chars, then trim the single separator space so
+      // paths beginning with "." (e.g. ".changeset/") are preserved.
+      .map((line) => line.slice(2).trim())
+      .filter(Boolean);
+  } catch {
+    return [];
   }
 }
 

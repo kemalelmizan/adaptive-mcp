@@ -1,5 +1,4 @@
-import type { MemoryStore } from "@adaptivemcp/memory";
-import type { Annotation, ToolRecord } from "@adaptivemcp/spec";
+import type { Annotation, Store, ToolRecord } from "@adaptivemcp/spec";
 
 export type ApprovalDecision = "allow" | "deny" | "require_confirmation";
 
@@ -19,7 +18,7 @@ export interface ApprovalPolicy {
 }
 
 export interface ApprovalOptions {
-  memory: MemoryStore;
+  memory: Store;
   policy?: ApprovalPolicy;
   /** Minimum invocations before flaky-based gating trusts stats. */
   minInvocations?: number;
@@ -34,11 +33,11 @@ export interface ApprovalOptions {
  * rate). When `require_confirmation` is returned, the caller must obtain human
  * approval before proceeding.
  *
- * The package also writes an `approval` recommendation into the SSOT so the YAML
+ * The package also writes an `approval` recommendation into the store so the YAML
  * view reflects the current approval boundary for each tool.
  */
 export class ApprovalGate {
-  private memory: MemoryStore;
+  private memory: Store;
   private policy: Required<ApprovalPolicy>;
   private minInvocations: number;
 
@@ -53,34 +52,38 @@ export class ApprovalGate {
     this.minInvocations = options.minInvocations ?? 10;
   }
 
-  /** Decide whether a planned tool call may proceed. */
-  gate(toolName: string): ApprovalDecision {
-    const record = this.memory.getTool(toolName);
+  /**
+   * Decide whether a planned tool call may proceed. Pass `serverName` when
+   * known so the gate reads the record for the right server — otherwise, a
+   * tool name shared across servers may resolve to the wrong record.
+   */
+  gate(toolName: string, serverName?: string): ApprovalDecision {
+    const record = this.memory.getTool(toolName, serverName);
 
     if (this.policy.denyTools.includes(toolName)) {
-      this.recordBoundary(toolName, "deny");
+      this.recordBoundary(toolName, "deny", serverName);
       return "deny";
     }
 
     const risk = record?.annotation.risk;
     if (risk && this.policy.confirmRiskLevels.includes(risk)) {
-      this.recordBoundary(toolName, "require_confirmation");
+      this.recordBoundary(toolName, "require_confirmation", serverName);
       return "require_confirmation";
     }
 
     if (record && record.stats.invocations >= this.minInvocations) {
       if (record.stats.failureRate >= this.policy.flakyFailureRate) {
-        this.recordBoundary(toolName, "require_confirmation");
+        this.recordBoundary(toolName, "require_confirmation", serverName);
         return "require_confirmation";
       }
     }
 
-    this.recordBoundary(toolName, "allow");
+    this.recordBoundary(toolName, "allow", serverName);
     return "allow";
   }
 
-  private recordBoundary(toolName: string, decision: ApprovalDecision): void {
-    this.memory.clearRecommendations(toolName, "approval");
+  private recordBoundary(toolName: string, decision: ApprovalDecision, serverName?: string): void {
+    this.memory.clearRecommendations(toolName, "approval", serverName);
     const rationale =
       decision === "deny"
         ? "Tool is explicitly denied by policy."
@@ -89,6 +92,7 @@ export class ApprovalGate {
           : "Tool is safe to run autonomously.";
     this.memory.addRecommendation({
       toolName,
+      serverName,
       type: "approval",
       payload: { decision },
       rationale,
@@ -98,7 +102,7 @@ export class ApprovalGate {
   }
 }
 
-/** Helper: did the SSOT record cross the flaky threshold? */
+/** Helper: did the store record cross the flaky threshold? */
 export function isFlaky(record: ToolRecord | undefined, threshold: number): boolean {
   return !!record && record.stats.invocations > 0 && record.stats.failureRate >= threshold;
 }

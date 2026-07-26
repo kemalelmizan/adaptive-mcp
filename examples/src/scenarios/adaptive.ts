@@ -1,11 +1,11 @@
-import { AdaptiveRuntime } from "../runtime.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 import { ThinClient } from "@adaptivemcp/thin-client";
-import { runTool, section } from "./shared.js";
+import { runTool, section, seedRandom } from "./shared.js";
 
 /**
  * Scenario: adaptive behavior across the full stack.
  *
- * Demonstrates the four planned packages wired into the runtime:
+ * Demonstrates the four published executor packages wired into the runtime:
  *   - routing:        model selection + budget warnings
  *   - orchestration:  retry policy for flaky tools
  *   - approval:       enforcement gate for high-risk tools
@@ -14,7 +14,8 @@ import { runTool, section } from "./shared.js";
  * The YAML view (dev.adaptivemcp/tools-metadata) reflects all recommendations.
  */
 async function main(): Promise<void> {
-  const runtime = new AdaptiveRuntime({ yamlPath: "examples/yaml/adaptive.yaml" });
+  seedRandom(20260719); // deterministic output so the narrative matches the print
+  const runtime = new AdaptiveRuntime({ yamlPath: "yaml/adaptive.yaml" });
 
   // Two tools: a cheap read-only search, and a destructive deploy.
   runtime.memory.ensureTool("search_customer", "crm");

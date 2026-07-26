@@ -1,7 +1,7 @@
 # @adaptivemcp/extension
 
 Adaptive MCP extension: derives the YAML `tools-metadata` view from the SQLite
-SSOT and serves it to MCP clients.
+store and serves it to MCP clients.
 
 This is the **one** package that touches the MCP protocol surface. It exposes a
 single resource, `dev.adaptivemcp/tools-metadata` (mime type `application/yaml`),
@@ -15,7 +15,7 @@ observations back.
 npm i @adaptivemcp/extension
 ```
 
-Requires **Node 26**.
+Requires **Node 22+** (Node 26 recommended).
 
 ## Usage
 
@@ -30,7 +30,7 @@ const controller = new ExtensionController({
   yamlPath: "tools-metadata.yaml", // optional: persist the derived view
 });
 
-// After telemetry/evaluation have populated the SSOT:
+// After telemetry/evaluation have populated the store:
 const doc = controller.sync();        // recompute + write yamlPath (if set)
 const yaml = controller.resourceText(); // the YAML string for the MCP resource
 const uri = controller.resourceUri();   // "dev.adaptivemcp/tools-metadata"
@@ -42,11 +42,11 @@ console.log(uri === TOOLS_METADATA_EXTENSION); // true
 
 | Method | Purpose |
 | --- | --- |
-| `sync()` | Recompute the YAML view from the SSOT; write to `yamlPath` if configured. Returns the document. |
+| `sync()` | Recompute the YAML view from the store; write to `yamlPath` if configured. Returns the document. |
 | `view()` | Read the current view without writing to disk. |
 | `resourceUri()` | The stable `dev.adaptivemcp/tools-metadata` URI. |
 | `resourceText()` | The YAML string served by the MCP resource. |
-| `annotate(toolName, annotation)` | Write a static annotation into the SSOT. |
+| `annotate(toolName, annotation)` | Write a static annotation into the store. |
 
 ## Advertising in `initialize`
 
@@ -58,4 +58,4 @@ that degrades gracefully on any host that ignores unknown resources.
 
 ## License
 
-Part of the Adaptive MCP monorepo. See the root [`README.md`](../../README.md).
+Released under the [MIT License](../../LICENSE). Copyright (c) 2026 Kemal Elmizan.

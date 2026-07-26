@@ -33,10 +33,6 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)
 
-  apps/docs: {}
-
-  apps/playground: {}
-
   examples:
     dependencies:
       '@adaptivemcp/approval':
@@ -54,12 +50,18 @@ importers:
       '@adaptivemcp/memory':
         specifier: workspace:*
         version: link:../packages/memory
+      '@adaptivemcp/middleware':
+        specifier: workspace:*
+        version: link:../packages/middleware
       '@adaptivemcp/orchestration':
         specifier: workspace:*
         version: link:../packages/orchestration
       '@adaptivemcp/routing':
         specifier: workspace:*
         version: link:../packages/routing
+      '@adaptivemcp/runtime':
+        specifier: workspace:*
+        version: link:../packages/runtime
       '@adaptivemcp/spec':
         specifier: workspace:*
         version: link:../packages/spec
@@ -172,6 +174,22 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)
 
+  packages/middleware:
+    dependencies:
+      '@adaptivemcp/spec':
+        specifier: workspace:*
+        version: link:../spec
+    devDependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:*
+        version: link:../memory
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)
+
   packages/orchestration:
     dependencies:
       '@adaptivemcp/memory':
@@ -197,6 +215,46 @@ importers:
         specifier: workspace:*
         version: link:../spec
     devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)
+
+  packages/runtime:
+    dependencies:
+      '@adaptivemcp/approval':
+        specifier: workspace:*
+        version: link:../approval
+      '@adaptivemcp/evaluation':
+        specifier: workspace:*
+        version: link:../evaluation
+      '@adaptivemcp/extension':
+        specifier: workspace:*
+        version: link:../extension
+      '@adaptivemcp/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@adaptivemcp/middleware':
+        specifier: workspace:*
+        version: link:../middleware
+      '@adaptivemcp/orchestration':
+        specifier: workspace:*
+        version: link:../orchestration
+      '@adaptivemcp/routing':
+        specifier: workspace:*
+        version: link:../routing
+      '@adaptivemcp/spec':
+        specifier: workspace:*
+        version: link:../spec
+      '@adaptivemcp/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -237,6 +295,9 @@ importers:
       '@adaptivemcp/memory':
         specifier: workspace:*
         version: link:../memory
+      '@adaptivemcp/middleware':
+        specifier: workspace:*
+        version: link:../middleware
       '@adaptivemcp/orchestration':
         specifier: workspace:*
         version: link:../orchestration

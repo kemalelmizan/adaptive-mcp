@@ -16,8 +16,9 @@ export interface ToolStats {
 export function computeToolStats(
   store: TelemetryStore,
   toolName: string,
+  serverName?: string,
 ): ToolStats {
-  const events = store.byTool(toolName);
+  const events = store.byTool(toolName, serverName);
   const invocations = events.length;
   const failures = events.filter((e) => e.status === "failed").length;
 

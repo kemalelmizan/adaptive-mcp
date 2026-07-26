@@ -3,7 +3,7 @@
 This package is a **runnable tour** of the Adaptive MCP packages. It shows how to
 stand up an MCP server and client, register tools, and attach the Adaptive MCP
 extension so that a `tools-metadata.yaml` view is derived automatically from a
-SQLite single source of truth (SSOT).
+SQLite store.
 
 > **Mental model**
 >
@@ -11,13 +11,13 @@ SQLite single source of truth (SSOT).
 > Tool execution (MCP server)
 >         │
 >         ▼
-> Telemetry  ──records event──▶  MemoryStore (SQLite SSOT)
+> Telemetry  ──records event──▶  MemoryStore (SQLite)
 >         │                            │
 >         │                            ▼
 >         │                     Evaluation  ──insights──▶  MemoryStore
 >         │                            │
 >         ▼                            ▼
-> ExtensionController  ◀──  reads SSOT  ──▶  tools-metadata.yaml (view)
+> ExtensionController  ◀──  reads the store  ──▶  tools-metadata.yaml (view)
 >         │
 >         ▼
 > MCP resource: dev.adaptivemcp/tools-metadata
@@ -26,12 +26,28 @@ SQLite single source of truth (SSOT).
 > The YAML is a **derived projection** of the SQLite store. Nobody edits it by
 > hand. Adaptive MCP recomputes it whenever metadata changes.
 
+> **Server-side vs. client-side**
+>
+> It's tempting to assume `@adaptivemcp/extension` is "the server half" and
+> `@adaptivemcp/runtime` is "the client half," since one sounds like a server
+> plugin and the other sounds like a client runtime. That's not the split:
+>
+> - `@adaptivemcp/extension` **is** server-side: it derives `tools-metadata.yaml`
+>   from the store and serves it as an MCP resource (Walkthrough 1).
+> - `@adaptivemcp/runtime` (`AdaptiveRuntime`) is a **transport-agnostic bundle**
+>   that wires telemetry, evaluation, routing, orchestration, approval, and the
+>   extension together. In these examples it's used server-side (Walkthrough 1)
+>   and standalone, with no server or client at all (Walkthrough 3). It is not
+>   "the client."
+> - The actual client-side package is `@adaptivemcp/thin-client` (`ThinClient`):
+>   it owns the execution lifecycle on the client — consulting the approval
+>   gate and applying the store-derived retry policy before calling a tool. See
+>   `dist/scenarios/adaptive.js`.
+
 ## Prerequisites
 
-- **Node 26** (the built-in `node:sqlite` module is available without the
-  `--experimental-sqlite` flag).
-  No LTS, no other `fnm` versions.
-- **pnpm 11.14.0** (latest in this registry).
+- **Node 22+** (Node 26 recommended)
+- **pnpm 11+**
 
 ```bash
 pnpm install
@@ -58,7 +74,7 @@ The server stays stateless and lightweight; all adaptive behavior lives in the
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { AdaptiveRuntime } from "./runtime.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 
 export async function startServer(dbPath?: string, yamlPath?: string) {
   const runtime = new AdaptiveRuntime({ dbPath, yamlPath });
@@ -75,7 +91,7 @@ export async function startServer(dbPath?: string, yamlPath?: string) {
     async ({ environment, version }) => {
       const failed = Math.random() < 0.15;
       const durationMs = 800 + Math.floor(Math.random() * 1200);
-      // ← The only Adaptive MCP line: record the execution into the SSOT.
+      // ← The only Adaptive MCP line: record the execution into the store.
       runtime.observeCompleted({
         toolName: "deploy_service",
         serverName: "adaptive-example-server",
@@ -94,7 +110,7 @@ export async function startServer(dbPath?: string, yamlPath?: string) {
     },
   );
 
-  // The Adaptive MCP resource: a derived YAML view of the SSOT.
+  // The Adaptive MCP resource: a derived YAML view of the store.
   server.registerResource(
     "tools-metadata",
     "dev.adaptivemcp/tools-metadata",
@@ -127,13 +143,20 @@ ADAPTIVE_YAML=tools-metadata.yaml node dist/server.js
 
 The client connects over stdio, calls the tools, and reads the
 `dev.adaptivemcp/tools-metadata` resource. The YAML it receives is computed from
-the server's SQLite SSOT. The client never writes metadata.
+the server's SQLite store. The client never writes metadata.
+
+This walkthrough's client is deliberately "dumb": it doesn't consult any
+Adaptive MCP package at all, just the plain MCP SDK. (`examples/src/client.ts`
+also exports a `runLocalLoop()` that uses `AdaptiveRuntime` standalone — that's
+Walkthrough 3, not this one, and it isn't "the client's" logic.) A client that
+actually *acts* on the adaptive signal — gating on approval, retrying per the
+learned policy — would drive its calls through `@adaptivemcp/thin-client`'s
+`ThinClient` instead; see `dist/scenarios/adaptive.js`.
 
 ```ts
 // examples/src/client.ts (abridged)
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { AdaptiveRuntime } from "./runtime.js";
 
 export async function runClient() {
   const transport = new StdioClientTransport({
@@ -168,35 +191,40 @@ node -e "import('./dist/client.js').then(m => m.runClient())"
 ```
 
 You'll see the server's tools listed and a YAML document printed. This is the live,
-derived view of the SSOT after a handful of calls.
+derived view of the store after a handful of calls.
 
 ---
 
 ## Walkthrough 3: The adaptation loop, locally
 
-`AdaptiveRuntime` wires the packages together so you can watch the loop without
-spawning a server:
+`AdaptiveRuntime` (from `@adaptivemcp/runtime`) wires the packages together so
+you can watch the loop without spawning a server. Its public surface is:
 
 ```ts
-// examples/src/runtime.ts (abridged)
+// @adaptivemcp/runtime — AdaptiveRuntime (abridged)
 export class AdaptiveRuntime {
-  readonly memory: MemoryStore;          // @adaptivemcp/memory: SQLite SSOT
+  readonly memory: Store;               // @adaptivemcp/memory: SQLite store
   readonly telemetry: TelemetryRecorder; // @adaptivemcp/telemetry
   readonly evaluator: Evaluator;         // @adaptivemcp/evaluation
   readonly extension: ExtensionController;// @adaptivemcp/extension
+  readonly router: Router;               // @adaptivemcp/routing
+  readonly orchestrator: Orchestrator;   // @adaptivemcp/orchestration
+  readonly approval: ApprovalGate;       // @adaptivemcp/approval
 
   observeCompleted(input) {
-    this.telemetry.complete(/* … */);    // event → MemoryStore (SSOT)
-    this.evaluator.evaluateAll();        // SSOT stats → insights → SSOT
-    this.extension.sync();               // SSOT → tools-metadata.yaml
+    this.telemetry.complete(/* … */);    // event → MemoryStore
+    this.evaluator.evaluateAll();        // store stats → insights → store
+    this.extension.sync();               // store → tools-metadata.yaml
   }
+  // Routing + orchestration are explicit passes you call once enough signal
+  // has accumulated: router.routeAll(); orchestrator.planAll();
 }
 ```
 
-Run the local loop:
+Run the local loop (the `quickstart` script drives it end to end):
 
 ```bash
-node dist/client.js
+pnpm quickstart
 ```
 
 ---
@@ -209,8 +237,8 @@ own `tools-metadata.*.yaml` next to them so you can diff the view across phases.
 | Script | Packages highlighted | What it shows |
 | --- | --- | --- |
 | `node dist/scenario.js` | spec · memory · telemetry · evaluation · extension | **Improvement over time**: a tool goes healthy → flaky → fixed; the YAML view evolves automatically. |
-| `node dist/scenarios/ssot.js` | spec · memory · extension | The SQLite store is the SSOT; the YAML is a pure projection. Writes metadata directly to the store. |
-| `node dist/scenarios/insights.js` | telemetry · evaluation · extension | Telemetry folds events into the SSOT; evaluation emits `observed_failure_rate` / `avg_duration_ms` insights as sample size grows. |
+| `node dist/scenarios/store.js` | spec · memory · extension | The SQLite store is the store; the YAML is a pure projection. Writes metadata directly to the store. |
+| `node dist/scenarios/insights.js` | telemetry · evaluation · extension | Telemetry folds events into the store; evaluation emits `observed_failure_rate` / `avg_duration_ms` insights as sample size grows. |
 | `node dist/scenarios/annotation.js` | spec · extension | Human `Annotation` (static) vs. learned `Insight` (dynamic) live side by side; only insights move on their own. |
 | `node dist/scenarios/adaptive.js` | routing · orchestration · approval · thin-client | **Full adaptive stack**: model selection + budget, retry policy for flaky tools, the approval gate enforcement hook, and the thin-client loop that consults both. |
 
@@ -218,7 +246,7 @@ Run them all:
 
 ```bash
 node dist/scenario.js
-node dist/scenarios/ssot.js
+node dist/scenarios/store.js
 node dist/scenarios/insights.js
 node dist/scenarios/annotation.js
 node dist/scenarios/adaptive.js
@@ -241,13 +269,13 @@ These mirror what the scenarios print. Use them to see the schema at a glance.
 | Package | Role in the examples |
 | --- | --- |
 | `@adaptivemcp/spec` | Shared types (`ToolRecord`, `Annotation`, `Insight`, `Recommendation`, `ToolStats`) and the `dev.adaptivemcp/` extension namespace. |
-| `@adaptivemcp/memory` | `MemoryStore` over `node:sqlite`, the SSOT. `setAnnotation` / `addInsight` / `addRecommendation` / `recordExecution`. |
-| `@adaptivemcp/telemetry` | `TelemetryRecorder` + `MemoryBackedTelemetryStore` fold every execution event into the SSOT. |
-| `@adaptivemcp/evaluation` | `Evaluator` reads SSOT stats and writes derived `Insight`s once a confidence threshold is met. |
-| `@adaptivemcp/extension` | `ExtensionController` renders the SSOT to `tools-metadata.yaml` and exposes it as an MCP resource. |
-| `@adaptivemcp/routing` | `Router` writes `model` (cheapest model meeting observed latency/failure) and `routing` (budget warning) recommendations into the SSOT. |
+| `@adaptivemcp/memory` | `MemoryStore` over `node:sqlite`, the store. `setAnnotation` / `addInsight` / `addRecommendation` / `recordExecution`. |
+| `@adaptivemcp/telemetry` | `TelemetryRecorder` + `MemoryBackedTelemetryStore` fold every execution event into the store. |
+| `@adaptivemcp/evaluation` | `Evaluator` reads store stats and writes derived `Insight`s once a confidence threshold is met. |
+| `@adaptivemcp/extension` | `ExtensionController` renders the store to `tools-metadata.yaml` and exposes it as an MCP resource. |
+| `@adaptivemcp/routing` | `Router` writes `model` (cheapest model meeting observed latency/failure) and `routing` (budget warning) recommendations into the store. |
 | `@adaptivemcp/orchestration` | `Orchestrator` writes a `workflow` recommendation with a retry policy scaled to the observed failure rate. |
 | `@adaptivemcp/approval` | `ApprovalGate` is the enforcement hook: `gate()` returns `allow` / `require_confirmation` / `deny` from the annotation risk + learned failure rate, and records an `approval` recommendation. |
-| `@adaptivemcp/thin-client` | `ThinClient` runs the client-side loop: consults the approval gate, then executes with the SSOT-derived retry policy. |
+| `@adaptivemcp/thin-client` | `ThinClient` runs the client-side loop: consults the approval gate, then executes with the store-derived retry policy. |
 
 > The four packages above are exercised by `dist/scenarios/adaptive.js`.

@@ -1,7 +1,20 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { AdaptiveRuntime } from "./runtime.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
+import { TOOLS_METADATA_RESOURCE_URI, riskToToolAnnotations, type RiskLevel } from "@adaptivemcp/spec";
+
+/**
+ * Merge an Adaptive MCP static `risk` level into a tool's core `annotations`
+ * (Strategy 2 of the governance hybrid, doubts.md §11): the host's native,
+ * already-parsed risk signal carries the risk instead of a parallel field.
+ */
+function withRisk(
+  annotations: Record<string, unknown>,
+  risk?: RiskLevel,
+): Record<string, unknown> {
+  return { ...annotations, ...riskToToolAnnotations(risk) };
+}
 
 /**
  * A minimal MCP server that exposes two application-level tools and the
@@ -10,16 +23,26 @@ import { AdaptiveRuntime } from "./runtime.js";
  */
 export async function startServer(dbPath?: string, yamlPath?: string): Promise<McpServer> {
   const runtime = new AdaptiveRuntime({ dbPath, yamlPath });
-  const server = new McpServer({ name: "adaptive-example-server", version: "0.1.0" });
+  const server = new McpServer(
+    { name: "adaptive-example-server", version: "0.1.0" },
+    // Advertise the Adaptive MCP extension via the SEP-2133 `extensions`
+    // capability (present in @modelcontextprotocol/sdk >= 1.29.0). Clients that
+    // don't parse capabilities still discover the resource via `resources/list`.
+    { capabilities: { extensions: { "dev.adaptivemcp/tools-metadata": {} } } },
+  );
 
-  // Tool: deploy a service (high-risk, slow).
+  // Tool: deploy a service (high-risk, slow). Static risk is projected onto
+  // core Tool.annotations via riskToToolAnnotations (Strategy 2 demo).
   server.registerTool(
     "deploy_service",
     {
       title: "Deploy Service",
       description: "Deploy a service to the target environment.",
       inputSchema: { environment: z.string(), version: z.string() },
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      annotations: withRisk(
+        { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+        "high",
+      ),
     },
     async ({ environment, version }) => {
       // Simulate occasional failure.
@@ -43,14 +66,18 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
     },
   );
 
-  // Tool: search a customer (low-risk, fast).
+  // Tool: search a customer (low-risk, fast). Static risk projected onto core
+  // Tool.annotations (Strategy 2 demo).
   server.registerTool(
     "search_customer",
     {
       title: "Search Customer",
       description: "Look up a customer by id.",
       inputSchema: { customerId: z.string() },
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      annotations: withRisk(
+        { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+        "low",
+      ),
     },
     async ({ customerId }) => {
       const durationMs = 20 + Math.floor(Math.random() * 60);
@@ -69,16 +96,61 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
   // Adaptive MCP resource: the derived YAML tools-metadata view.
   server.registerResource(
     "tools-metadata",
-    "dev.adaptivemcp/tools-metadata",
+    TOOLS_METADATA_RESOURCE_URI,
     {
       title: "Adaptive MCP Tools Metadata",
       description:
-        "Derived view of tool metadata (annotations, learned insights, recommendations, stats) from the SQLite SSOT.",
+        "Derived view of tool metadata (annotations, learned insights, recommendations, stats) from the SQLite store.",
       mimeType: "application/yaml",
     },
     async (uri) => ({
       contents: [{ uri: uri.href, mimeType: "application/yaml", text: runtime.extension.resourceText() }],
     }),
+  );
+
+  // Adaptive MCP report channel: clients report tool observations back to the
+  // server via the `report_observation` tool (the spec-legal client→server
+  // mechanism). The server validates and folds the report into the store and
+  // re-syncs the view. A stateless server MAY ignore reports; set foldReports
+  // to false to register the tool as a no-op (conformance signal only).
+  const reportTool = runtime.extension.reportObservationTool();
+  const foldReports = process.env.ADAPTIVE_FOLD_REPORTS !== "false";
+  server.registerTool(
+    reportTool.name,
+    {
+      title: "Report Observation",
+      description: reportTool.description,
+      inputSchema: {
+        tool: z.string(),
+        status: z.enum(["success", "failure", "error"]),
+        duration_ms: z.number().optional(),
+        cost: z.number().optional(),
+        timestamp: z.string(),
+        client_id: z.string().optional(),
+      },
+    },
+    async ({ tool, status, duration_ms, cost, timestamp, client_id }) => {
+      // Ensure the tool record exists before folding (graceful on unknown tools).
+      runtime.memory.ensureTool(tool, "adaptive-example-server");
+      const result = runtime.extension.reportObservation({
+        tool,
+        status,
+        duration_ms,
+        cost,
+        timestamp,
+        client_id,
+        foldReports,
+      });
+      if (!result.accepted) {
+        return {
+          content: [{ type: "text", text: `observation for ${tool} not persisted (${result.reason})` }],
+        };
+      }
+      runtime.extension.sync();
+      return {
+        content: [{ type: "text", text: `observation for ${tool} recorded at ${timestamp}` }],
+      };
+    },
   );
 
   const transport = new StdioServerTransport();

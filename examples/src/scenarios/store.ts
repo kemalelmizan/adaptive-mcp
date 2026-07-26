@@ -4,12 +4,12 @@ import { SPEC_VERSION } from "@adaptivemcp/spec";
 import { renderToolsMetadata, toYaml } from "@adaptivemcp/extension";
 
 /**
- * Scenario: the SQLite store is the single source of truth (SSOT).
+ * Scenario: the SQLite MemoryStore is the authoritative store.
  *
  * Highlights:
  *   - `@adaptivemcp/spec`  : the shared `ToolRecord` / `Annotation` / `Insight` types.
  *   - `@adaptivemcp/memory`: the SQLite-backed `MemoryStore` that persists them.
- *   - `@adaptivemcp/extension`: the YAML view is *derived* from the SSOT, never the reverse.
+ *   - `@adaptivemcp/extension`: the YAML view is *derived* from the store, never the reverse.
  *
  * We write metadata directly into the store, then show that the YAML view is a
  * pure projection of whatever the store contains.
@@ -18,7 +18,7 @@ function main(): void {
   const memory = new MemoryStore({ path: ":memory:" });
   const extension = new ExtensionController({ memory });
 
-  console.log("--- 1. Seed the SSOT directly (no YAML involved yet) ---\n");
+  console.log("--- 1. Seed the store directly (no YAML involved yet) ---\n");
 
   // Human-written static annotation (the operator's view of the tool).
   memory.setAnnotation({
@@ -54,11 +54,11 @@ function main(): void {
     });
   }
 
-  console.log("--- 2. Read the raw SSOT record (what SQLite actually stores) ---\n");
+  console.log("--- 2. Read the raw store record (what SQLite actually stores) ---\n");
   const record = memory.getTool("deploy_service");
   console.log(JSON.stringify(record, null, 2));
 
-  console.log("\n--- 3. Derive the YAML view from the SSOT ---\n");
+  console.log("\n--- 3. Derive the YAML view from the store ---\n");
   const doc = renderToolsMetadata(memory.allTools(), SPEC_VERSION);
   console.log(toYaml(doc));
 
@@ -68,7 +68,7 @@ function main(): void {
   // timestamp; the tool content (the actual projection) is identical.
   const a = extension.view().tools;
   const b = extension.view().tools;
-  console.log("view() is a stable projection of the SSOT:", JSON.stringify(a) === JSON.stringify(b));
+  console.log("view() is a stable projection of the store:", JSON.stringify(a) === JSON.stringify(b));
 
   memory.close();
 }

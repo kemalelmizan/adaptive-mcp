@@ -1,8 +1,7 @@
-import type { Insight, ToolRecord } from "@adaptivemcp/spec";
-import type { MemoryStore } from "@adaptivemcp/memory";
+import type { Insight, Store, ToolRecord } from "@adaptivemcp/spec";
 
 export interface EvaluationOptions {
-  memory: MemoryStore;
+  memory: Store;
   /** Failure rate above which an insight is emitted. */
   failureRateThreshold?: number;
   /** Minimum invocations before evaluating. */
@@ -13,10 +12,10 @@ export interface EvaluationOptions {
  * Turns accumulated telemetry into learned insights.
  *
  * This is the "evaluate -> remember" step of the adaptation loop: it reads the
- * SSOT stats and writes derived Insights back into the MemoryStore.
+ * store stats and writes derived Insights back into the MemoryStore.
  */
 export class Evaluator {
-  private memory: MemoryStore;
+  private memory: Store;
   private failureRateThreshold: number;
   private minInvocations: number;
 
@@ -27,8 +26,8 @@ export class Evaluator {
   }
 
   /** Evaluate a single tool and persist any derived insights. */
-  evaluateTool(toolName: string): Insight[] {
-    const record = this.memory.getTool(toolName);
+  evaluateTool(toolName: string, serverName?: string): Insight[] {
+    const record = this.memory.getTool(toolName, serverName);
     if (!record) return [];
     return this.evaluateRecord(record);
   }
@@ -48,6 +47,7 @@ export class Evaluator {
     if (stats.failureRate >= this.failureRateThreshold) {
       insights.push({
         toolName: record.toolName,
+        serverName: record.serverName,
         key: "observed_failure_rate",
         value: Number(stats.failureRate.toFixed(4)),
         confidence: confidenceFor(stats.invocations),
@@ -60,6 +60,7 @@ export class Evaluator {
     if (stats.avgDurationMs != null) {
       insights.push({
         toolName: record.toolName,
+        serverName: record.serverName,
         key: "avg_duration_ms",
         value: Math.round(stats.avgDurationMs),
         confidence: confidenceFor(stats.invocations),

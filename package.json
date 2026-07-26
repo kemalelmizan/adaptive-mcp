@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "packageManager": "pnpm@11.14.0",
+  "packageManager": "pnpm@11.15.1",
   "engines": {
     "node": ">=22"
   },
@@ -20,7 +20,8 @@
     "release": "node scripts/release.ts",
     "release:dry": "node scripts/release.ts --dry-run",
     "maintenance": "node scripts/maintenance.ts",
-    "maintenance:check": "node scripts/maintenance.ts check"
+    "maintenance:check": "node scripts/maintenance.ts check",
+    "docs": "node scripts/docs.ts"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",

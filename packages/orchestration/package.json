@@ -1,8 +1,7 @@
 {
   "name": "@adaptivemcp/orchestration",
-  "version": "0.0.2",
-  "private": true,
-  "description": "Composition and execution strategies for Adaptive MCP. (stub)",
+  "version": "0.2.2",
+  "description": "Composition and execution strategies for Adaptive MCP.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

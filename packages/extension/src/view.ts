@@ -1,17 +1,25 @@
 import yaml from "js-yaml";
+import { createHash } from "node:crypto";
 import type { ToolRecord } from "@adaptivemcp/spec";
 
 /**
  * A single tool entry in the derived YAML tools-metadata view.
  *
- * The YAML is a *projection* of the SQLite SSOT. It is never edited directly;
- * Adaptive MCP recomputes it from the SSOT whenever metadata changes.
+ * The YAML is a *projection* of the SQLite store. It is never edited directly;
+ * Adaptive MCP recomputes it from the store whenever metadata changes.
  */
 export interface ToolMetadataView {
   name: string;
   server?: string;
   /** Static, human-written annotation. */
   annotation: {
+    /**
+     * Learned/observed risk only. Per the governance hybrid (doubts.md §11),
+     * *static* operator risk SHOULD be projected onto core `Tool.annotations`
+     * via `riskToToolAnnotations`, not emitted here, to avoid duplicating the
+     * protocol's native risk signal. This field carries observed risk (e.g.
+     * "flaky in practice") that core hints cannot express.
+     */
     risk?: string;
     owner?: string;
     tags?: string[];
@@ -30,10 +38,20 @@ export interface ToolMetadataView {
     total_cost: number;
     last_observed_at: string | null;
   };
+  /**
+   * Per-middleware contributions (D3: the YAML `middleware` map). Each key is a
+   * middleware name (e.g. "headroom") and the value is whatever that middleware
+   * chose to surface via `contributeView` — e.g. a CCR hash, savings percent,
+   * or a skip/error marker. Absent when no middleware is registered.
+   */
+  middleware?: Record<string, unknown>;
   updated_at: string;
 }
 
-export function toToolMetadataView(record: ToolRecord): ToolMetadataView {
+export function toToolMetadataView(
+  record: ToolRecord,
+  middleware?: Record<string, unknown>,
+): ToolMetadataView {
   const insights: ToolMetadataView["insights"] = {};
   for (const i of record.insights) {
     insights[i.key] = { value: i.value, confidence: i.confidence, source: i.source };
@@ -61,12 +79,15 @@ export function toToolMetadataView(record: ToolRecord): ToolMetadataView {
       total_cost: record.stats.totalCost,
       last_observed_at: record.stats.lastObservedAt,
     },
+    middleware: middleware && Object.keys(middleware).length > 0 ? middleware : undefined,
     updated_at: record.updatedAt,
   };
 }
 
 export interface ToolsMetadataDocument {
   version: string;
+  /** Opaque cache token; changes whenever the view changes. */
+  etag: string;
   generated_at: string;
   tools: ToolMetadataView[];
 }
@@ -74,14 +95,28 @@ export interface ToolsMetadataDocument {
 export function renderToolsMetadata(
   records: ToolRecord[],
   version: string,
+  middleware?: Record<string, unknown>,
 ): ToolsMetadataDocument {
-  return {
-    version,
-    generated_at: new Date().toISOString(),
-    tools: records.map(toToolMetadataView),
-  };
+  const tools = records.map((r) => toToolMetadataView(r, middleware));
+  const generated_at = new Date().toISOString();
+  // etag is a stable hash of the *meaningful* content (version + tools), NOT
+  // including the volatile generated_at timestamp. Two renders of an unchanged
+  // store therefore produce the same etag, so clients can skip re-parsing.
+  const etag = createHash("sha1")
+    .update(yaml.dump({ version, tools }, { noRefs: true }))
+    .digest("hex");
+  return { version, etag, generated_at, tools };
 }
 
 export function toYaml(doc: ToolsMetadataDocument): string {
-  return yaml.dump(doc, { lineWidth: 120, sortKeys: false, noRefs: true });
+  // Strict dump: no custom tags, no object refs — safe to re-parse.
+  return yaml.dump(doc, { lineWidth: 120, sortKeys: false, noRefs: true, schema: yaml.JSON_SCHEMA });
+}
+
+/** Serialize the document in the requested MIME type (YAML or JSON). */
+export function toDocument(doc: ToolsMetadataDocument, mimeType: string): string {
+  if (mimeType === "application/json") {
+    return JSON.stringify(doc, null, 2);
+  }
+  return toYaml(doc);
 }

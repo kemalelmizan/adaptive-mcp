@@ -3,7 +3,7 @@
 Persistent operational knowledge for Adaptive MCP, backed by SQLite
 (`node:sqlite`).
 
-`memory` is the **single source of truth (SSOT)**. Every other package reads
+`memory` is the **store**. Every other package reads
 from or writes to it: telemetry folds execution events in, evaluation writes
 derived insights back, and the extension derives its YAML view from it. The
 YAML is a *projection*, never the source.
@@ -14,7 +14,7 @@ YAML is a *projection*, never the source.
 npm i @adaptivemcp/memory
 ```
 
-Requires **Node 26** (the `node:sqlite` module is available without the
+Requires **Node 22+** (Node 26 recommended; the `node:sqlite` module is available without the
 `--experimental-sqlite` flag).
 
 ## Usage
@@ -68,4 +68,4 @@ annotation, insights, recommendations, and stats as JSON columns.
 
 ## License
 
-Part of the Adaptive MCP monorepo. See the root [`README.md`](../../README.md).
+Released under the [MIT License](../../LICENSE). Copyright (c) 2026 Kemal Elmizan.

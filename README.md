@@ -1,35 +1,20 @@
 # Adaptive MCP
 
-Turn MCP usage into learned metadata, so clients adapt instead of guessing.
-
-Adaptive MCP is a runtime ecosystem that learns how MCP tools are actually used
-and helps runtimes adapt to that behavior over time. It does **not** replace MCP,
-redefine tools, or introduce new protocol abstractions. Instead it observes tool
-usage, attaches learned metadata to existing MCP primitives, and lets clients
-govern themselves from real signal.
-
 > **Status:** experimental. The packages are published, but the API may shift
 > before 1.0.
+
+Adaptive MCP is a runtime ecosystem that learns how MCP tools are actually used
+and helps runtimes adapt to that behavior over time. It observes tool
+usage, attaches learned metadata to existing MCP primitives, and lets clients
+govern themselves from real signal.
 
 > I introduced this project in the talk session
 > *"Self-Improving MCP Agents"* at the [MCP Dev Summit in Seoul (2026)](https://events.linuxfoundation.org/mcp-dev-summit-seoul/).
 > [Check session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
 
-**What it is**
-
-- A learning layer over MCP primitives (tools, resources)
-- A derived `tools-metadata.yaml` view, recomputed from a SQLite source of truth
-- An unofficial, server-governed resource: clients read it and report observations back
-
-**What it is not**
-
-- Not a new protocol, and not a replacement for MCP tools
-- Not a fork of the MCP SDK
-- Not an official MCP extension
-
 ## Quick start
 
-Requires **Node 26** and **pnpm 11.14.0**
+Requires **Node 22+** (Node 26 recommended) and **pnpm 11+**
 
 ```bash
 git clone https://github.com/kemalelmizan/adaptive-mcp
@@ -38,7 +23,7 @@ pnpm install
 pnpm -r run build
 ```
 
-### See the adaptation loop in one command
+### Adaptation loop
 
 The whole loop (observe, evaluate, derive view) runs locally with no server
 or transport. From the repo root:
@@ -58,16 +43,37 @@ import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/tele
 import { Evaluator } from "@adaptivemcp/evaluation";
 import { ExtensionController } from "@adaptivemcp/extension";
 
-const memory = new MemoryStore();                                   // SQLite SSOT
+const memory = new MemoryStore();                                   // SQLite store
 const telemetry = new TelemetryRecorder({ store: new MemoryBackedTelemetryStore(memory) });
 const evaluator = new Evaluator({ memory });
 const extension = new ExtensionController({ memory, yamlPath: "tools-metadata.yaml" });
 
-for (let i = 0; i < 20; i++) {
-  telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 900 });
+// Observe a realistic stream of calls. The point of the telemetry layer is
+// that it learns from *varied* signal — different tools, latency jitter, and
+// the occasional failure. A loop that replays the same event 20× teaches the
+// evaluator nothing (flat 0% failure rate, flat latency). Here we mix a healthy
+// tool, a heavier one, and a deploy that hits a flaky window so the evaluator
+// actually has something to learn.
+for (let i = 0; i < 40; i++) {
+  telemetry.complete({ toolName: "search_customer", serverName: "crm" }, { durationMs: 120 + Math.round(Math.random() * 40) });
 }
-evaluator.evaluateAll();   // SSOT stats → insights → SSOT
-extension.sync();          // SSOT → tools-metadata.yaml (and the MCP resource text)
+for (let i = 0; i < 15; i++) {
+  telemetry.complete({ toolName: "generate_report", serverName: "analytics" }, { durationMs: 1800 + Math.round(Math.random() * 300), cost: { amount: 0.012, currency: "USD" } });
+}
+for (let i = 0; i < 25; i++) {
+  telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 900 + Math.round(Math.random() * 150) });
+}
+// A flaky deploy window: ~40% of these blow up, so the evaluator flags
+// deploy_service as flaky and the approval gate will ask for confirmation.
+for (let i = 0; i < 15; i++) {
+  if (Math.random() < 0.4) {
+    telemetry.fail({ toolName: "deploy_service", serverName: "demo" }, { message: "upstream timeout", code: "ETIMEDOUT" }, { durationMs: 1100 });
+  } else {
+    telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 1100 });
+  }
+}
+evaluator.evaluateAll();   // store stats → insights → store
+extension.sync();          // store → tools-metadata.yaml (and the MCP resource text)
 console.log(extension.resourceText());
 ```
 
@@ -84,7 +90,7 @@ pnpm server     # or start the server alone (blocks on stdio)
 ```bash
 cd examples
 pnpm scenario            # improvement over time (healthy → flaky → fixed)
-pnpm scenario:ssot       # SSOT is the source of truth; YAML is derived
+pnpm scenario:store       # the store holds the metadata; YAML is derived
 pnpm scenario:insights   # telemetry → evaluation → insights
 pnpm scenario:annotation # human annotation vs. learned insight
 pnpm scenario:adaptive   # full stack: routing + orchestration + approval + thin-client
@@ -97,18 +103,18 @@ The adaptation loop runs entirely on the client/runtime side:
 ```mermaid
 flowchart TD
     ToolExec["Tool execution (MCP server)"] --> Telemetry
-    Telemetry -->|records event| Memory["MemoryStore (SQLite SSOT)"]
+    Telemetry -->|records event| Memory["MemoryStore (SQLite)"]
     Memory --> Eval["Evaluation"]
     Eval -->|insights| Memory
     Telemetry --> Ext["ExtensionController"]
     Memory --> Ext
     Eval --> Ext
-    Ext -->|reads SSOT| YAML["tools-metadata.yaml (derived view)"]
+    Ext -->|reads the store| YAML["tools-metadata.yaml (derived view)"]
     Ext --> Resource["MCP resource: dev.adaptivemcp/tools-metadata"]
 ```
 
-Data always flows in one direction: **event → MemoryStore (SSOT) → derived
-YAML view**. The YAML is never edited directly; it is recomputed from the SSOT
+Data always flows in one direction: **event → MemoryStore → derived
+YAML view**. The YAML is never edited directly; it is recomputed from the store
 whenever metadata changes.
 
 ## Design constraints
@@ -161,12 +167,15 @@ the **existing** MCP primitives. Concretely:
 ## Data model
 
 All metadata is persisted in a SQLite store (`node:sqlite`). The schema is a
-single `tools` table keyed by `tool_name`:
+single `tools` table keyed by the composite `(tool_name, server_name)` pair —
+not `tool_name` alone, since two different MCP servers can expose a tool with
+the same name, and a `tool_name`-only key would let one server's record
+silently overwrite the other's:
 
 | Column | Type | Contents |
 | --- | --- | --- |
 | `tool_name` | TEXT (PK) | Tool identifier |
-| `server_name` | TEXT | Originating MCP server |
+| `server_name` | TEXT (PK) | Originating MCP server (`''` if unknown) |
 | `annotation` | JSON | Static, human-written `Annotation` |
 | `insights` | JSON | Learned `Insight[]` |
 | `recommendations` | JSON | Suggested `Recommendation[]` |
@@ -198,7 +207,7 @@ human-readable projection consumed by out-of-band MCP clients.
 | Package | Responsibility |
 | --- | --- |
 | `@adaptivemcp/spec` | Extension identifiers (`dev.adaptivemcp/` reversed-domain namespace), event schemas, shared types |
-| `@adaptivemcp/memory` | SQLite SSOT store (`MemoryStore`) over `node:sqlite` |
+| `@adaptivemcp/memory` | SQLite store (`MemoryStore`) over `node:sqlite` |
 | `@adaptivemcp/telemetry` | `TelemetryRecorder` + memory-backed store + stat queries |
 | `@adaptivemcp/evaluation` | `Evaluator` emits `observed_failure_rate` / `avg_duration_ms` insights |
 | `@adaptivemcp/extension` | `ExtensionController` derives + writes the YAML view and exposes the MCP resource |
@@ -220,7 +229,7 @@ human-readable projection consumed by out-of-band MCP clients.
   ≥ `flakyFailureRate`, default 0.2, after `minInvocations`), else `allow`.
   Writes an `approval` recommendation with `payload: { decision }`.
 - **Thin client** (`ThinClient.run`): consults the gate, then executes with the
-  SSOT-derived retry policy (or default). Records the outcome back to the SSOT.
+  store-derived retry policy (or default). Records the outcome back to the store.
 
 ## The `tools-metadata` extension resource
 
@@ -282,7 +291,7 @@ server.registerResource("tools-metadata", "dev.adaptivemcp/tools-metadata", {
 The [`examples/`](./examples) directory is a **runnable tour** of every Adaptive
 MCP package. It stands up a real MCP server + client, registers tools, and
 attaches the Adaptive MCP extension so a `tools-metadata.yaml` view is derived
-automatically from a SQLite single source of truth (SSOT).
+automatically from a SQLite store.
 
 - **Full walkthrough.** [`examples/README.md`](./examples/README.md) walks
   through three worked examples:
@@ -297,9 +306,9 @@ automatically from a SQLite single source of truth (SSOT).
   ([source](./examples/src/scenarios)):
   - `scenario.js`: improvement over time (healthy, then flaky, then fixed); the YAML
     view evolves automatically.
-  - `scenarios/ssot.js`: the SQLite store is the SSOT; the YAML is a pure
+  - `scenarios/store.js`: the SQLite MemoryStore is the store; the YAML is a pure
     projection.
-  - `scenarios/insights.js`: telemetry folds events into the SSOT; evaluation
+  - `scenarios/insights.js`: telemetry folds events into the store; evaluation
     emits `observed_failure_rate` / `avg_duration_ms` insights.
   - `scenarios/annotation.js`: human `Annotation` (static) vs. learned
     `Insight` (dynamic) side by side.
@@ -316,30 +325,32 @@ dependency-light and follow the same boundaries as the architecture above.
 
 ### Published (`@adaptivemcp/*)`)
 
-These five are the **published** set (see `PUBLISHABLE_PACKAGES` in
+All packages below are published to npm (see `PUBLISHABLE_PACKAGES` in
 [`scripts/lib/workspace.ts`](./scripts/lib/workspace.ts)), released with the
 [`scripts/release.ts`](./scripts/release.ts) flow (see
-[`docs/RELEASE.md`](./docs/RELEASE.md) for the full release runbook).
+[`docs/RELEASE.md`](./docs/RELEASE.md) for the full release runbook). The table
+is generated from each `package.json` by `pnpm docs`; the version column is a
+live npm badge.
 
-| Package | Version | Install | Description |
-| --- | --- | --- | --- |
-| `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | `npm i @adaptivemcp/spec` | Extension identifiers (`dev.adaptivemcp/` reversed-domain namespace), event schemas, and shared types. |
-| `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | `npm i @adaptivemcp/memory` | Persistent operational knowledge backed by SQLite (`node:sqlite`), the SSOT. |
-| `@adaptivemcp/telemetry` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry) | `npm i @adaptivemcp/telemetry` | Tool execution events and observability (recorder + memory-backed store). |
-| `@adaptivemcp/evaluation` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation) | `npm i @adaptivemcp/evaluation` | Outcome scoring and feedback loops; emits `observed_failure_rate` / `avg_duration_ms` insights. |
-| `@adaptivemcp/extension` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension) | `npm i @adaptivemcp/extension` | Derives the YAML `tools-metadata` view from the SSOT and serves it as the `dev.adaptivemcp/tools-metadata` MCP resource. |
-
-### Private (not published)
-
-`routing`, `orchestration`, `approval`, and `thin-client` are implemented but
-kept private for now. They are the client-side **executor** of the policy the
-server governs, and their APIs are still stabilizing. `examples` and `apps` are
-runnable demos, not libraries.
+<!-- packages:published:start -->
+| Package | Version | Description |
+| --- | --- | --- |
+| `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | Extension identifiers, event schemas, and shared types for Adaptive MCP. |
+| `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | Persistent operational knowledge for Adaptive MCP, backed by SQLite (node:sqlite). |
+| `@adaptivemcp/telemetry` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry) | Tool execution events and observability for Adaptive MCP. |
+| `@adaptivemcp/evaluation` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation) | Outcome scoring and feedback loops for Adaptive MCP. |
+| `@adaptivemcp/extension` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension) | Adaptive MCP extension: derives the YAML tools-metadata view from the SQLite store and serves it to MCP clients. |
+| `@adaptivemcp/runtime` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/runtime)](https://www.npmjs.com/package/@adaptivemcp/runtime) | Batteries-included Adaptive MCP runtime: wires telemetry, evaluation, routing, orchestration, approval, and the extension into one transport-agnostic loop. |
+| `@adaptivemcp/routing` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/routing)](https://www.npmjs.com/package/@adaptivemcp/routing) | Model selection and cost optimization for Adaptive MCP. |
+| `@adaptivemcp/orchestration` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/orchestration)](https://www.npmjs.com/package/@adaptivemcp/orchestration) | Composition and execution strategies for Adaptive MCP. |
+| `@adaptivemcp/approval` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/approval)](https://www.npmjs.com/package/@adaptivemcp/approval) | Intent, plan, and tool approval boundaries for Adaptive MCP. |
+| `@adaptivemcp/thin-client` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/thin-client)](https://www.npmjs.com/package/@adaptivemcp/thin-client) | Minimal client-side execution loop for Adaptive MCP. |
+<!-- packages:published:end -->
 
 ## How to build, test, and run
 
-Requires **Node 26** (the `node:sqlite` module is available without the
-`--experimental-sqlite` flag) and **pnpm 11.14.0**.
+Requires **Node 22+** (Node 26 recommended; the `node:sqlite` module is available without the
+`--experimental-sqlite` flag) and **pnpm 11+**.
 
 ```bash
 pnpm install
@@ -352,12 +363,12 @@ pnpm lint              # ESLint
 
 The suite (`vitest`) covers every package plus an end-to-end integration test:
 
-- **Unit**: `memory` (SSOT folding), `evaluation` (insight thresholds),
+- **Unit**: `memory` (store folding), `evaluation` (insight thresholds),
   `extension` (view projection + YAML stability), `routing` (model + budget),
   `orchestration` (retry scaling), `approval` (gate decisions), `thin-client`
   (gate + retry execution).
 - **Integration**: `examples/src/runtime.test.ts` drives `AdaptiveRuntime`
-  through `observeCompleted` and asserts the derived SSOT state, the
+  through `observeCompleted` and asserts the derived store state, the
   recommendation types, the approval gate decision, and YAML stability/disk
   write.
 
@@ -392,11 +403,9 @@ at the [MCP Dev Summit Seoul 2026](https://mcpseoul2026.sched.com/event/2PYdz/se
 
 ### What's next
 
-- Multi-server aggregation: merge `tools-metadata` across servers into one view.
-- More insight types: cost drift, latency regression, and approval friction.
-- Conformance scenarios so hosts can verify graceful degradation.
-- Promote `routing`, `orchestration`, `approval`, and `thin-client` to published
-  packages once their APIs settle.
+See `docs/ROADMAP.md` Phase 6 for the full, risk/effort-ordered list of planned
+work (new insight types, multi-server aggregation, conformance scenarios, a
+real-host adapter, and more).
 
 ## License
 

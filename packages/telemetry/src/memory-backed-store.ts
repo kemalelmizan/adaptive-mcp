@@ -1,17 +1,16 @@
-import type { ToolExecutionEvent } from "@adaptivemcp/spec";
-import type { MemoryStore } from "@adaptivemcp/memory";
+import type { Store, ToolExecutionEvent } from "@adaptivemcp/spec";
 import type { TelemetryStore } from "./store.js";
 
 /**
  * Telemetry store that keeps a recent event log in memory AND folds every event
- * into the SQLite-backed MemoryStore (the SSOT). This keeps the hot event log
+ * into the SQLite-backed MemoryStore (the store). This keeps the hot event log
  * cheap while ensuring durable stats accumulate over time.
  */
 export class MemoryBackedTelemetryStore implements TelemetryStore {
   private events = new Map<string, ToolExecutionEvent>();
-  private memory: MemoryStore;
+  private memory: Store;
 
-  constructor(memory: MemoryStore) {
+  constructor(memory: Store) {
     this.memory = memory;
   }
 
@@ -24,8 +23,10 @@ export class MemoryBackedTelemetryStore implements TelemetryStore {
     return this.events.get(id);
   }
 
-  byTool(toolName: string): ToolExecutionEvent[] {
-    return this.all().filter((e) => e.toolName === toolName);
+  byTool(toolName: string, serverName?: string): ToolExecutionEvent[] {
+    return this.all().filter(
+      (e) => e.toolName === toolName && (serverName === undefined || e.serverName === serverName),
+    );
   }
 
   all(): ToolExecutionEvent[] {

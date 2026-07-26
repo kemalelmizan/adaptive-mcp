@@ -3,7 +3,7 @@ import type { ToolExecutionEvent } from "@adaptivemcp/spec";
 export interface TelemetryStore {
   record(event: ToolExecutionEvent): void;
   get(id: string): ToolExecutionEvent | undefined;
-  byTool(toolName: string): ToolExecutionEvent[];
+  byTool(toolName: string, serverName?: string): ToolExecutionEvent[];
   all(): ToolExecutionEvent[];
   clear(): void;
 }
@@ -24,8 +24,10 @@ export class InMemoryTelemetryStore implements TelemetryStore {
     return this.events.get(id);
   }
 
-  byTool(toolName: string): ToolExecutionEvent[] {
-    return this.all().filter((e) => e.toolName === toolName);
+  byTool(toolName: string, serverName?: string): ToolExecutionEvent[] {
+    return this.all().filter(
+      (e) => e.toolName === toolName && (serverName === undefined || e.serverName === serverName),
+    );
   }
 
   all(): ToolExecutionEvent[] {

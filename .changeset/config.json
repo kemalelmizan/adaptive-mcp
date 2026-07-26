@@ -7,5 +7,5 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@adaptivemcp/docs", "@adaptivemcp/playground"]
+  "ignore": []
 }

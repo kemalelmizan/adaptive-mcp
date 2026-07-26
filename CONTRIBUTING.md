@@ -21,8 +21,8 @@ pnpm test
 
 Requirements:
 
-- **Node 26** (the built-in `node:sqlite` module is used without a flag).
-- **pnpm 11.14.0** (pinned via the repo `packageManager` field).
+- **Node 22+** (Node 26 recommended; the built-in `node:sqlite` module is used without a flag).
+- **pnpm 11+** (pinned via the repo `packageManager` field).
 
 Run the examples from the repo root:
 
@@ -35,7 +35,7 @@ pnpm --filter @adaptivemcp/examples scenario
 
 - `packages/spec` owns identifiers, event schemas, and shared types. Keep it
   dependency-light.
-- `packages/memory` is the SQLite single source of truth (SSOT).
+- `packages/memory` is the SQLite store.
 - `packages/telemetry`, `packages/evaluation`, `packages/extension` form the
   observe, evaluate, and view steps.
 - `packages/routing`, `packages/orchestration`, `packages/approval`,
@@ -45,7 +45,7 @@ pnpm --filter @adaptivemcp/examples scenario
 
 ## Adding an insight type
 
-Insights are learned signals folded into the SSOT by `packages/evaluation`. To
+Insights are learned signals folded into the store by `packages/evaluation`. To
 add one:
 
 1. Define the insight key and shape in `packages/spec` (add it to the
@@ -53,7 +53,7 @@ add one:
 2. Compute it in `packages/evaluation` behind a confidence threshold so it only
    appears once enough samples accumulate.
 3. Render it in `packages/extension` (the YAML view is a projection of the
-   SSOT, never hand-edited).
+   store, never hand-edited).
 4. Add a scenario or unit test that exercises the new signal.
 
 Do not write insights directly into the YAML file. The YAML is derived.

@@ -1,5 +1,4 @@
-import type { MemoryStore } from "@adaptivemcp/memory";
-import type { ToolRecord } from "@adaptivemcp/spec";
+import type { Store, ToolRecord } from "@adaptivemcp/spec";
 
 export interface ModelOption {
   id: string;
@@ -17,7 +16,7 @@ export interface BudgetPolicy {
 }
 
 export interface RoutingOptions {
-  memory: MemoryStore;
+  memory: Store;
   /** Candidate models, cheapest first by default. */
   models?: ModelOption[];
   /** Per-tool / per-server cost budgets. */
@@ -34,11 +33,11 @@ export interface RoutingOptions {
  *  - budget guardrails: warn (as a recommendation) when a tool or server is
  *    approaching or over its cost budget.
  *
- * Both outcomes are written into the SSOT as `recommendation` entries of type
+ * Both outcomes are written into the store as `recommendation` entries of type
  * `model` and `routing` respectively, so the YAML view surfaces them.
  */
 export class Router {
-  private memory: MemoryStore;
+  private memory: Store;
   private models: ModelOption[];
   private budget: BudgetPolicy;
   private minInvocations: number;
@@ -56,28 +55,32 @@ export class Router {
   /** Evaluate every known tool and persist routing recommendations. */
   routeAll(): void {
     for (const record of this.memory.allTools()) {
-      this.routeTool(record.toolName);
+      this.routeTool(record.toolName, record.serverName);
     }
   }
 
   /** Evaluate a single tool, writing `model` + `routing` recommendations. */
-  routeTool(toolName: string): void {
-    const record = this.memory.getTool(toolName);
+  routeTool(toolName: string, serverName?: string): void {
+    const record = this.memory.getTool(toolName, serverName);
     if (!record) return;
     if (record.stats.invocations < this.minInvocations) return;
 
-    this.memory.clearRecommendations(toolName, "model");
-    this.memory.clearRecommendations(toolName, "routing");
+    this.memory.clearRecommendations(toolName, "model", serverName);
+    this.memory.clearRecommendations(toolName, "routing", serverName);
 
     const model = this.selectModel(record);
     if (model) {
+      const avg = Math.round(record.stats.avgDurationMs ?? 0);
+      const rationale =
+        avg >= 500
+          ? `Lowest-latency model for slow tool (avg ${avg}ms, failure rate ${record.stats.failureRate.toFixed(2)}); trades cost for speed.`
+          : `Cheapest model for fast tool (avg ${avg}ms, failure rate ${record.stats.failureRate.toFixed(2)}).`;
       this.memory.addRecommendation({
         toolName,
+        serverName,
         type: "model",
         payload: { model: model.id },
-        rationale: `Cheapest model meeting observed latency (avg ${Math.round(
-          record.stats.avgDurationMs ?? 0,
-        )}ms) and failure rate (${record.stats.failureRate.toFixed(2)}).`,
+        rationale,
         confidence: confidenceFor(record.stats.invocations),
         generatedAt: new Date().toISOString(),
       });
@@ -111,6 +114,7 @@ export class Router {
     const over = spent >= limit;
     return {
       toolName: record.toolName,
+      serverName: record.serverName,
       type: "routing",
       payload: {
         perToolLimit: limit,

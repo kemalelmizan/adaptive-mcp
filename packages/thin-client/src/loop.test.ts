@@ -3,6 +3,7 @@ import { MemoryStore } from "@adaptivemcp/memory";
 import { ApprovalGate } from "@adaptivemcp/approval";
 import { Orchestrator } from "@adaptivemcp/orchestration";
 import { ThinClient } from "./loop.js";
+import type { Middleware, PlannedCall } from "@adaptivemcp/middleware";
 import type { ToolExecutionEvent } from "@adaptivemcp/spec";
 
 function record(store: MemoryStore, toolName: string, failRate: number, calls: number): void {
@@ -36,18 +37,19 @@ describe("@adaptivemcp/thin-client", () => {
   it("executes an allowed tool and records success", async () => {
     record(store, "search_customer", 0, 40);
     client = new ThinClient({ memory: store, gate });
-    let recorded: { ok: boolean; error?: string } | undefined;
+    let recorded: { ok: boolean; error?: string; output?: unknown } | undefined;
     const res = await client.run(
       "search_customer",
-      async () => ({ ok: true }),
+      async () => ({ ok: true, output: "result" }),
       {},
-      (ok, error) => {
-        recorded = { ok, error };
+      (ok, error, output) => {
+        recorded = { ok, error, output };
       },
     );
     expect(res.decision).toBe("allow");
     expect(res.executed).toBe(true);
     expect(recorded?.ok).toBe(true);
+    expect(recorded?.output).toBe("result");
   });
 
   it("blocks denied tools without executing", async () => {
@@ -88,7 +90,7 @@ describe("@adaptivemcp/thin-client", () => {
     expect(called).toBe(false);
   });
 
-  it("retries using the SSOT-derived policy", async () => {
+  it("retries using the store-derived policy", async () => {
     record(store, "deploy_service", 0.3, 40);
     new Orchestrator({ memory: store }).planTool("deploy_service");
     client = new ThinClient({ memory: store, gate });
@@ -104,5 +106,26 @@ describe("@adaptivemcp/thin-client", () => {
     );
     expect(res.executed).toBe(true);
     expect(attempts).toBe(3);
+  });
+
+  it("runs registered middleware around the call (D2/D5)", async () => {
+    record(store, "search_customer", 0, 40);
+    const seen: string[] = [];
+    const upper: Middleware = {
+      name: "upper",
+      afterCall: (_r, call: PlannedCall) => {
+        seen.push("after");
+        if (typeof call.output === "string") call.output = call.output.toUpperCase();
+      },
+    };
+    client = new ThinClient({ memory: store, gate, middleware: [upper] });
+    const res = await client.run(
+      "search_customer",
+      async () => ({ ok: true, output: "hello" }),
+      {},
+      () => {},
+    );
+    expect(res.output).toBe("HELLO");
+    expect(seen).toEqual(["after"]);
   });
 });

@@ -3,7 +3,7 @@
 Outcome scoring and feedback loops for Adaptive MCP.
 
 `evaluation` is the **evaluate → remember** step of the adaptation loop. It
-reads the SSOT stats from `@adaptivemcp/memory` and writes derived `Insight`s
+reads the store stats from `@adaptivemcp/memory` and writes derived `Insight`s
 back. For example, an `observed_failure_rate` or `avg_duration_ms` signal emerges
 only once enough samples accumulate.
 
@@ -13,7 +13,7 @@ only once enough samples accumulate.
 npm i @adaptivemcp/evaluation
 ```
 
-Requires **Node 26**.
+Requires **Node 22+** (Node 26 recommended).
 
 ## Usage
 
@@ -47,4 +47,4 @@ Insights emitted: `observed_failure_rate` and `avg_duration_ms`.
 
 ## License
 
-Part of the Adaptive MCP monorepo. See the root [`README.md`](../../README.md).
+Released under the [MIT License](../../LICENSE). Copyright (c) 2026 Kemal Elmizan.

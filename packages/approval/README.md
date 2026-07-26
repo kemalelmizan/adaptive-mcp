@@ -2,13 +2,27 @@
 
 Intent, plan, and tool approval experiments for Adaptive MCP.
 
-> **Status:** private / not yet published. This package is an experimental
-> research area (intent → plan → tool) and is not part of the published
-> `@adaptivemcp/*` set.
+> **Status:** published to npm as `@adaptivemcp/approval`. It is the
+> enforcement hook for autonomy boundaries.
 
 `approval` is the enforcement hook for autonomy boundaries. Given a tool name,
 it returns an allow/confirm/deny decision based on its learned risk and
 flakiness.
+
+## Usage
+
+```ts
+import { MemoryStore } from "@adaptivemcp/memory";
+import { ApprovalGate } from "@adaptivemcp/approval";
+
+const memory = new MemoryStore();
+const gate = new ApprovalGate({ memory });
+
+// Before a tool runs:
+const decision = gate.gate("deploy_service");
+// -> "allow" | "require_confirmation" | "deny"
+// High-risk tools (annotation risk: "high") or flaky tools require confirmation.
+```
 
 ## What it does
 
@@ -30,4 +44,4 @@ should agents receive? See the root [`AGENTS.md`](../../AGENTS.md).
 
 ## License
 
-Part of the Adaptive MCP monorepo. See the root [`README.md`](../../README.md).
+Released under the [MIT License](../../LICENSE). Copyright (c) 2026 Kemal Elmizan.

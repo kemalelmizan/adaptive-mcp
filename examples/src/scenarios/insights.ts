@@ -1,12 +1,12 @@
-import { AdaptiveRuntime } from "../runtime.js";
-import { runTool, section } from "./shared.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
+import { runTool, section, seedRandom } from "./shared.js";
 
 /**
  * Scenario: telemetry -> evaluation -> insights.
  *
  * Highlights:
  *   - `@adaptivemcp/telemetry`: `TelemetryRecorder` + `MemoryBackedTelemetryStore`
- *     fold every execution event into the SSOT.
+ *     fold every execution event into the store.
  *   - `@adaptivemcp/evaluation`: `Evaluator` reads accumulated stats and writes
  *     derived `Insight`s (observed_failure_rate, avg_duration_ms) back into the
  *     store once a confidence threshold is met.
@@ -16,6 +16,7 @@ import { runTool, section } from "./shared.js";
  * and strengthen as the sample size grows.
  */
 function main(): void {
+  seedRandom(20260719); // deterministic output so the narrative matches the print
   const runtime = new AdaptiveRuntime({ yamlPath: "tools-metadata.insights.yaml" });
 
   section("Phase A: healthy tool (low failure rate)");

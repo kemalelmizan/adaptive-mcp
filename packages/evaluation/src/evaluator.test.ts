@@ -60,7 +60,7 @@ describe("@adaptivemcp/evaluation", () => {
     expect(insights[0].confidence).toBeCloseTo(0.95, 2);
   });
 
-  it("persists insights into the SSOT", () => {
+  it("persists insights into the store", () => {
     record(store, "deploy_service", 0.3, 40);
     evaluator.evaluateAll();
     const insights = store.getTool("deploy_service")?.insights ?? [];

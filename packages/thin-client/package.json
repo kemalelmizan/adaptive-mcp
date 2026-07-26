@@ -1,8 +1,7 @@
 {
   "name": "@adaptivemcp/thin-client",
-  "version": "0.0.2",
-  "private": true,
-  "description": "Minimal MCP client implementation for Adaptive MCP. (stub)",
+  "version": "0.2.2",
+  "description": "Minimal client-side execution loop for Adaptive MCP.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,7 +23,8 @@
     "@adaptivemcp/spec": "workspace:*",
     "@adaptivemcp/memory": "workspace:*",
     "@adaptivemcp/approval": "workspace:*",
-    "@adaptivemcp/orchestration": "workspace:*"
+    "@adaptivemcp/orchestration": "workspace:*",
+    "@adaptivemcp/middleware": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

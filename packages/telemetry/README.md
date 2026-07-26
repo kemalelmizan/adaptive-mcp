@@ -4,7 +4,7 @@ Tool execution events and observability for Adaptive MCP.
 
 `telemetry` is the **observe** step of the adaptation loop. It captures
 `ToolExecutionEvent`s, the atomic observations of tool executions, and folds
-them into the SSOT (`@adaptivemcp/memory`).
+them into the store (`@adaptivemcp/memory`).
 
 ## Install
 
@@ -12,7 +12,7 @@ them into the SSOT (`@adaptivemcp/memory`).
 npm i @adaptivemcp/telemetry
 ```
 
-Requires **Node 26**.
+Requires **Node 22+** (Node 26 recommended).
 
 ## Usage
 
@@ -41,9 +41,9 @@ recorder.complete(ctx, { durationMs: 1200, output: { ok: true }, cost: { amount:
 | `TelemetryRecorder` | Ergonomic surface for emitting observations. `record(event)`, `start(ctx, extra?)`, `complete(ctx, {durationMs?, output?, cost?}, extra?)`, `fail(ctx, {message, code?}, extra?)`. |
 | `TelemetryStore` | Store interface for events. |
 | `InMemoryTelemetryStore` | Default volatile store. |
-| `MemoryBackedTelemetryStore` | Folds events directly into a `MemoryStore` (the SSOT) via `recordExecution`. |
+| `MemoryBackedTelemetryStore` | Folds events directly into a `MemoryStore` (the store) via `recordExecution`. |
 | `queries` | Read-side helpers over stored events. |
 
 ## License
 
-Part of the Adaptive MCP monorepo. See the root [`README.md`](../../README.md).
+Released under the [MIT License](../../LICENSE). Copyright (c) 2026 Kemal Elmizan.

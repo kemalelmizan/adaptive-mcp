@@ -9,3 +9,5 @@
  */
 export { ThinClient } from "./loop.js";
 export type { ThinClientOptions, ToolHandler } from "./loop.js";
+export { MiddlewareChain } from "@adaptivemcp/middleware";
+export type { Middleware, MiddlewareContext, PlannedCall, CallResult } from "@adaptivemcp/middleware";

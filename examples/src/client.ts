@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { AdaptiveRuntime } from "./runtime.js";
+import { AdaptiveRuntime } from "@adaptivemcp/runtime";
+import { TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
 
 /**
  * A minimal MCP client that:
@@ -28,7 +29,7 @@ export async function runClient(): Promise<void> {
   }
   await client.callTool({ name: "deploy_service", arguments: { environment: "prod", version: "1.0.0" } });
 
-  const res = await client.readResource({ uri: "dev.adaptivemcp/tools-metadata" });
+  const res = await client.readResource({ uri: TOOLS_METADATA_RESOURCE_URI });
   const text = (res.contents[0] as { text: string }).text;
   console.log("\n--- tools-metadata.yaml (from server resource) ---\n");
   console.log(text);
@@ -63,5 +64,10 @@ export function runLocalLoop(): void {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runLocalLoop();
+  // `pnpm client` runs the real stdio client that spawns the server and reads
+  // the derived resource. Use `pnpm client:local` for the no-child-process demo.
+  runClient().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  });
 }

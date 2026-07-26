@@ -1,8 +1,7 @@
 {
   "name": "@adaptivemcp/routing",
-  "version": "0.0.2",
-  "private": true,
-  "description": "Model selection and cost optimization for Adaptive MCP. (stub)",
+  "version": "0.2.2",
+  "description": "Model selection and cost optimization for Adaptive MCP.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
