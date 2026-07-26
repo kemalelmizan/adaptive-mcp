@@ -14,7 +14,8 @@
     "scenario:ssot": "node dist/scenarios/ssot.js",
     "scenario:insights": "node dist/scenarios/insights.js",
     "scenario:annotation": "node dist/scenarios/annotation.js",
-    "scenario:adaptive": "node dist/scenarios/adaptive.js"
+    "scenario:adaptive": "node dist/scenarios/adaptive.js",
+    "scenario:execution-graph": "node dist/scenarios/execution-graph.js"
   },
   "dependencies": {
     "@adaptivemcp/spec": "workspace:*",
@@ -26,6 +27,7 @@
     "@adaptivemcp/orchestration": "workspace:*",
     "@adaptivemcp/approval": "workspace:*",
     "@adaptivemcp/thin-client": "workspace:*",
+    "@adaptivemcp/graph-analysis": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^4.0.0"
   },

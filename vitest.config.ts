@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: [root + "packages/*/src/**/*.test.ts", root + "examples/src/**/*.test.ts"],
+    include: ["packages/*/src/**/*.test.ts", "examples/src/**/*.test.ts"],
     environment: "node",
     reporters: ["dot"],
   },

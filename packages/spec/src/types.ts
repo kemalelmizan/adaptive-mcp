@@ -39,6 +39,10 @@ export interface ToolExecutionEvent {
   model?: string;
   cost?: CostInfo;
   metadata?: Record<string, unknown>;
+  /** Parent node ID in the execution graph (for DAG construction) */
+  parentId?: string;
+  /** Human-readable workflow name (e.g., "deploy_release") */
+  workflowId?: string;
 }
 
 export type InsightSource = "telemetry" | "evaluation" | "human" | "memory";
@@ -106,4 +110,90 @@ export interface ToolStats {
   avgDurationMs: number | null;
   totalCost: number;
   lastObservedAt: string | null;
+}
+
+/**
+ * A single node in the execution graph (DAG).
+ * Each tool invocation becomes a node with parent/children relationships.
+ */
+export interface ExecutionNode {
+  id: string;
+  toolName: string;
+  serverName?: string;
+  sessionId: string;
+  workflowId?: string;
+  parentId?: string;
+  childrenIds: string[];
+  timestamp: string;
+  durationMs?: number;
+  status: ToolStatus;
+  input?: unknown;
+  output?: unknown;
+  error?: ToolError;
+  model?: string;
+  cost?: CostInfo;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * An execution graph (DAG) representing a complete workflow.
+ */
+export interface ExecutionGraph {
+  workflowId: string;
+  sessionId: string;
+  rootNodeId: string;
+  nodes: Map<string, ExecutionNode>;
+  createdAt: string;
+  completedAt?: string;
+  status: "running" | "completed" | "failed" | "partial";
+}
+
+/**
+ * Graph analysis results.
+ */
+export interface CriticalPathResult {
+  path: ExecutionNode[];
+  totalDurationMs: number;
+}
+
+export interface Bottleneck {
+  node: ExecutionNode;
+  impactScore: number; // How much this node slows down the critical path
+  reason: "duration" | "fan_out" | "failure_rate" | "cost";
+}
+
+export interface FanOutReport {
+  maxFanOut: number;
+  avgFanOut: number;
+  parallelizableNodes: ExecutionNode[];
+  sequentialChains: ExecutionNode[][];
+}
+
+export interface FailureCascade {
+  rootCause: ExecutionNode;
+  affectedNodes: ExecutionNode[];
+  blastRadius: number;
+}
+
+export interface CostBreakdown {
+  totalCost: number;
+  byTool: Record<string, number>;
+  byNode: Record<string, number>;
+  criticalPathCost: number;
+}
+
+export interface WorkflowStats {
+  workflowId: string;
+  totalExecutions: number;
+  successRate: number;
+  avgDurationMs: number;
+  avgCost: number;
+  commonPatterns: WorkflowPattern[];
+}
+
+export interface WorkflowPattern {
+  pattern: string;
+  frequency: number;
+  avgDurationMs: number;
+  successRate: number;
 }

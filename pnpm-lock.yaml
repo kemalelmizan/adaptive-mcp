@@ -48,6 +48,9 @@ importers:
       '@adaptivemcp/extension':
         specifier: workspace:*
         version: link:../packages/extension
+      '@adaptivemcp/graph-analysis':
+        specifier: workspace:*
+        version: link:../packages/graph-analysis
       '@adaptivemcp/memory':
         specifier: workspace:*
         version: link:../packages/memory
@@ -135,6 +138,22 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)
+
+  packages/graph-analysis:
+    dependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@adaptivemcp/spec':
+        specifier: workspace:*
+        version: link:../spec
+    devDependencies:
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
         version: 2.1.9(@types/node@22.20.1)
 
   packages/memory:

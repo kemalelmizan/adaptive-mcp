@@ -1,0 +1,30 @@
+{
+  "name": "@adaptivemcp/graph-analysis",
+  "version": "0.1.0",
+  "description": "Graph analysis for Adaptive MCP execution DAGs",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@adaptivemcp/memory": "workspace:*",
+    "@adaptivemcp/spec": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

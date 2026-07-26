@@ -8,6 +8,7 @@ export interface ToolEventContext {
   sessionId?: string;
   requestId?: string;
   model?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /**
