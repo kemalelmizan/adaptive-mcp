@@ -17,7 +17,9 @@
     "scenario:annotation": "node dist/scenarios/annotation.js",
     "scenario:adaptive": "node dist/scenarios/adaptive.js",
     "scenario:execution-graph": "node dist/scenarios/execution-graph.js",
-    "scenario:middleware": "node dist/scenarios/middleware.js"
+    "scenario:failure-cascade": "node dist/scenarios/failure-cascade.js",
+    "scenario:middleware": "node dist/scenarios/middleware.js",
+    "scenario:cost-optimization": "node dist/scenarios/cost-optimization.js"
   },
   "dependencies": {
     "@adaptivemcp/spec": "workspace:*",

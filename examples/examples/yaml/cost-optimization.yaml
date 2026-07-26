@@ -1,0 +1,121 @@
+version: 0.1.0
+etag: 24cb8f3134cc67e5abe8a7024738e1e6a66bca05
+generated_at: 2026-07-26T05:06:53.109Z
+tools:
+  - name: ci_cd_pipeline
+    server: ci-cd
+    annotation: {}
+    insights: {}
+    recommendations: []
+    stats:
+      invocations: 3
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 509500
+      total_cost: 0.07095
+      last_observed_at: 2026-07-26T05:06:53.107Z
+    updated_at: 2026-07-26T05:06:53.109Z
+  - name: deploy_prod
+    server: ci-cd
+    annotation: {}
+    insights: {}
+    recommendations: []
+    stats:
+      invocations: 3
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 36666.666666666664
+      total_cost: 0.005
+      last_observed_at: 2026-07-26T05:06:53.108Z
+    updated_at: 2026-07-26T05:06:53.108Z
+  - name: deploy_staging
+    server: ci-cd
+    annotation: {}
+    insights: {}
+    recommendations: []
+    stats:
+      invocations: 3
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 50000
+      total_cost: 0.0075
+      last_observed_at: 2026-07-26T05:06:53.108Z
+    updated_at: 2026-07-26T05:06:53.108Z
+  - name: docker_build
+    server: ci-cd
+    annotation: {}
+    insights: {}
+    recommendations: []
+    stats:
+      invocations: 3
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 130000
+      total_cost: 0.022
+      last_observed_at: 2026-07-26T05:06:53.108Z
+    updated_at: 2026-07-26T05:06:53.108Z
+  - name: docker_push
+    server: ci-cd
+    annotation: {}
+    insights: {}
+    recommendations: []
+    stats:
+      invocations: 3
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 25000
+      total_cost: 0.0025
+      last_observed_at: 2026-07-26T05:06:53.108Z
+    updated_at: 2026-07-26T05:06:53.108Z
+  - name: github_checkout
+    server: ci-cd
+    annotation: {}
+    insights: {}
+    recommendations: []
+    stats:
+      invocations: 3
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 1166.6666666666667
+      total_cost: 0.00025
+      last_observed_at: 2026-07-26T05:06:53.108Z
+    updated_at: 2026-07-26T05:06:53.108Z
+  - name: integration_test
+    server: ci-cd
+    annotation: {}
+    insights: {}
+    recommendations: []
+    stats:
+      invocations: 3
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 75000
+      total_cost: 0.01
+      last_observed_at: 2026-07-26T05:06:53.108Z
+    updated_at: 2026-07-26T05:06:53.108Z
+  - name: npm_install
+    server: ci-cd
+    annotation: {}
+    insights: {}
+    recommendations: []
+    stats:
+      invocations: 3
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 31666.666666666668
+      total_cost: 0.0042
+      last_observed_at: 2026-07-26T05:06:53.108Z
+    updated_at: 2026-07-26T05:06:53.108Z
+  - name: npm_test
+    server: ci-cd
+    annotation: {}
+    insights: {}
+    recommendations: []
+    stats:
+      invocations: 3
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 160000
+      total_cost: 0.0195
+      last_observed_at: 2026-07-26T05:06:53.108Z
+    updated_at: 2026-07-26T05:06:53.108Z
