@@ -24,6 +24,10 @@ export interface ToolMetadataView {
     owner?: string;
     tags?: string[];
     description?: string;
+    /** Budget limit for this tool (from routing recommendations) */
+    budget?: { limit: number; currency: string };
+    /** Whether this tool requires approval before execution */
+    require_approval?: boolean;
   };
   /** Learned from observed behavior. */
   insights: Record<string, { value: unknown; confidence: number; source: string }>;
@@ -56,6 +60,11 @@ export function toToolMetadataView(
   for (const i of record.insights) {
     insights[i.key] = { value: i.value, confidence: i.confidence, source: i.source };
   }
+  
+  // Extract budget and approval recommendations
+  const budgetRec = record.recommendations.find(r => r.type === "routing" && r.payload && typeof r.payload === "object" && "perToolLimit" in r.payload);
+  const approvalRec = record.recommendations.find(r => r.type === "approval" && r.payload && typeof r.payload === "object" && "decision" in r.payload);
+  
   return {
     name: record.toolName,
     server: record.serverName,
@@ -64,6 +73,8 @@ export function toToolMetadataView(
       owner: record.annotation.owner,
       tags: record.annotation.tags,
       description: record.annotation.description,
+      budget: budgetRec ? { limit: (budgetRec.payload as any).perToolLimit, currency: "USD" } : undefined,
+      require_approval: approvalRec ? (approvalRec.payload as any).decision === "require_confirmation" : undefined,
     },
     insights,
     recommendations: record.recommendations.map((r) => ({

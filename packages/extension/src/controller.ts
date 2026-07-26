@@ -1,7 +1,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { SPEC_VERSION, TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
-import type { Annotation, Store, ExecutionNode } from "@adaptivemcp/spec";
+import type { Annotation, Store, ExecutionNode, ToolRecord } from "@adaptivemcp/spec";
 import {
   renderToolsMetadata,
   toDocument,
@@ -484,5 +484,29 @@ const doc: WorkflowGraphDocument = {
   annotate(toolName: string, annotation: Annotation): ToolsMetadataDocument {
     this.memory.setAnnotation(annotation);
     return this.sync();
+  }
+
+  /**
+   * Aggregate tools-metadata views from multiple stores (multi-server aggregation).
+   * This merges views from multiple stores, preserving the (toolName, serverName) composite key.
+   * 
+   * @param stores Array of stores to aggregate
+   * @returns Aggregated ToolsMetadataDocument
+   */
+  static aggregateViews(stores: Store[], version: string = SPEC_VERSION): ToolsMetadataDocument {
+    const allTools: ToolRecord[] = [];
+    const seen = new Set<string>();
+    
+    for (const store of stores) {
+      for (const tool of store.allTools()) {
+        const key = `${tool.toolName}::${tool.serverName ?? ''}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          allTools.push(tool);
+        }
+      }
+    }
+    
+    return renderToolsMetadata(allTools, SPEC_VERSION);
   }
 }

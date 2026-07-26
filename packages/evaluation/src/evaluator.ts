@@ -1,4 +1,4 @@
-import type { Insight, Store, ToolRecord, ExecutionNode } from "@adaptivemcp/spec";
+import type { Insight, Store, ToolRecord, ExecutionNode, ToolExecutionEvent } from "@adaptivemcp/spec";
 
 export interface EvaluationOptions {
   memory: Store;
@@ -175,6 +175,73 @@ export class Evaluator {
     return insights;
   }
 
+  /** Detect repeated tool call sequences (repetition_detected insight) */
+  private detectRepetition(nodes: ExecutionNode[]): Insight[] {
+    const insights: Insight[] = [];
+    const now = new Date().toISOString();
+    
+    // Build tool sequence from the graph (topological order)
+    const sequence = this.getToolSequence(nodes);
+    if (sequence.length < 4) return insights; // Need at least 4 tools for a pattern
+    
+    // Look for repeated subsequences of length 2-4
+    for (let patternLen = 2; patternLen <= 4; patternLen++) {
+      const patterns = new Map<string, { count: number; positions: number[] }>();
+      
+      for (let i = 0; i <= sequence.length - patternLen; i++) {
+        const pattern = sequence.slice(i, i + patternLen).join(" -> ");
+        const existing = patterns.get(pattern) ?? { count: 0, positions: [] };
+        existing.count++;
+        existing.positions.push(i);
+        patterns.set(pattern, existing);
+      }
+      
+      for (const [pattern, data] of patterns) {
+        if (data.count >= 3) { // Repeated at least 3 times
+          insights.push({
+            toolName: "workflow",
+            serverName: nodes[0]?.serverName,
+            key: "repetition_detected",
+            value: { pattern, count: data.count, length: patternLen },
+            confidence: 0.7,
+            source: "evaluation",
+            observedAt: new Date().toISOString(),
+            sampleSize: data.count,
+          });
+        }
+      }
+    }
+    
+    return insights;
+  }
+
+  /** Get tool sequence from graph nodes (topological order) */
+  private getToolSequence(nodes: ExecutionNode[]): string[] {
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const roots = nodes.filter(n => !n.parentId);
+    const sequence: string[] = [];
+    const visited = new Set<string>();
+    
+    function dfs(nodeId: string) {
+      if (visited.has(nodeId)) return;
+      visited.add(nodeId);
+      
+      const node = nodeMap.get(nodeId);
+      if (!node) return;
+      
+      sequence.push(node.toolName);
+      for (const childId of node.childrenIds) {
+        dfs(childId);
+      }
+    }
+    
+    for (const root of roots) {
+      dfs(root.id);
+    }
+    
+    return sequence;
+  }
+
   private findCriticalPath(nodes: ExecutionNode[]): ExecutionNode[] {
     const nodeMap = new Map(nodes.map(n => [n.id, n]));
     const roots = nodes.filter(n => !n.parentId);
@@ -238,6 +305,117 @@ export class Evaluator {
         confidence: confidenceFor(stats.invocations),
         source: "telemetry",
         observedAt: now,
+        sampleSize: stats.invocations,
+      });
+    }
+
+    // Cost drift detection
+    if (stats.totalCost > 0 && stats.invocations >= this.minInvocations * 2) {
+      const avgCost = stats.totalCost / stats.invocations;
+      // Check if we have a previous cost baseline in insights
+      const costInsight = record.insights.find(i => i.key === "avg_cost_per_invocation");
+      if (costInsight && typeof costInsight.value === "number") {
+        const drift = (avgCost - costInsight.value) / costInsight.value;
+        if (Math.abs(drift) > 0.3) { // 30% drift threshold
+          insights.push({
+            toolName: record.toolName,
+            serverName: record.serverName,
+            key: "cost_drift",
+            value: { drift: Number(drift.toFixed(4)), currentAvg: avgCost, baseline: costInsight.value },
+            confidence: confidenceFor(stats.invocations),
+            source: "evaluation",
+            observedAt: new Date().toISOString(),
+            sampleSize: stats.invocations,
+          });
+        }
+      }
+      // Update or create cost baseline
+      insights.push({
+        toolName: record.toolName,
+        serverName: record.serverName,
+        key: "avg_cost_per_invocation",
+        value: avgCost,
+        confidence: confidenceFor(stats.invocations),
+        source: "telemetry",
+        observedAt: new Date().toISOString(),
+        sampleSize: stats.invocations,
+      });
+    }
+
+    // Latency regression detection
+    if (stats.avgDurationMs != null && stats.invocations >= this.minInvocations * 2) {
+      const latencyInsight = record.insights.find(i => i.key === "avg_duration_ms_baseline");
+      if (latencyInsight && typeof latencyInsight.value === "number") {
+        const regression = (stats.avgDurationMs - latencyInsight.value) / latencyInsight.value;
+        if (regression > 0.5) { // 50% regression threshold
+          insights.push({
+            toolName: record.toolName,
+            serverName: record.serverName,
+            key: "latency_regression",
+            value: { regression: Number(regression.toFixed(4)), currentAvg: stats.avgDurationMs, baseline: latencyInsight.value },
+            confidence: confidenceFor(stats.invocations),
+            source: "evaluation",
+            observedAt: new Date().toISOString(),
+            sampleSize: stats.invocations,
+          });
+        }
+      }
+      // Update or create latency baseline
+      insights.push({
+        toolName: record.toolName,
+        serverName: record.serverName,
+        key: "avg_duration_ms_baseline",
+        value: stats.avgDurationMs,
+        confidence: confidenceFor(stats.invocations),
+        source: "telemetry",
+        observedAt: new Date().toISOString(),
+        sampleSize: stats.invocations,
+      });
+    }
+
+    // Approval friction tracking
+    const approvalInsight = record.insights.find(i => i.key === "approval_friction");
+    const approvalRec = record.recommendations.find(r => r.type === "approval");
+    if (approvalRec && approvalRec.payload && typeof approvalRec.payload === "object" && "decision" in approvalRec.payload) {
+      const decision = approvalRec.payload.decision as string;
+      if (decision === "require_confirmation") {
+        const frictionCount = (approvalInsight?.value as number) ?? 0;
+        insights.push({
+          toolName: record.toolName,
+          serverName: record.serverName,
+          key: "approval_friction",
+          value: frictionCount + 1,
+          confidence: 0.8,
+          source: "evaluation",
+          observedAt: new Date().toISOString(),
+          sampleSize: 1,
+        });
+      }
+    }
+
+    // Context cost tracking (output tokens)
+    if (stats.avgOutputTokens != null && stats.invocations >= this.minInvocations) {
+      insights.push({
+        toolName: record.toolName,
+        serverName: record.serverName,
+        key: "avg_output_tokens",
+        value: Math.round(stats.avgOutputTokens),
+        confidence: confidenceFor(stats.invocations),
+        source: "telemetry",
+        observedAt: now,
+        sampleSize: stats.invocations,
+      });
+    }
+
+    if (stats.avgDurationMs != null) {
+      insights.push({
+        toolName: record.toolName,
+        serverName: record.serverName,
+        key: "avg_duration_ms",
+        value: Math.round(stats.avgDurationMs),
+        confidence: confidenceFor(stats.invocations),
+        source: "telemetry",
+        observedAt: new Date().toISOString(),
         sampleSize: stats.invocations,
       });
     }

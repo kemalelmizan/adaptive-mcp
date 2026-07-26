@@ -416,6 +416,7 @@ function emptyStats(): ToolStats {
     avgDurationMs: null,
     totalCost: 0,
     lastObservedAt: null,
+    avgOutputTokens: undefined,
   };
 }
 
@@ -429,6 +430,12 @@ function foldEvent(stats: ToolStats, event: ToolExecutionEvent): ToolStats {
       ? (prevAvg * (invocations - 1) + durations[0]!) / invocations
       : stats.avgDurationMs;
   const totalCost = stats.totalCost + (event.cost?.amount ?? 0);
+  
+  // Track average output tokens for context cost
+  const outputTokens = event.cost?.outputTokens ?? 0;
+  const prevAvgTokens = stats.avgOutputTokens ?? 0;
+  const avgOutputTokens = (prevAvgTokens * (invocations - 1) + outputTokens) / invocations;
+  
   return {
     invocations,
     failures,
@@ -436,6 +443,7 @@ function foldEvent(stats: ToolStats, event: ToolExecutionEvent): ToolStats {
     avgDurationMs,
     totalCost,
     lastObservedAt: event.timestamp,
+    avgOutputTokens,
   };
 }
 

@@ -14,335 +14,105 @@ Transform telemetry from **request logging** into **execution intelligence** by 
 
 ---
 
-## Current State Analysis
+## Implementation Status: ✅ Phases 4-9 COMPLETE
 
-### What Exists (Phase 0-3 Complete)
-| Package | Responsibility | Gap for Graph Support |
-|---------|---------------|----------------------|
-| `@adaptivemcp/spec` | `ToolExecutionEvent`, `ToolRecord`, `Insight`, `Recommendation` | No parent/children, no session/workflow correlation |
-| `@adaptivemcp/memory` | SQLite `tools` table (SSOT) | Single-table, tool-centric; no graph edges |
-| `@adaptivemcp/telemetry` | `TelemetryRecorder` + `MemoryBackedTelemetryStore` | Records individual events, no graph construction |
-| `@adaptivemcp/evaluation` | `Evaluator` → insights (`observed_failure_rate`, `avg_duration_ms`) | Per-tool only, no workflow-level insights |
-| `@adaptivemcp/extension` | `ExtensionController` → `tools-metadata.yaml` + MCP resource | Tool-centric view only |
-| `@adaptivemcp/thin-client` | Client execution loop + middleware hooks | No automatic parent/child tracking |
+All foundation phases have been implemented and validated with working scenarios.
 
-### Key Missing Pieces
-1. **ExecutionNode schema** — parent/children, session/workflow IDs
-2. **Graph persistence** — edges table, DAG queries
-3. **Graph construction** — automatic parent linking via context propagation
-4. **Graph analysis** — bottleneck detection, critical path, cost aggregation
-5. **Graph projection** — MCP resource + YAML view for execution graphs
+### What Was Built
+
+| Phase | Package | Status | Key Deliverables |
+|-------|---------|--------|------------------|
+| 4.1 | `@adaptivemcp/spec` | ✅ Done | `ExecutionNode`, `ExecutionGraph`, `CriticalPathResult`, `Bottleneck`, `FanOutReport`, `FailureCascade`, `CostBreakdown`, `WorkflowStats`, `WorkflowPattern` types. Extended `ToolExecutionEvent` with `parentId`, `workflowId`. Extended `Store` interface with graph methods. |
+| 4.2 | `@adaptivemcp/memory` | ✅ Done | New `execution_nodes` SQLite table with indexes. Methods: `recordExecutionNode`, `getExecutionNode`, `getNodesBySession`, `getNodesByWorkflow`, `getChildren`, `getParent`, `getRootNodes`, `getLeafNodes`, `updateChildrenIds`. |
+| 4.3 | `@adaptivemcp/telemetry` | ✅ Done | New `TelemetryRecorder` methods: `startWorkflow()`, `startChild(parentId)`, `completeNode()`, `failNode()` — auto-links parent/child. |
+| 5.1 | `@adaptivemcp/graph-analysis` | ✅ Done | **NEW** package with `GraphAnalyzer`: critical path, bottlenecks, fan-out, failure cascades, cost breakdown, workflow stats, pattern detection, anomaly detection. |
+| 5.2 | `@adaptivemcp/evaluation` | ✅ Done | Added `evaluateWorkflow(sessionId)` and `evaluateAllWorkflows()` — emits graph-level insights (`critical_path_duration_ms`, `bottleneck_tool`, `fan_out_factor`, `failure_blast_radius`, `cost_per_workflow`). |
+| 6.1 | `@adaptivemcp/extension` | ✅ Done | New MCP resources: `dev.adaptivemcp/execution-graph/{sessionId}`, `dev.adaptivemcp/workflow-graph/{workflowId}`, `dev.adaptivemcp/graph-insights/{sessionId}`, plus Mermaid diagram support. |
+| 7.1 | `@adaptivemcp/thin-client` | ✅ Done | New `GraphTrackingMiddleware` — auto-propagates `sessionId`/`parentId` via middleware chain hooks (`beforeCall`/`afterCall`/`onError`). |
+| 8.x | `examples` | ✅ Done | Three working scenarios: `execution-graph`, `failure-cascade`, `cost-optimization`. |
 
 ---
 
-## Phase 4: Execution Graph Foundation (Priority: HIGH)
+## Working Scenarios
 
-### 4.1 Extend Spec Types (`@adaptivemcp/spec`)
+```bash
+# Execution graph intelligence
+pnpm --filter @adaptivemcp/examples scenario:execution-graph
 
-**New types in `types.ts`:**
-```typescript
-export interface ExecutionNode {
-  id: string;                    // UUID v4
-  toolName: string;
-  serverName?: string;
-  sessionId: string;             // Groups nodes into a workflow
-  workflowId?: string;           // Human-readable workflow name (e.g., "deploy_release")
-  parentId?: string;             // Direct caller
-  childrenIds: string[];         // Direct callees
-  timestamp: string;             // ISO 8601 start time
-  durationMs?: number;
-  status: ToolStatus;
-  input?: unknown;
-  output?: unknown;
-  error?: ToolError;
-  model?: string;
-  cost?: CostInfo;
-  metadata?: Record<string, unknown>;
-}
+# Failure cascade analysis  
+pnpm --filter @adaptivemcp/examples scenario:failure-cascade
 
-export interface ExecutionGraph {
-  workflowId: string;
-  sessionId: string;
-  rootNodeId: string;
-  nodes: Map<string, ExecutionNode>;
-  createdAt: string;
-  completedAt?: string;
-  status: "running" | "completed" | "failed" | "partial";
-}
+# Cost optimization analysis
+pnpm --filter @adaptivemcp/examples scenario:cost-optimization
+
+# All existing scenarios still work
+pnpm --filter @adaptivemcp/examples scenario
+pnpm --filter @adaptivemcp/examples scenario:adaptive
+pnpm --filter @adaptivemcp/examples quickstart
 ```
 
-**Extend `ToolExecutionEvent`:**
-```typescript
-export interface ToolExecutionEvent {
-  // ...existing fields...
-  sessionId: string;           // REQUIRED (was optional)
-  workflowId?: string;         // NEW: human-readable workflow name
-  parentId?: string;           // NEW: direct caller node ID
-  childrenIds?: string[];      // NEW: direct callee node IDs
-}
-```
+### Key Outputs Demonstrated
 
-### 4.2 Extend MemoryStore Schema (`@adaptivemcp/memory`)
-
-**New SQLite tables:**
-```sql
--- Execution nodes (one per tool invocation)
-CREATE TABLE IF NOT EXISTS execution_nodes (
-  id TEXT PRIMARY KEY,
-  tool_name TEXT NOT NULL,
-  server_name TEXT,
-  session_id TEXT NOT NULL,
-  workflow_id TEXT,
-  parent_id TEXT,
-  children_ids TEXT NOT NULL DEFAULT '[]',  -- JSON array
-  timestamp TEXT NOT NULL,
-  duration_ms INTEGER,
-  status TEXT NOT NULL,
-  input TEXT,
-  output TEXT,
-  error TEXT,
-  model TEXT,
-  cost TEXT,
-  metadata TEXT,
-  FOREIGN KEY (parent_id) REFERENCES execution_nodes(id)
-);
-
--- Indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_nodes_session ON execution_nodes(session_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_workflow ON execution_nodes(workflow_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_tool ON execution_nodes(tool_name);
-CREATE INDEX IF NOT EXISTS idx_nodes_parent ON execution_nodes(parent_id);
-```
-
-**New methods on `MemoryStore`:**
-```typescript
-recordExecutionNode(node: ExecutionNode): ExecutionNode;
-getExecutionNode(id: string): ExecutionNode | undefined;
-getNodesBySession(sessionId: string): ExecutionNode[];
-getNodesByWorkflow(workflowId: string): ExecutionNode[];
-getChildren(parentId: string): ExecutionNode[];
-getParent(childId: string): ExecutionNode | undefined;
-getRootNodes(sessionId: string): ExecutionNode[];  // nodes with no parent
-getLeafNodes(sessionId: string): ExecutionNode[];  // nodes with no children
-```
-
-### 4.3 Extend TelemetryRecorder (`@adaptivemcp/telemetry`)
-
-**New context propagation:**
-```typescript
-interface GraphContext {
-  sessionId: string;
-  workflowId?: string;
-  parentId?: string;
-}
-
-class TelemetryRecorder {
-  // Start a new workflow root
-  startWorkflow(ctx: ToolEventContext & { workflowId?: string }): ExecutionNode;
-  
-  // Start a child node (automatically links to parent)
-  startChild(ctx: ToolEventContext, parentId: string): ExecutionNode;
-  
-  // Complete a node
-  completeNode(nodeId: string, result: { durationMs: number; output?: unknown }): ExecutionNode;
-  
-  // Fail a node
-  failNode(nodeId: string, error: ToolError): ExecutionNode;
-}
-```
-
-**Automatic context propagation via thin-client middleware** (Phase 4.6).
+- **Critical Path**: `deploy_release → argocd.sync → kubernetes.apply → kubernetes.wait` (45.5s)
+- **Bottlenecks**: `kubernetes.apply` (12s duration), `deploy_release` (fan-out=4)
+- **Failure Cascades**: `kubernetes.apply` failure → blast radius 1 (`kubernetes.wait`)
+- **Cost Breakdown**: Total $0.0101, critical path $0.0080, per-tool attribution
+- **Workflow Stats**: Aggregated across sessions (success rate, avg duration, avg cost, patterns)
+- **MCP Resources**: Graph data + Mermaid diagrams exposed as `dev.adaptivemcp/*` resources
 
 ---
 
-## Phase 5: Graph Intelligence (Priority: HIGH)
+## Backward Compatibility
 
-### 5.1 GraphAnalyzer Package (`@adaptivemcp/graph-analysis`)
-
-**New package with:**
-```typescript
-export class GraphAnalyzer {
-  constructor(private memory: MemoryStore) {}
-  
-  // Core analyses
-  getCriticalPath(sessionId: string): ExecutionNode[];           // Longest duration path
-  getBottlenecks(sessionId: string, topN = 5): Bottleneck[];     // Slowest nodes by impact
-  getFanOutAnalysis(sessionId: string): FanOutReport;            // Parallelism analysis
-  getFailureCascade(sessionId: string): FailureCascade[];        // Failure propagation
-  getCostBreakdown(sessionId: string): CostBreakdown;            // Cost per tool/workflow
-  getWorkflowStats(workflowId: string): WorkflowStats;           // Aggregated across sessions
-  
-  // Pattern detection
-  detectCommonPatterns(workflowId: string, minOccurrences = 3): WorkflowPattern[];
-  detectAnomalies(sessionId: string): Anomaly[];
-}
-```
-
-**Derived insights written back to SSOT as `Insight` entries:**
-- `critical_path_duration_ms` — workflow-level latency insight
-- `bottleneck_tool` — tool causing most downstream delay
-- `fan_out_factor` — parallelism degree
-- `failure_blast_radius` — how many nodes a failure affects
-- `cost_per_workflow` — aggregated cost insight
-
-### 5.2 Extend Evaluator (`@adaptivemcp/evaluation`)
-
-Add workflow-level evaluation:
-```typescript
-evaluateWorkflow(sessionId: string): Insight[];
-evaluateAllWorkflows(): void;
-```
+- All existing scenarios work unchanged
+- Graph tracking is **opt-in** via `enableGraph: true` in `AdaptiveRuntimeOptions`
+- Events without `sessionId`/`parentId` treated as root nodes
+- No breaking changes to existing APIs
 
 ---
 
-## Phase 6: Graph Projection & Exposure (Priority: MEDIUM)
+## Next Phases: Production Hardening & Advanced Intelligence
 
-### 6.1 Extend ExtensionController (`@adaptivemcp/extension`)
+### Phase 9: Production Hardening (Priority: HIGH)
 
-**New MCP resources:**
-- `dev.adaptivemcp/execution-graph/{sessionId}` — full DAG for a session
-- `dev.adaptivemcp/workflow-graph/{workflowId}` — aggregated workflow pattern
-- `dev.adaptivemcp/graph-insights/{sessionId}` — derived insights
+| Task | Package | Effort | Description |
+|------|---------|--------|-------------|
+| 9.1 | `@adaptivemcp/memory` | Medium | Add WAL mode, connection pooling, and migration framework for `execution_nodes` table |
+| 9.2 | `@adaptivemcp/graph-analysis` | Medium | Add incremental/streaming analysis for long-running workflows (don't recompute full graph on every event) |
+| 9.3 | `@adaptivemcp/extension` | Low | Add ETag/If-None-Match support for graph MCP resources |
+| 9.4 | `@adaptivemcp/thin-client` | Medium | Add `AsyncLocalStorage`-based context propagation for true async call stacks (not just middleware chain) |
+| 9.5 | `@adaptivemcp/memory` | Medium | Add TTL-based cleanup for old execution nodes (configurable retention) |
 
-**YAML view extension (`tools-metadata.yaml`):**
-```yaml
-tools:
-  deploy_service:
-    # ...existing fields...
-    graphInsights:
-      avgCriticalPathMs: 12500
-      commonBottlenecks: ["kubernetes.apply", "argocd.sync"]
-      typicalFanOut: 3
-      failureBlastRadius: 4
-workflows:
-  deploy_release:
-    avgDurationMs: 45000
-    successRate: 0.92
-    avgCost: 0.045
-    commonPatterns:
-      - pattern: "sequential_deploy"
-        frequency: 0.7
-```
+### Phase 10: Advanced Graph Intelligence (Priority: MEDIUM)
 
-### 6.2 Graph Visualization Resource
+| Task | Package | Effort | Description |
+|------|---------|--------|-------------|
+| 10.1 | `@adaptivemcp/graph-analysis` | High | **Causal inference**: Detect root causes vs symptoms in failure cascades using counterfactual reasoning |
+| 10.2 | `@adaptivemcp/graph-analysis` | High | **Predictive modeling**: Forecast workflow duration/cost/failure probability from partial graph |
+| 10.3 | `@adaptivemcp/graph-analysis` | Medium | **Subgraph isomorphism**: Detect recurring anti-patterns (e.g., "diamond dependency", "sequential bottleneck") |
+| 10.4 | `@adaptivemcp/evaluation` | Medium | **Multi-session learning**: Aggregate patterns across workflow runs to improve recommendations |
+| 10.5 | `@adaptivemcp/routing` | Medium | **Graph-aware routing**: Route based on workflow position (e.g., cheaper model for leaf nodes, premium for critical path) |
 
-Expose as MCP resource with Mermaid/GraphViz format:
-```mermaid
-graph TD
-    A[deploy_release] --> B[github.merge_pr]
-    A --> C[github.create_release]
-    A --> D[argocd.sync]
-    D --> E[kubernetes.apply]
-    D --> F[kubernetes.wait]
-    A --> G[slack.notify]
-```
+### Phase 11: MCP Ecosystem Integration (Priority: MEDIUM)
+
+| Task | Package | Effort | Description |
+|------|---------|--------|-------------|
+| 11.1 | `@adaptivemcp/extension` | Medium | Implement `dev.adaptivemcp/execution-graph` as a **readable MCP resource** with pagination/cursors |
+| 11.2 | `@adaptivemcp/extension` | Medium | Add **subscription/notification** for graph updates (SSE or MCP notifications) |
+| 11.3 | `@adaptivemcp/spec` | Low | Define standard `ExecutionGraph` schema for cross-server graph federation |
+| 11.4 | `@adaptivemcp/thin-client` | Medium | **Distributed tracing headers**: Propagate `traceparent`/`tracestate` (W3C TraceContext) across MCP servers |
+
+### Phase 12: Visualization & UX (Priority: LOW)
+
+| Task | Package | Effort | Description |
+|------|---------|--------|-------------|
+| 12.1 | `adaptivemcp.github.io` | Medium | Interactive graph explorer in docs (Mermaid + D3.js) |
+| 12.2 | `@adaptivemcp/extension` | Low | GraphViz DOT export alongside Mermaid |
+| 12.3 | `examples` | Low | Scenario: "debugging a failed deployment" — walk through graph inspection |
 
 ---
 
-## Phase 7: Thin-Client Integration (Priority: HIGH)
-
-### 7.1 Automatic Context Propagation (`@adaptivemcp/thin-client`)
-
-**Middleware that automatically:**
-1. Generates `sessionId` at workflow start (or uses incoming)
-2. Tracks `parentId` from call stack
-3. Emits `startChild` / `completeNode` / `failNode` automatically
-4. Propagates context via MCP `requestId` / custom headers
-
-```typescript
-class GraphTrackingMiddleware {
-  private sessionId: string;
-  private nodeStack: string[] = [];
-  
-  async onToolCall(toolName: string, args: unknown, next: NextFn) {
-    const parentId = this.nodeStack[this.nodeStack.length - 1];
-    const node = this.telemetry.startChild({ toolName, ... }, parentId);
-    this.nodeStack.push(node.id);
-    
-    try {
-      const result = await next(args);
-      this.telemetry.completeNode(node.id, { durationMs: ..., output: result });
-      return result;
-    } catch (e) {
-      this.telemetry.failNode(node.id, { message: e.message });
-      throw e;
-    } finally {
-      this.nodeStack.pop();
-    }
-  }
-}
-```
-
-### 7.2 Workflow Boundary Detection
-
-- **Explicit**: `workflowId` passed in context
-- **Implicit**: Heuristic — root node = no parent, or MCP `initialize` boundary
-- **Named**: Well-known workflows (deploy, test, build) get stable `workflowId`
-
----
-
-## Phase 8: Example Scenarios (Priority: MEDIUM)
-
-### 8.1 Scenario: `deploy_release` DAG Visualization
-
-```typescript
-// examples/src/scenarios/execution-graph.ts
-const runtime = new AdaptiveRuntime({ yamlPath: "tools-metadata.graph.yaml" });
-
-// Simulate a deployment workflow
-const sessionId = "deploy-123";
-runtime.telemetry.startWorkflow({ 
-  toolName: "deploy_release", 
-  sessionId, 
-  workflowId: "deploy_release" 
-});
-
-// Parallel fan-out
-const mergePr = runtime.telemetry.startChild({ toolName: "github.merge_pr", sessionId }, rootId);
-const createRelease = runtime.telemetry.startChild({ toolName: "github.create_release", sessionId }, rootId);
-
-// Sequential chain under argocd.sync
-const argocdSync = runtime.telemetry.startChild({ toolName: "argocd.sync", sessionId }, rootId);
-const k8sApply = runtime.telemetry.startChild({ toolName: "kubernetes.apply", sessionId }, argocdSync.id);
-const k8sWait = runtime.telemetry.startChild({ toolName: "kubernetes.wait", sessionId }, k8sApply.id);
-
-// Notification
-const notify = runtime.telemetry.startChild({ toolName: "slack.notify", sessionId }, rootId);
-
-// Complete all...
-runtime.evaluator.evaluateAll();
-runtime.graphAnalyzer.analyzeAll();
-runtime.extension.sync();
-
-console.log(runtime.extension.resourceText()); // Shows graph insights
-```
-
-### 8.2 Scenario: Failure Cascade Analysis
-
-Simulate `kubernetes.apply` failing → observe `failure_blast_radius` insight → see approval recommendation for `argocd.sync`.
-
-### 8.3 Scenario: Cost Optimization
-
-Aggregate cost per workflow → routing recommendation for cheaper model on high-volume leaf tools.
-
----
-
-## Implementation Priority Order
-
-| Phase | Package | Effort | Impact | Dependencies |
-|-------|---------|--------|--------|--------------|
-| 4.1 | `@adaptivemcp/spec` | Low | Foundation | — |
-| 4.2 | `@adaptivemcp/memory` | Medium | Foundation | 4.1 |
-| 4.3 | `@adaptivemcp/telemetry` | Medium | Foundation | 4.1, 4.2 |
-| 5.1 | `@adaptivemcp/graph-analysis` (NEW) | High | Core Value | 4.2 |
-| 5.2 | `@adaptivemcp/evaluation` | Medium | Core Value | 5.1 |
-| 6.1 | `@adaptivemcp/extension` | Medium | Exposure | 5.1 |
-| 7.1 | `@adaptivemcp/thin-client` | High | Automation | 4.3 |
-| 8.x | `examples` | Medium | Validation | All |
-
----
-
-## Migration Strategy
+## Migration Strategy (Unchanged)
 
 1. **Backward compatible**: Existing `ToolExecutionEvent` without `sessionId`/`parentId` still works (treated as root nodes)
 2. **Opt-in graph**: Thin-client middleware off by default; enable via `AdaptiveRuntimeOptions.enableGraph = true`
@@ -351,14 +121,17 @@ Aggregate cost per workflow → routing recommendation for cheaper model on high
 
 ---
 
-## Success Metrics
+## Success Metrics (Updated)
 
-- [ ] `deploy_release` scenario prints full Mermaid graph in YAML
-- [ ] `graphAnalyzer.getCriticalPath()` returns correct path for multi-phase scenario
-- [ ] `failure_blast_radius` insight triggers approval recommendation
-- [ ] Cost per workflow aggregated correctly across 100+ simulated runs
-- [ ] Thin-client middleware automatically builds graph without manual instrumentation
-- [ ] MCP client can fetch `dev.adaptivemcp/execution-graph/{sessionId}` resource
+- [x] `deploy_release` scenario prints full Mermaid graph in YAML
+- [x] `graphAnalyzer.getCriticalPath()` returns correct path for multi-phase scenario
+- [x] `failure_blast_radius` insight triggers approval recommendation
+- [x] Cost per workflow aggregated correctly across 100+ simulated runs
+- [x] Thin-client middleware automatically builds graph without manual instrumentation
+- [x] MCP client can fetch `dev.adaptivemcp/execution-graph/{sessionId}` resource
+- [ ] Production deployment with WAL mode and connection pooling
+- [ ] Incremental graph analysis for 10,000+ node workflows
+- [ ] Cross-server trace propagation with W3C TraceContext
 
 ---
 
@@ -366,5 +139,5 @@ Aggregate cost per workflow → routing recommendation for cheaper model on high
 
 - `docs/ROADMAP.md` — Main project roadmap (Phases 0-4 complete)
 - `docs/sep-2133-tools-metadata.md` — MCP extension spec (graph resource to be added)
-- `packages/spec/src/types.ts` — Core type definitions (to be extended)
-- `packages/memory/src/store.ts` — SQLite SSOT (schema to be extended)
+- `packages/spec/src/types.ts` — Core type definitions (extended with graph types)
+- `packages/memory/src/store.ts` — SQLite SSOT (extended with execution_nodes table)

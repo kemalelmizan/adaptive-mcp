@@ -5,7 +5,8 @@ import type { Store } from "@adaptivemcp/spec";
  *
  * Middleware may mutate `input`/`output`/`credentials` in place (the chain
  * passes the same object through every stage). `output` is only present after
- * the call has executed (in `afterCall` / `onError`).
+ * the call has executed (in `afterCall` / `onError`). `credentials` can hold
+ * arbitrary credential data (tokens, API keys, etc.) as a flexible object.
  */
 export interface PlannedCall {
   toolName: string;
@@ -15,7 +16,7 @@ export interface PlannedCall {
   /** The tool result. Only present in `afterCall` / `onError`. Mutable by `afterCall`. */
   output?: unknown;
   /** Credentials resolved by an auth-injecting middleware. */
-  credentials?: Record<string, string>;
+  credentials?: Record<string, unknown>;
 }
 
 export interface CallResult {

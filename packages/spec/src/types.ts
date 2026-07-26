@@ -155,6 +155,8 @@ export interface ToolStats {
   avgDurationMs: number | null;
   totalCost: number;
   lastObservedAt: string | null;
+  /** Average output tokens per invocation (for context cost tracking) */
+  avgOutputTokens?: number;
 }
 
 /**

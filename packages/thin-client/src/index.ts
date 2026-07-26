@@ -13,3 +13,5 @@ export { MiddlewareChain } from "@adaptivemcp/middleware";
 export type { Middleware, MiddlewareContext, PlannedCall, CallResult } from "@adaptivemcp/middleware";
 export { GraphTrackingMiddleware, createGraphTrackingMiddleware } from "./graph-middleware.js";
 export type { } from "./graph-middleware.js";
+export { OAuthMiddleware, InMemoryOAuthTokenStore, createOAuthMiddleware } from "./oauth-middleware.js";
+export type { OAuthClientConfig, OAuthToken, OAuthTokenStore } from "./oauth-middleware.js";

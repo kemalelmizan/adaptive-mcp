@@ -13,7 +13,7 @@ export interface ApprovalPolicy {
    * confirmation. Defaults to 0.2.
    */
   flakyFailureRate?: number;
-  /** Tools explicitly denied (by name). */
+  /** Tools explicitly denied (by name or glob pattern, e.g. "flaky-server/*"). */
   denyTools?: string[];
 }
 
@@ -60,7 +60,8 @@ export class ApprovalGate {
   gate(toolName: string, serverName?: string): ApprovalDecision {
     const record = this.memory.getTool(toolName, serverName);
 
-    if (this.policy.denyTools.includes(toolName)) {
+    // Check deny list with glob pattern support
+    if (this.policy.denyTools.some(pattern => this.matchGlob(pattern, toolName))) {
       this.recordBoundary(toolName, "deny", serverName);
       return "deny";
     }
@@ -80,6 +81,19 @@ export class ApprovalGate {
 
     this.recordBoundary(toolName, "allow", serverName);
     return "allow";
+  }
+
+  /**
+   * Simple glob matching: * matches any characters, ? matches single character.
+   * Patterns like "flaky-server/*" or "dangerous-*" are supported.
+   */
+  private matchGlob(pattern: string, toolName: string): boolean {
+    // Escape special regex characters except * and ?
+    const regexPattern = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*')
+      .replace(/\?/g, '.');
+    return new RegExp(`^${regexPattern}$`).test(toolName);
   }
 
   private recordBoundary(toolName: string, decision: ApprovalDecision, serverName?: string): void {

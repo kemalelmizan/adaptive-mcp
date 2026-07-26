@@ -1,11 +1,9 @@
 {
-  "name": "@adaptivemcp/evaluation",
-  "version": "0.2.5",
-  "description": "Outcome scoring and feedback loops for Adaptive MCP.",
-  "license": "MIT",
+  "name": "@adaptivemcp/opencode-plugin",
+  "version": "0.1.0",
+  "description": "OpenCode plugin for Adaptive MCP - maps OpenCode hooks to Adaptive MCP telemetry and middleware",
   "type": "module",
   "main": "./dist/index.js",
-  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
@@ -13,27 +11,29 @@
       "import": "./dist/index.js"
     }
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "vitest run --config ../../vitest.config.ts"
+    "build": "tsc",
+    "test": "vitest run",
+    "dev": "tsc --watch"
   },
   "dependencies": {
     "@adaptivemcp/spec": "workspace:*",
     "@adaptivemcp/memory": "workspace:*",
     "@adaptivemcp/telemetry": "workspace:*",
+    "@adaptivemcp/evaluation": "workspace:*",
     "@adaptivemcp/extension": "workspace:*",
     "@adaptivemcp/routing": "workspace:*",
     "@adaptivemcp/orchestration": "workspace:*",
     "@adaptivemcp/approval": "workspace:*",
     "@adaptivemcp/graph-analysis": "workspace:*",
+    "@adaptivemcp/middleware": "workspace:*",
     "@adaptivemcp/thin-client": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
