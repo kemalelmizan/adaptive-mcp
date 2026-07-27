@@ -13,10 +13,26 @@ export class GraphAnalyzer {
   }
 
   /**
+   * Fetch all nodes for a session. Extracted so `IncrementalGraphAnalyzer`
+   * can override it with a cache without touching every call site.
+   */
+  protected fetchSessionNodes(sessionId: string): ExecutionNode[] {
+    return this.memory.getNodesBySession(sessionId);
+  }
+
+  /**
+   * Fetch all nodes for a workflow. Extracted so `IncrementalGraphAnalyzer`
+   * can override it with a cache without touching every call site.
+   */
+  protected fetchWorkflowNodes(workflowId: string): ExecutionNode[] {
+    return this.memory.getNodesByWorkflow(workflowId);
+  }
+
+  /**
    * Get the critical path (longest duration path) for a session.
    */
   getCriticalPath(sessionId: string): CriticalPathResult {
-    const nodes = this.memory.getNodesBySession(sessionId);
+    const nodes = this.fetchSessionNodes(sessionId);
     if (nodes.length === 0) {
       return { path: [], totalDurationMs: 0 };
     }
@@ -121,7 +137,7 @@ export class GraphAnalyzer {
    * Analyze fan-out/fan-in patterns for parallelism opportunities.
    */
   getFanOutAnalysis(sessionId: string): FanOutReport {
-    const nodes = this.memory.getNodesBySession(sessionId);
+    const nodes = this.fetchSessionNodes(sessionId);
     if (nodes.length === 0) {
       return { maxFanOut: 0, avgFanOut: 0, parallelizableNodes: [], sequentialChains: [] };
     }
@@ -177,7 +193,7 @@ export class GraphAnalyzer {
    * Analyze failure cascades - how failures propagate through the graph.
    */
   getFailureCascade(sessionId: string): FailureCascade[] {
-    const nodes = this.memory.getNodesBySession(sessionId);
+    const nodes = this.fetchSessionNodes(sessionId);
     const failedNodes = nodes.filter(n => n.status === "failed");
     const cascades: FailureCascade[] = [];
 
@@ -198,7 +214,7 @@ export class GraphAnalyzer {
    * Get cost breakdown for a session.
    */
   getCostBreakdown(sessionId: string): CostBreakdown {
-    const nodes = this.memory.getNodesBySession(sessionId);
+    const nodes = this.fetchSessionNodes(sessionId);
     const byTool: Record<string, number> = {};
     const byNode: Record<string, number> = {};
     let totalCost = 0;
@@ -226,7 +242,7 @@ export class GraphAnalyzer {
    * Get aggregated workflow statistics across all sessions.
    */
   getWorkflowStats(workflowId: string): WorkflowStats {
-    const nodes = this.memory.getNodesByWorkflow(workflowId);
+    const nodes = this.fetchWorkflowNodes(workflowId);
     if (nodes.length === 0) {
       return {
         workflowId,
@@ -275,7 +291,7 @@ export class GraphAnalyzer {
    * Detect common workflow patterns.
    */
   detectCommonPatterns(workflowId: string, minOccurrences = 3): WorkflowPattern[] {
-    const nodes = this.memory.getNodesByWorkflow(workflowId);
+    const nodes = this.fetchWorkflowNodes(workflowId);
     const sessions = new Map<string, ExecutionNode[]>();
     
     for (const node of nodes) {
@@ -331,7 +347,7 @@ export class GraphAnalyzer {
    * Detect anomalies in a session compared to historical patterns.
    */
   detectAnomalies(sessionId: string): Array<{ type: string; node: ExecutionNode; description: string }> {
-    const nodes = this.memory.getNodesBySession(sessionId);
+    const nodes = this.fetchSessionNodes(sessionId);
     const anomalies: Array<{ type: string; node: ExecutionNode; description: string }> = [];
 
     for (const node of nodes) {

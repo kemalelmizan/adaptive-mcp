@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Store, ExecutionNode } from "@adaptivemcp/spec";
 import type { Middleware, MiddlewareContext, PlannedCall, CallResult } from "@adaptivemcp/middleware";
 
@@ -15,11 +16,26 @@ interface GraphStore extends Store {
 }
 
 /**
+ * Per-async-chain graph context. Treated as immutable: every update replaces
+ * it via `enterWith` rather than mutating fields in place, so concurrent call
+ * chains (e.g. `Promise.all`) each see their own snapshot instead of racing on
+ * shared instance state.
+ */
+interface GraphContext {
+  stack: string[];
+  rootNodeId?: string;
+}
+
+const EMPTY_CONTEXT: GraphContext = { stack: [] };
+
+/**
  * Middleware that automatically tracks execution graph context.
- * 
+ *
  * This middleware:
  * 1. Generates a sessionId at workflow start (or uses incoming)
- * 2. Tracks parentId from call stack using AsyncLocalStorage
+ * 2. Tracks parentId from call stack using AsyncLocalStorage, so concurrent
+ *    call chains started via `Promise.all` don't corrupt each other's
+ *    parent/child linkage the way a single shared stack would.
  * 3. Emits startChild/completeNode/failNode automatically
  * 4. Propagates context via MCP requestId / custom headers
  */
@@ -28,13 +44,35 @@ export class GraphTrackingMiddleware implements Middleware {
   private store: GraphStore;
   private sessionId: string;
   private workflowId?: string;
-  private nodeStack: string[] = [];
-  private rootNodeId?: string;
+  private als = new AsyncLocalStorage<GraphContext>();
 
   constructor(store: Store, options: { sessionId?: string; workflowId?: string } = {}) {
     this.store = store as GraphStore;
     this.sessionId = options.sessionId ?? crypto.randomUUID();
     this.workflowId = options.workflowId;
+  }
+
+  /** The graph context for the currently running async call chain. */
+  private getContext(): GraphContext {
+    return this.als.getStore() ?? EMPTY_CONTEXT;
+  }
+
+  /**
+   * Runs `fn` in an isolated fork of the current graph context.
+   *
+   * This is the actual concurrency boundary: `enterWith` alone is not enough,
+   * because two sibling calls kicked off back-to-back (e.g. via
+   * `Promise.all`) run synchronously up to their first await *before* either
+   * has genuinely yielded to the event loop, so they still share one active
+   * async resource at the moment `enterWith` would fire and corrupt each
+   * other's context. `als.run()` ties the context to the async resources
+   * created during `fn`'s execution instead, which is what actually isolates
+   * concurrent chains. Callers (e.g. `ThinClient.run`) must wrap each
+   * top-level call's full `beforeCall` -> execute -> `afterCall`/`onError`
+   * sequence in one `runInContext` call for this to hold.
+   */
+  runInContext<T>(fn: () => Promise<T>): Promise<T> {
+    return this.als.run(this.getContext(), fn);
   }
 
   /** Get the current session ID. */
@@ -47,19 +85,20 @@ export class GraphTrackingMiddleware implements Middleware {
     return this.workflowId;
   }
 
-  /** Get the current parent node ID (top of stack). */
+  /** Get the current parent node ID (top of stack) for this async call chain. */
   getParentId(): string | undefined {
-    return this.nodeStack[this.nodeStack.length - 1];
+    const { stack } = this.getContext();
+    return stack[stack.length - 1];
   }
 
-  /** Get the root node ID. */
+  /** Get the root node ID for this async call chain. */
   getRootNodeId(): string | undefined {
-    return this.rootNodeId;
+    return this.getContext().rootNodeId;
   }
 
-  /** Get the current node stack depth. */
+  /** Get the current node stack depth for this async call chain. */
   getDepth(): number {
-    return this.nodeStack.length;
+    return this.getContext().stack.length;
   }
 
   /** Start a new workflow root node. */
@@ -78,8 +117,7 @@ export class GraphTrackingMiddleware implements Middleware {
     };
     
     this.store.recordExecutionNode(node);
-    this.rootNodeId = node.id;
-    this.nodeStack.push(node.id);
+    this.als.enterWith({ stack: [node.id], rootNodeId: node.id });
     return node.id;
   }
 
@@ -103,15 +141,16 @@ export class GraphTrackingMiddleware implements Middleware {
     };
     
     this.store.recordExecutionNode(node);
-    
+
     // Update parent's children
     const parent = this.store.getExecutionNode(parentId);
     if (parent) {
       const updatedChildren = [...parent.childrenIds, node.id];
       this.store.updateChildrenIds(parentId, updatedChildren);
     }
-    
-    this.nodeStack.push(node.id);
+
+    const current = this.getContext();
+    this.als.enterWith({ ...current, stack: [...current.stack, node.id] });
     return node.id;
   }
 
@@ -129,11 +168,7 @@ export class GraphTrackingMiddleware implements Middleware {
     };
     
     this.store.recordExecutionNode(updated);
-    // Pop from stack if it matches
-    const index = this.nodeStack.indexOf(nodeId);
-    if (index !== -1) {
-      this.nodeStack.splice(index, 1);
-    }
+    this.popFromStack(nodeId);
   }
 
   /** Fail the current node. */
@@ -148,20 +183,24 @@ export class GraphTrackingMiddleware implements Middleware {
     };
     
     this.store.recordExecutionNode(updated);
-    // Pop from stack if it matches
-    const index = this.nodeStack.indexOf(nodeId);
-    if (index !== -1) {
-      this.nodeStack.splice(index, 1);
-    }
+    this.popFromStack(nodeId);
+  }
+
+  /** Remove `nodeId` from this async call chain's stack, wherever it is. */
+  private popFromStack(nodeId: string): void {
+    const current = this.getContext();
+    if (!current.stack.includes(nodeId)) return;
+    this.als.enterWith({ ...current, stack: current.stack.filter((id) => id !== nodeId) });
   }
 
   /** Middleware hook: runs before each tool call. */
   async beforeCall(call: PlannedCall, ctx: MiddlewareContext): Promise<void> {
+    const { stack, rootNodeId } = this.getContext();
     // If this is the first call in the chain and we don't have a root yet,
     // start the workflow
-    if (this.nodeStack.length === 0 && !this.rootNodeId) {
+    if (stack.length === 0 && !rootNodeId) {
       await this.startWorkflow(call.toolName, call.serverName);
-    } else if (this.nodeStack.length > 0) {
+    } else if (stack.length > 0) {
       // Start a child node
       await this.startChild(call.toolName, call.serverName);
     }
@@ -169,7 +208,7 @@ export class GraphTrackingMiddleware implements Middleware {
 
   /** Middleware hook: runs after each tool call (success or failure). */
   async afterCall(result: CallResult, call: PlannedCall, ctx: MiddlewareContext): Promise<void> {
-    const nodeId = this.nodeStack[this.nodeStack.length - 1];
+    const nodeId = this.getParentId();
     if (!nodeId) return;
 
     if (result.ok) {
@@ -186,7 +225,7 @@ export class GraphTrackingMiddleware implements Middleware {
 
   /** Middleware hook: runs after a thrown execution error. */
   async onError(err: unknown, call: PlannedCall, ctx: MiddlewareContext): Promise<void> {
-    const nodeId = this.nodeStack[this.nodeStack.length - 1];
+    const nodeId = this.getParentId();
     if (!nodeId) return;
 
     await this.failNode(nodeId, {

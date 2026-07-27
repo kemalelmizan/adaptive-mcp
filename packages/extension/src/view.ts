@@ -193,6 +193,15 @@ export function renderToolsMetadata(
   return { version, etag, generated_at, tools };
 }
 
+/**
+ * Stable sha1 hash of the *meaningful* content of a document — callers pass
+ * only the fields that should invalidate the etag (never `generated_at` or
+ * `etag` itself), so two renders of unchanged data produce the same etag.
+ */
+export function computeEtag(payload: unknown): string {
+  return createHash("sha1").update(JSON.stringify(payload)).digest("hex");
+}
+
 export function toYaml(doc: AnyDocument): string {
   // Strict dump: no custom tags, no object refs — safe to re-parse.
   return yaml.dump(doc, { lineWidth: 120, sortKeys: false, noRefs: true, schema: yaml.JSON_SCHEMA });

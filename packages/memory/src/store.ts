@@ -10,12 +10,36 @@ import type {
   ToolStats,
   ExecutionNode,
 } from "@adaptivemcp/spec";
+import { runMigrations } from "./migrations.js";
+
+export interface MemoryStorePragmaOptions {
+  journalMode?: string;
+  synchronous?: string;
+  busyTimeoutMs?: number;
+}
 
 export interface MemoryStoreOptions {
   /** Path to the SQLite database file. Use ":memory:" for an in-memory store. */
   path?: string;
   dbOptions?: DatabaseSyncOptions;
+  /**
+   * PRAGMA overrides. `journalMode` is ignored for `:memory:` stores, since
+   * WAL requires a file on disk. Defaults: journalMode "WAL", synchronous
+   * "NORMAL", busyTimeoutMs 5000. `foreign_keys` is always enabled.
+   */
+  pragmas?: MemoryStorePragmaOptions;
+  /** When set, `recordExecutionNode` opportunistically prunes nodes older than `maxAgeMs`. */
+  retention?: { maxAgeMs: number };
 }
+
+const DEFAULT_PRAGMAS: Required<MemoryStorePragmaOptions> = {
+  journalMode: "WAL",
+  synchronous: "NORMAL",
+  busyTimeoutMs: 5000,
+};
+
+/** Opportunistic pruning is throttled to at most once per this interval, to avoid a DELETE scan on every write. */
+const RETENTION_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 interface ToolRow {
   tool_name: string;
@@ -56,44 +80,6 @@ interface ExecutionNodeRow {
  */
 const UNKNOWN_SERVER = "";
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS tools (
-  tool_name TEXT NOT NULL,
-  server_name TEXT NOT NULL DEFAULT '',
-  annotation TEXT NOT NULL,
-  insights TEXT NOT NULL DEFAULT '[]',
-  recommendations TEXT NOT NULL DEFAULT '[]',
-  stats TEXT NOT NULL DEFAULT '{}',
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY (tool_name, server_name)
-);
-
-CREATE TABLE IF NOT EXISTS execution_nodes (
-  id TEXT PRIMARY KEY,
-  tool_name TEXT NOT NULL,
-  server_name TEXT,
-  session_id TEXT NOT NULL,
-  workflow_id TEXT,
-  parent_id TEXT,
-  children_ids TEXT NOT NULL DEFAULT '[]',
-  timestamp TEXT NOT NULL,
-  duration_ms INTEGER,
-  status TEXT NOT NULL,
-  input TEXT,
-  output TEXT,
-  error TEXT,
-  model TEXT,
-  cost TEXT,
-  metadata TEXT,
-  FOREIGN KEY (parent_id) REFERENCES execution_nodes(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_nodes_session ON execution_nodes(session_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_workflow ON execution_nodes(workflow_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_tool ON execution_nodes(tool_name);
-CREATE INDEX IF NOT EXISTS idx_nodes_parent ON execution_nodes(parent_id);
-`;
-
 /**
  * SQLite-backed store for Adaptive MCP.
  *
@@ -103,10 +89,25 @@ CREATE INDEX IF NOT EXISTS idx_nodes_parent ON execution_nodes(parent_id);
  */
 export class MemoryStore implements Store {
   private db: DatabaseSync;
+  private readonly isMemory: boolean;
+  private readonly retention?: { maxAgeMs: number };
+  private lastPrunedAt = 0;
 
   constructor(options: MemoryStoreOptions = {}) {
-    this.db = new DatabaseSync(options.path ?? ":memory:", options.dbOptions ?? {});
-    this.db.exec(SCHEMA);
+    const path = options.path ?? ":memory:";
+    this.isMemory = path === ":memory:";
+    this.retention = options.retention;
+    this.db = new DatabaseSync(path, options.dbOptions ?? {});
+
+    const pragmas = { ...DEFAULT_PRAGMAS, ...options.pragmas };
+    if (!this.isMemory) {
+      this.db.exec(`PRAGMA journal_mode = ${pragmas.journalMode}`);
+    }
+    this.db.exec(`PRAGMA synchronous = ${pragmas.synchronous}`);
+    this.db.exec(`PRAGMA foreign_keys = ON`);
+    this.db.exec(`PRAGMA busy_timeout = ${pragmas.busyTimeoutMs}`);
+
+    runMigrations(this.db);
   }
 
   close(): void {
@@ -316,7 +317,28 @@ export class MemoryStore implements Store {
         node.cost ? JSON.stringify(node.cost) : null,
         node.metadata ? JSON.stringify(node.metadata) : null,
       );
+    this.maybeOpportunisticPrune();
     return node;
+  }
+
+  /**
+   * Delete execution nodes older than `olderThanMs`. Does not cascade-clean
+   * dangling `parent_id`/`children_ids` references left on surviving rows —
+   * acceptable for a best-effort retention pass; callers relying on strict
+   * graph integrity should prune with generous windows.
+   */
+  pruneExecutionNodes(olderThanMs: number, now: number = Date.now()): { deleted: number } {
+    const cutoff = new Date(now - olderThanMs).toISOString();
+    const result = this.db.prepare(`DELETE FROM execution_nodes WHERE timestamp < ?`).run(cutoff);
+    this.lastPrunedAt = now;
+    return { deleted: Number(result.changes) };
+  }
+
+  private maybeOpportunisticPrune(): void {
+    if (!this.retention) return;
+    const now = Date.now();
+    if (now - this.lastPrunedAt < RETENTION_CHECK_INTERVAL_MS) return;
+    this.pruneExecutionNodes(this.retention.maxAgeMs, now);
   }
 
   /** Get an execution node by ID. */

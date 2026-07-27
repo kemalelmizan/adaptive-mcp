@@ -97,32 +97,41 @@ export class ThinClient {
     }
 
     const call: PlannedCall = { toolName, serverName, input };
-    await this.chain.runBefore(call);
 
-    // Start graph tracking if enabled
-    if (this.graphTracking) {
-      await this.graphTracking.beforeCall(call, { store: this.memory, toolName, serverName });
-    }
+    // The full beforeCall -> execute -> afterCall/onError sequence runs inside
+    // one graph-tracking context fork, so concurrent calls (e.g. via
+    // `Promise.all`) each get an isolated parent/child stack instead of
+    // corrupting a shared one. See GraphTrackingMiddleware.runInContext.
+    const runOnce = async (): Promise<{ decision: ApprovalDecision; executed: boolean; output?: unknown }> => {
+      await this.chain.runBefore(call);
 
-    const policy = this.retryPolicyFor(toolName, serverName);
-    const startTime = Date.now();
-    const result = await this.executeWithRetry(handler, call, policy);
-    const durationMs = Date.now() - startTime;
-    call.output = result.output;
-    await this.chain.runAfter(result, call);
-
-    // Complete graph tracking if enabled
-    if (this.graphTracking) {
-      const callResult: CallResult = { ok: result.ok, error: result.error };
-      if (result.ok) {
-        await this.graphTracking.afterCall(callResult, call, { store: this.memory, toolName, serverName });
-      } else {
-        await this.graphTracking.onError(new Error(result.error ?? "Unknown error"), call, { store: this.memory, toolName, serverName });
+      if (this.graphTracking) {
+        await this.graphTracking.beforeCall(call, { store: this.memory, toolName, serverName });
       }
-    }
 
-    record(result.ok, result.error, call.output);
-    return { decision, executed: true, output: call.output };
+      const policy = this.retryPolicyFor(toolName, serverName);
+      const result = await this.executeWithRetry(handler, call, policy);
+      call.output = result.output;
+      await this.chain.runAfter(result, call);
+
+      if (this.graphTracking) {
+        const callResult: CallResult = { ok: result.ok, error: result.error };
+        if (result.ok) {
+          await this.graphTracking.afterCall(callResult, call, { store: this.memory, toolName, serverName });
+        } else {
+          await this.graphTracking.onError(new Error(result.error ?? "Unknown error"), call, {
+            store: this.memory,
+            toolName,
+            serverName,
+          });
+        }
+      }
+
+      record(result.ok, result.error, call.output);
+      return { decision, executed: true, output: call.output };
+    };
+
+    return this.graphTracking ? this.graphTracking.runInContext(runOnce) : runOnce();
   }
 
   /** Read the suggested retry policy from the store, else fall back to default. */

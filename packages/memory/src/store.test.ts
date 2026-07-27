@@ -1,6 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { MemoryStore } from "./store.js";
-import type { ToolExecutionEvent } from "@adaptivemcp/spec";
+import type { ToolExecutionEvent, ExecutionNode } from "@adaptivemcp/spec";
+
+function makeNode(overrides: Partial<ExecutionNode> = {}): ExecutionNode {
+  return {
+    id: "n1",
+    toolName: "deploy_service",
+    sessionId: "s1",
+    childrenIds: [],
+    timestamp: new Date().toISOString(),
+    status: "completed",
+    ...overrides,
+  };
+}
 
 describe("@adaptivemcp/memory", () => {
   let store: MemoryStore;
@@ -130,5 +146,94 @@ describe("@adaptivemcp/memory", () => {
     expect(stats?.failureRate).toBeCloseTo(0.5);
     expect(stats?.avgDurationMs).toBe(1000);
     expect(stats?.totalCost).toBeCloseTo(0.02);
+  });
+
+  describe("production hardening (Phase 9)", () => {
+    let dir: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), "adaptivemcp-memory-test-"));
+    });
+
+    afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("applies WAL journal mode for file-backed stores", () => {
+      const path = join(dir, "wal.db");
+      const fileStore = new MemoryStore({ path });
+      fileStore.recordExecutionNode(makeNode());
+
+      const raw = new DatabaseSync(path);
+      const mode = raw.prepare(`PRAGMA journal_mode`).get() as { journal_mode: string };
+      raw.close();
+      fileStore.close();
+
+      expect(mode.journal_mode).toBe("wal");
+    });
+
+    it("does not attempt WAL for :memory: stores", () => {
+      expect(() => new MemoryStore({ path: ":memory:" })).not.toThrow();
+    });
+
+    it("runs migrations idempotently when reopening an existing file", () => {
+      const path = join(dir, "migrations.db");
+      const a = new MemoryStore({ path });
+      a.close();
+      const b = new MemoryStore({ path });
+      b.close();
+
+      const raw = new DatabaseSync(path);
+      const rows = raw.prepare(`SELECT version FROM schema_migrations ORDER BY version`).all() as {
+        version: number;
+      }[];
+      raw.close();
+      expect(rows.map((r) => r.version)).toEqual([1, 2]);
+    });
+
+    it("creates the timestamp index used for pruning", () => {
+      const path = join(dir, "index.db");
+      const fileStore = new MemoryStore({ path });
+      fileStore.close();
+
+      const raw = new DatabaseSync(path);
+      const indexes = raw
+        .prepare(`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'execution_nodes'`)
+        .all() as { name: string }[];
+      raw.close();
+      expect(indexes.map((i) => i.name)).toContain("idx_nodes_timestamp");
+    });
+
+    it("prunes execution nodes older than the cutoff and returns the deleted count", () => {
+      const now = Date.now();
+      const oldTimestamp = new Date(now - 10_000).toISOString();
+      const freshTimestamp = new Date(now - 1_000).toISOString();
+      store.recordExecutionNode(makeNode({ id: "old", timestamp: oldTimestamp }));
+      store.recordExecutionNode(makeNode({ id: "fresh", timestamp: freshTimestamp }));
+
+      const result = store.pruneExecutionNodes(5_000, now);
+
+      expect(result.deleted).toBe(1);
+      expect(store.getExecutionNode("old")).toBeUndefined();
+      expect(store.getExecutionNode("fresh")).toBeDefined();
+    });
+
+    it("leaves the tools table untouched by pruning", () => {
+      store.ensureTool("deploy_service");
+      store.recordExecutionNode(makeNode({ timestamp: new Date(0).toISOString() }));
+      store.pruneExecutionNodes(1);
+      expect(store.getTool("deploy_service")).toBeDefined();
+    });
+
+    it("opportunistically prunes when retention is configured and the check interval has elapsed", () => {
+      const retentionStore = new MemoryStore({ path: ":memory:", retention: { maxAgeMs: 1_000 } });
+      const now = Date.now();
+      retentionStore.recordExecutionNode(makeNode({ id: "old", timestamp: new Date(now - 5_000).toISOString() }));
+      retentionStore.recordExecutionNode(makeNode({ id: "new", timestamp: new Date(now).toISOString() }));
+
+      expect(retentionStore.getExecutionNode("old")).toBeUndefined();
+      expect(retentionStore.getExecutionNode("new")).toBeDefined();
+      retentionStore.close();
+    });
   });
 });

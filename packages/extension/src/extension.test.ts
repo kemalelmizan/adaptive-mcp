@@ -8,6 +8,18 @@ import {
   toYaml,
 } from "./index.js";
 import { SPEC_VERSION } from "@adaptivemcp/spec";
+import type { ExecutionNode } from "@adaptivemcp/spec";
+
+function node(overrides: Partial<ExecutionNode> & { id: string }): ExecutionNode {
+  return {
+    toolName: "tool",
+    sessionId: "s1",
+    childrenIds: [],
+    timestamp: new Date().toISOString(),
+    status: "completed",
+    ...overrides,
+  };
+}
 
 describe("@adaptivemcp/extension", () => {
   let store: MemoryStore;
@@ -158,5 +170,60 @@ describe("@adaptivemcp/extension", () => {
     });
     expect(res.accepted).toBe(false);
     expect(store.getTool("deploy_service")!.stats.invocations).toBe(0);
+  });
+
+  describe("graph resource ETags (Phase 9.3)", () => {
+    it.each([
+      ["executionGraphResourceText", (c: ExtensionController) => c.executionGraphResourceText("s1", "application/json")],
+      ["workflowGraphResourceText", (c: ExtensionController) => c.workflowGraphResourceText("wf1", "application/json")],
+      ["graphInsightsResourceText", (c: ExtensionController) => c.graphInsightsResourceText("s1", "application/json")],
+    ] as const)("%s computes a real, stable etag for unchanged data", (_name, call) => {
+      store.recordExecutionNode(node({ id: "root", workflowId: "wf1" }));
+      const controller = new ExtensionController({ memory: store });
+
+      const first = call(controller);
+      const second = call(controller);
+      if (typeof first !== "string" || typeof second !== "string") throw new Error("expected documents");
+
+      const etagA = (JSON.parse(first) as { etag: string }).etag;
+      const etagB = (JSON.parse(second) as { etag: string }).etag;
+      expect(etagA).toBeTruthy();
+      expect(etagA).toBe(etagB);
+    });
+
+    it.each([
+      ["executionGraphResourceText", (c: ExtensionController, opts: { ifNoneMatch?: string }) =>
+        c.executionGraphResourceText("s1", "application/json", opts)],
+      ["workflowGraphResourceText", (c: ExtensionController, opts: { ifNoneMatch?: string }) =>
+        c.workflowGraphResourceText("wf1", "application/json", opts)],
+      ["graphInsightsResourceText", (c: ExtensionController, opts: { ifNoneMatch?: string }) =>
+        c.graphInsightsResourceText("s1", "application/json", opts)],
+    ] as const)("%s returns notModified when ifNoneMatch matches, full doc when stale", (_name, call) => {
+      store.recordExecutionNode(node({ id: "root", workflowId: "wf1" }));
+      const controller = new ExtensionController({ memory: store });
+
+      const initial = call(controller, {});
+      if (typeof initial !== "string") throw new Error("expected a document");
+      const etag = (JSON.parse(initial) as { etag: string }).etag;
+
+      const matched = call(controller, { ifNoneMatch: etag });
+      expect(matched).toEqual({ notModified: true, etag });
+
+      const stale = call(controller, { ifNoneMatch: "bogus" });
+      expect(typeof stale).toBe("string");
+    });
+
+    it("execution graph etag changes when a new node is recorded for the session", () => {
+      store.recordExecutionNode(node({ id: "root", workflowId: "wf1" }));
+      const controller = new ExtensionController({ memory: store });
+      const before = controller.executionGraphResourceText("s1", "application/json") as string;
+      const etagBefore = (JSON.parse(before) as { etag: string }).etag;
+
+      store.recordExecutionNode(node({ id: "child", parentId: "root", workflowId: "wf1" }));
+      const after = controller.executionGraphResourceText("s1", "application/json") as string;
+      const etagAfter = (JSON.parse(after) as { etag: string }).etag;
+
+      expect(etagAfter).not.toBe(etagBefore);
+    });
   });
 });

@@ -16,7 +16,7 @@ Transform telemetry from **request logging** into **execution intelligence** by 
 
 ## Implementation Status: ✅ Phases 4-9 COMPLETE
 
-All foundation phases have been implemented and validated with working scenarios.
+All foundation phases, plus Phase 9 (Production Hardening), have been implemented and validated with working scenarios and tests. Phases 10-12 (Advanced Intelligence, MCP Ecosystem Integration, Visualization) are not yet started — see below.
 
 ### What Was Built
 
@@ -71,17 +71,17 @@ pnpm --filter @adaptivemcp/examples quickstart
 
 ---
 
-## Next Phases: Production Hardening & Advanced Intelligence
+## Next Phases: Advanced Intelligence
 
-### Phase 9: Production Hardening (Priority: HIGH)
+### Phase 9: Production Hardening — ✅ Done
 
 | Task | Package | Effort | Description |
 |------|---------|--------|-------------|
-| 9.1 | `@adaptivemcp/memory` | Medium | Add WAL mode, connection pooling, and migration framework for `execution_nodes` table |
-| 9.2 | `@adaptivemcp/graph-analysis` | Medium | Add incremental/streaming analysis for long-running workflows (don't recompute full graph on every event) |
-| 9.3 | `@adaptivemcp/extension` | Low | Add ETag/If-None-Match support for graph MCP resources |
-| 9.4 | `@adaptivemcp/thin-client` | Medium | Add `AsyncLocalStorage`-based context propagation for true async call stacks (not just middleware chain) |
-| 9.5 | `@adaptivemcp/memory` | Medium | Add TTL-based cleanup for old execution nodes (configurable retention) |
+| 9.1 | `@adaptivemcp/memory` | Medium | ✅ WAL mode + tuned PRAGMAs and a versioned migration framework for `execution_nodes`. `node:sqlite`'s `DatabaseSync` is a single synchronous connection per process, so "connection pooling" (as originally worded) does not apply and was scoped out. |
+| 9.2 | `@adaptivemcp/graph-analysis` | Medium | ✅ `IncrementalGraphAnalyzer`, an opt-in `GraphAnalyzer` subclass that caches session/workflow node reads instead of re-querying the store on every call. Descoped from true event-driven streaming — no event bus exists from `MemoryStore` writes to analyzer instances anywhere in the codebase, so a cache with explicit `invalidate()` is the pragmatic fit. |
+| 9.3 | `@adaptivemcp/extension` | Low | ✅ Real content-hash ETags for the 3 graph resource documents, plus an `ifNoneMatch` option returning `{ notModified: true, etag }`. |
+| 9.4 | `@adaptivemcp/thin-client` | Medium | ✅ `AsyncLocalStorage`-based context propagation in `GraphTrackingMiddleware`, fixing a confirmed concurrency bug where parallel tool calls corrupted a shared parent/child stack. Required wrapping each call's full lifecycle in `runInContext` in `ThinClient.run()` — `enterWith` alone doesn't isolate calls kicked off back-to-back (e.g. via `Promise.all`). |
+| 9.5 | `@adaptivemcp/memory` | Medium | ✅ `pruneExecutionNodes` + configurable `retention` option for TTL-based cleanup, backed by a new timestamp index. |
 
 ### Phase 10: Advanced Graph Intelligence (Priority: MEDIUM)
 
@@ -129,9 +129,9 @@ pnpm --filter @adaptivemcp/examples quickstart
 - [x] Cost per workflow aggregated correctly across 100+ simulated runs
 - [x] Thin-client middleware automatically builds graph without manual instrumentation
 - [x] MCP client can fetch `dev.adaptivemcp/execution-graph/{sessionId}` resource
-- [ ] Production deployment with WAL mode and connection pooling
-- [ ] Incremental graph analysis for 10,000+ node workflows
-- [ ] Cross-server trace propagation with W3C TraceContext
+- [x] WAL mode for file-backed stores (connection pooling n/a — `node:sqlite` is a single-connection driver)
+- [ ] Incremental graph analysis validated at 10,000+ node workflow scale (cache added in 9.2; not load-tested at this scale)
+- [ ] Cross-server trace propagation with W3C TraceContext (Phase 11.4, not started)
 
 ---
 

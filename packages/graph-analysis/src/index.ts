@@ -5,4 +5,6 @@
  * critical paths, bottlenecks, fan-out analysis, failure cascades, cost breakdowns.
  */
 export { GraphAnalyzer } from "./analyzer.js";
+export { IncrementalGraphAnalyzer } from "./incremental-analyzer.js";
+export type { IncrementalGraphAnalyzerOptions } from "./incremental-analyzer.js";
 export type { } from "@adaptivemcp/spec";

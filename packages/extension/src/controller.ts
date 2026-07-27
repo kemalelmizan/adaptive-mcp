@@ -6,11 +6,23 @@ import {
   renderToolsMetadata,
   toDocument,
   toYaml,
+  computeEtag,
   type ToolsMetadataDocument,
   type ExecutionGraphDocument,
   type WorkflowGraphDocument,
   type GraphInsightsDocument,
 } from "./view.js";
+
+/** Returned by conditional-read resource methods when `ifNoneMatch` matches the current etag. */
+export interface NotModified {
+  notModified: true;
+  etag: string;
+}
+
+export interface ResourceReadOptions {
+  /** When this matches the document's current etag, the method returns `{ notModified: true }` instead of the full document. */
+  ifNoneMatch?: string;
+}
 
 export interface ExtensionControllerOptions {
   memory: Store;
@@ -86,62 +98,50 @@ export class ExtensionController {
   }
 
   /** Get the execution graph for a session in the requested format. */
-  executionGraphResourceText(sessionId: string, mimeType = "application/yaml"): string {
+  executionGraphResourceText(
+    sessionId: string,
+    mimeType = "application/yaml",
+    options: ResourceReadOptions = {},
+  ): string | NotModified {
+    const doc = this.buildExecutionGraphDocument(sessionId);
+    if (options.ifNoneMatch && options.ifNoneMatch === doc.etag) {
+      return { notModified: true, etag: doc.etag };
+    }
+    return toDocument(doc, mimeType);
+  }
+
+  private buildExecutionGraphDocument(sessionId: string): ExecutionGraphDocument {
     const graphStore = this.memory as Store & {
       getNodesBySession?: (sessionId: string) => ExecutionNode[];
       getRootNodes?: (sessionId: string) => ExecutionNode[];
     };
-    
-    if (!graphStore.getNodesBySession || !graphStore.getRootNodes) {
-      const doc: ExecutionGraphDocument = {
-        version: SPEC_VERSION,
-        etag: "",
-        generated_at: new Date().toISOString(),
-        session_id: sessionId,
-        workflow_id: "unknown",
-        nodes: [],
-        edges: [],
-      };
-      return toDocument(doc, mimeType);
-    }
 
-    const nodes = graphStore.getNodesBySession(sessionId);
-    if (nodes.length === 0) {
-      const doc: ExecutionGraphDocument = {
-        version: SPEC_VERSION,
-        etag: "",
-        generated_at: new Date().toISOString(),
-        session_id: sessionId,
-        workflow_id: "unknown",
-        nodes: [],
-        edges: [],
-      };
-      return toDocument(doc, mimeType);
-    }
+    const nodes = graphStore.getNodesBySession && graphStore.getRootNodes ? graphStore.getNodesBySession(sessionId) : [];
 
-    // Build graph document
-    const doc: ExecutionGraphDocument = {
+    const workflowId = nodes[0]?.workflowId ?? "unknown";
+    const renderedNodes = nodes.map(n => ({
+      id: n.id,
+      tool: n.toolName,
+      server: n.serverName,
+      parent: n.parentId,
+      children: n.childrenIds,
+      timestamp: n.timestamp,
+      duration_ms: n.durationMs,
+      status: n.status,
+      cost: n.cost?.amount,
+      model: n.model,
+    }));
+    const edges = nodes.flatMap(n => n.childrenIds.map(childId => ({ from: n.id, to: childId })));
+
+    return {
       version: SPEC_VERSION,
-      etag: "",
+      etag: computeEtag({ version: SPEC_VERSION, session_id: sessionId, workflow_id: workflowId, nodes: renderedNodes, edges }),
       generated_at: new Date().toISOString(),
       session_id: sessionId,
-      workflow_id: nodes[0]?.workflowId ?? "unknown",
-      nodes: nodes.map(n => ({
-        id: n.id,
-        tool: n.toolName,
-        server: n.serverName,
-        parent: n.parentId,
-        children: n.childrenIds,
-        timestamp: n.timestamp,
-        duration_ms: n.durationMs,
-        status: n.status,
-        cost: n.cost?.amount,
-        model: n.model,
-      })),
-      edges: nodes.flatMap(n => n.childrenIds.map(childId => ({ from: n.id, to: childId }))),
+      workflow_id: workflowId,
+      nodes: renderedNodes,
+      edges,
     };
-
-    return toDocument(doc, mimeType);
   }
 
   /**
@@ -202,43 +202,24 @@ export class ExtensionController {
   }
 
   /** Get the workflow graph in the requested format. */
-  workflowGraphResourceText(workflowId: string, mimeType = "application/yaml"): string {
+  workflowGraphResourceText(
+    workflowId: string,
+    mimeType = "application/yaml",
+    options: ResourceReadOptions = {},
+  ): string | NotModified {
+    const doc = this.buildWorkflowGraphDocument(workflowId);
+    if (options.ifNoneMatch && options.ifNoneMatch === doc.etag) {
+      return { notModified: true, etag: doc.etag };
+    }
+    return toDocument(doc, mimeType);
+  }
+
+  private buildWorkflowGraphDocument(workflowId: string): WorkflowGraphDocument {
     const graphStore = this.memory as Store & {
       getNodesByWorkflow?: (workflowId: string) => ExecutionNode[];
     };
-    
-    if (!graphStore.getNodesByWorkflow) {
-      const doc: WorkflowGraphDocument = {
-        version: SPEC_VERSION,
-        etag: "",
-        generated_at: new Date().toISOString(),
-        workflow_id: workflowId,
-        total_executions: 0,
-        success_rate: 0,
-        avg_duration_ms: 0,
-        avg_cost: 0,
-        common_patterns: [],
-        critical_path: [],
-      };
-      return toDocument(doc, mimeType);
-    }
 
-    const nodes = graphStore.getNodesByWorkflow(workflowId);
-    if (nodes.length === 0) {
-      const doc: WorkflowGraphDocument = {
-        version: SPEC_VERSION,
-        etag: "",
-        generated_at: new Date().toISOString(),
-        workflow_id: workflowId,
-        total_executions: 0,
-        success_rate: 0,
-        avg_duration_ms: 0,
-        avg_cost: 0,
-        common_patterns: [],
-        critical_path: [],
-      };
-      return toDocument(doc, mimeType);
-    }
+    const nodes = graphStore.getNodesByWorkflow ? graphStore.getNodesByWorkflow(workflowId) : [];
 
     // Group by session
     const sessions = new Map<string, ExecutionNode[]>();
@@ -264,20 +245,34 @@ export class ExtensionController {
       }
     }
 
-const doc: WorkflowGraphDocument = {
+    const total_executions = sessionCount;
+    const success_rate = sessionCount > 0 ? successCount / sessionCount : 0;
+    const avg_duration_ms = sessionCount > 0 ? Math.round(totalDuration / sessionCount) : 0;
+    const avg_cost = sessionCount > 0 ? totalCost / sessionCount : 0;
+    const common_patterns: WorkflowGraphDocument["common_patterns"] = [];
+    const critical_path: WorkflowGraphDocument["critical_path"] = [];
+
+    return {
       version: SPEC_VERSION,
-      etag: "",
+      etag: computeEtag({
+        version: SPEC_VERSION,
+        workflow_id: workflowId,
+        total_executions,
+        success_rate,
+        avg_duration_ms,
+        avg_cost,
+        common_patterns,
+        critical_path,
+      }),
       generated_at: new Date().toISOString(),
       workflow_id: workflowId,
-      total_executions: sessionCount,
-      success_rate: sessionCount > 0 ? successCount / sessionCount : 0,
-      avg_duration_ms: sessionCount > 0 ? Math.round(totalDuration / sessionCount) : 0,
-      avg_cost: sessionCount > 0 ? totalCost / sessionCount : 0,
-      common_patterns: [],
-      critical_path: [],
+      total_executions,
+      success_rate,
+      avg_duration_ms,
+      avg_cost,
+      common_patterns,
+      critical_path,
     };
-
-    return toDocument(doc, mimeType);
   }
 
   /**
@@ -289,73 +284,60 @@ const doc: WorkflowGraphDocument = {
   }
 
   /** Get graph insights for a session. */
-  graphInsightsResourceText(sessionId: string, mimeType = "application/yaml"): string {
+  graphInsightsResourceText(
+    sessionId: string,
+    mimeType = "application/yaml",
+    options: ResourceReadOptions = {},
+  ): string | NotModified {
+    const doc = this.buildGraphInsightsDocument(sessionId);
+    if (options.ifNoneMatch && options.ifNoneMatch === doc.etag) {
+      return { notModified: true, etag: doc.etag };
+    }
+    return toDocument(doc, mimeType);
+  }
+
+  private buildGraphInsightsDocument(sessionId: string): GraphInsightsDocument {
     // This would use GraphAnalyzer - for now return basic info
     const graphStore = this.memory as Store & {
       getNodesBySession?: (sessionId: string) => ExecutionNode[];
       getRootNodes?: (sessionId: string) => ExecutionNode[];
     };
-    
-    if (!graphStore.getNodesBySession || !graphStore.getRootNodes) {
-      const doc: GraphInsightsDocument = {
-        version: SPEC_VERSION,
-        etag: "",
-        generated_at: new Date().toISOString(),
-        session_id: sessionId,
-        workflow_id: "unknown",
-        total_nodes: 0,
-        total_duration_ms: 0,
-        total_cost: 0,
-        failed_nodes: 0,
-        max_fan_out: 0,
-        parallelizable_nodes: [],
-        critical_path: [],
-      };
-      return toDocument(doc, mimeType);
-    }
 
-    const nodes = graphStore.getNodesBySession(sessionId);
-    if (nodes.length === 0) {
-      const doc: GraphInsightsDocument = {
-        version: SPEC_VERSION,
-        etag: "",
-        generated_at: new Date().toISOString(),
-        session_id: sessionId,
-        workflow_id: "unknown",
-        total_nodes: 0,
-        total_duration_ms: 0,
-        total_cost: 0,
-        failed_nodes: 0,
-        max_fan_out: 0,
-        parallelizable_nodes: [],
-        critical_path: [],
-      };
-      return toDocument(doc, mimeType);
-    }
+    const nodes = graphStore.getNodesBySession && graphStore.getRootNodes ? graphStore.getNodesBySession(sessionId) : [];
 
-    // Basic insights
-    const totalDuration = nodes.reduce((sum, n) => sum + (n.durationMs ?? 0), 0);
-    const totalCost = nodes.reduce((sum, n) => sum + (n.cost?.amount ?? 0), 0);
-    const failedNodes = nodes.filter(n => n.status === "failed");
-    const maxFanOut = Math.max(...nodes.map(n => n.childrenIds.length));
-    const parallelizableNodes = nodes.filter(n => n.childrenIds.length > 1);
+    const workflow_id = nodes[0]?.workflowId ?? "unknown";
+    const total_duration_ms = nodes.reduce((sum, n) => sum + (n.durationMs ?? 0), 0);
+    const total_cost = nodes.reduce((sum, n) => sum + (n.cost?.amount ?? 0), 0);
+    const failed_nodes = nodes.filter(n => n.status === "failed").length;
+    const max_fan_out = nodes.length > 0 ? Math.max(...nodes.map(n => n.childrenIds.length)) : 0;
+    const parallelizable_nodes = nodes.filter(n => n.childrenIds.length > 1).map(n => n.toolName);
+    const critical_path = this.getCriticalPath(nodes).map(n => n.toolName);
 
-    const doc: GraphInsightsDocument = {
+    return {
       version: SPEC_VERSION,
-      etag: "",
+      etag: computeEtag({
+        version: SPEC_VERSION,
+        session_id: sessionId,
+        workflow_id,
+        total_nodes: nodes.length,
+        total_duration_ms,
+        total_cost,
+        failed_nodes,
+        max_fan_out,
+        parallelizable_nodes,
+        critical_path,
+      }),
       generated_at: new Date().toISOString(),
       session_id: sessionId,
-      workflow_id: nodes[0]?.workflowId ?? "unknown",
+      workflow_id,
       total_nodes: nodes.length,
-      total_duration_ms: totalDuration,
-      total_cost: totalCost,
-      failed_nodes: failedNodes.length,
-      max_fan_out: maxFanOut,
-      parallelizable_nodes: parallelizableNodes.map(n => n.toolName),
-      critical_path: this.getCriticalPath(nodes).map(n => n.toolName),
+      total_duration_ms,
+      total_cost,
+      failed_nodes,
+      max_fan_out,
+      parallelizable_nodes,
+      critical_path,
     };
-
-    return toDocument(doc, mimeType);
   }
 
   private getCriticalPath(nodes: ExecutionNode[]): ExecutionNode[] {
