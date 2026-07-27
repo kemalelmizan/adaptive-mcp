@@ -38,8 +38,9 @@ pnpm --filter @adaptivemcp/examples client
 | `@adaptivemcp/memory` | SQLite store (`node:sqlite`), reference `Store` impl | ✅ done |
 | `@adaptivemcp/telemetry` | Recorder + memory-backed store + queries | ✅ done |
 | `@adaptivemcp/evaluation` | Insight generation from observed stats | ✅ done |
-| `@adaptivemcp/extension` | Derives + writes `tools-metadata.yaml` view | ✅ done |
-| `@adaptivemcp/routing` | Model selection / budget optimization | ✅ done |
+| `@adaptivemcp/extension` | Derives + writes `tools-metadata.yaml` view; execution-graph/workflow-graph/graph-insights MCP resources | ✅ done |
+| `@adaptivemcp/graph-analysis` | `GraphAnalyzer` — critical path, bottlenecks, failure cascades, causal analysis, anti-patterns, forecasting | ✅ done |
+| `@adaptivemcp/routing` | Model selection / budget optimization; position-aware routing (critical path vs. leaf) | ✅ done |
 | `@adaptivemcp/orchestration` | Execution composition / retries | ✅ done |
 | `@adaptivemcp/approval` | Intent → plan → tool approval gate | ✅ done |
 | `@adaptivemcp/thin-client` | Client-side execution loop + middleware hooks | ✅ done |
@@ -386,4 +387,57 @@ full in `docs/doubts.md`.
   precedence strategy (host UI > suggestion > nothing) is implemented, but the
   dual-emit of static risk once #1649 lands is blocked on that upstream issue
   shipping — nothing to do here until #1649 moves out of Draft.
+
+## Phase 7: Distributed Execution Graph (complete)
+
+Treats every tool invocation as a node in a directed acyclic graph (DAG),
+turning telemetry into execution intelligence: critical path, bottlenecks,
+failure cascades, cost-per-workflow, causal root-cause analysis, anti-pattern
+detection, workflow forecasting, and MCP protocol support (paginated
+resource, subscribe/notify) for exposing the graph. (Absorbed from the
+now-retired `docs/EXECUTION_GRAPH_ROADMAP.md`, which tracked this work across
+its own phases 4-12 before being folded in here.)
+
+- `@adaptivemcp/spec`: `ExecutionNode` + graph analysis types; canonical
+  `ExecutionGraphResource` wire schema and `buildExecutionGraph` builder.
+- `@adaptivemcp/memory`: `execution_nodes` table with WAL mode, a versioned
+  migration framework, and TTL-based pruning (`pruneExecutionNodes`).
+- `@adaptivemcp/telemetry`: `startWorkflow`/`startChild`/`completeNode`/`failNode`
+  auto-link parent/child nodes.
+- `@adaptivemcp/graph-analysis` (new package): `GraphAnalyzer` — critical
+  path, bottlenecks, fan-out, failure cascades, cost breakdown, workflow
+  stats, causal cascade (root cause vs. symptom), anti-pattern detection
+  (sequential bottleneck, diamond dependency), workflow forecasting, pattern
+  and anomaly detection. `IncrementalGraphAnalyzer` caches reads for
+  long-running/repeatedly-polled workflows.
+- `@adaptivemcp/evaluation`: cross-session pattern learning
+  (`evaluateAllWorkflows` aggregates `commonPatterns` across a workflow's runs).
+- `@adaptivemcp/extension`: execution-graph/workflow-graph/graph-insights MCP
+  resources with real content-hash ETags, pagination, and Mermaid + GraphViz
+  DOT diagram export.
+- `@adaptivemcp/thin-client`: `GraphTrackingMiddleware` (`AsyncLocalStorage`-based,
+  concurrency-safe under parallel calls) auto-builds the graph and generates a
+  W3C `traceparent` per node.
+- `@adaptivemcp/routing`: `routeByPosition` — model selection based on a
+  node's critical-path/leaf position within one specific execution.
+- `examples`: four scenarios (`execution-graph`, `failure-cascade`,
+  `cost-optimization`, `debugging-deployment`) plus a real MCP client/server
+  demo of resource pagination and subscribe/notify over stdio.
+- `adaptivemcp.github.io` (sibling repo): an interactive execution-graph
+  explorer page (static Mermaid diagram + a D3-powered force-directed view).
+
+**Descoped honestly, not silently:** "connection pooling" doesn't apply to
+`node:sqlite`'s single-connection driver (WAL mode was implemented instead);
+causal-cascade analysis is ancestor-based ordering, not counterfactual
+replay; workflow forecasting is historical-baseline extrapolation, not a
+trained model (this codebase has no ML/statistics dependencies anywhere);
+anti-pattern detection covers two named shapes, not general subgraph
+isomorphism (NP-hard); distributed tracing generates valid W3C trace context
+as graph *data* since no live MCP transport exists in this codebase to carry
+headers on; multi-server graph "federation" means a shared schema + builder,
+not an implemented cross-server aggregation/discovery protocol.
+
+**Validated by:** the full test suite (146 tests across all packages), all
+four example scenarios, and a real stdio MCP client/server run exercising
+resource pagination and subscribe/notify end-to-end.
 
