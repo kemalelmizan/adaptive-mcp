@@ -294,6 +294,9 @@ importers:
 
   packages/routing:
     dependencies:
+      '@adaptivemcp/graph-analysis':
+        specifier: workspace:*
+        version: link:../graph-analysis
       '@adaptivemcp/memory':
         specifier: workspace:*
         version: link:../memory

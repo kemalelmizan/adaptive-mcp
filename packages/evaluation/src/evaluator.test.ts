@@ -1,7 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { MemoryStore } from "@adaptivemcp/memory";
 import { Evaluator } from "./evaluator.js";
-import type { ToolExecutionEvent } from "@adaptivemcp/spec";
+import type { ToolExecutionEvent, ExecutionNode } from "@adaptivemcp/spec";
+
+function node(overrides: Partial<ExecutionNode> & { id: string; sessionId: string; workflowId: string }): ExecutionNode {
+  return {
+    toolName: "deploy",
+    childrenIds: [],
+    timestamp: new Date().toISOString(),
+    status: "completed",
+    ...overrides,
+  };
+}
 
 function record(store: MemoryStore, toolName: string, failRate: number, calls: number): void {
   store.ensureTool(toolName, "srv");
@@ -65,5 +75,43 @@ describe("@adaptivemcp/evaluation", () => {
     evaluator.evaluateAll();
     const insights = store.getTool("deploy_service")?.insights ?? [];
     expect(insights.some((i) => i.key === "observed_failure_rate")).toBe(true);
+  });
+
+  describe("evaluateAllWorkflows (multi-session learning, Phase 10.4)", () => {
+    it("returns [] when graph tracking is not enabled", () => {
+      const ev = new Evaluator({ memory: { allTools: () => [], getTool: () => undefined } as never });
+      expect(ev.evaluateAllWorkflows()).toEqual([]);
+    });
+
+    it("evaluates every session of every workflow and learns the common cross-session pattern", () => {
+      // Three sessions of the same workflow, all running the identical single-tool
+      // sequence, so detectCommonPatterns' default minOccurrences (3) is met.
+      for (const [sessionId, durationMs] of [["s1", 100], ["s2", 200], ["s3", 300]] as const) {
+        store.recordExecutionNode(node({ id: `${sessionId}-root`, sessionId, workflowId: "wf1", durationMs }));
+      }
+
+      const insights = evaluator.evaluateAllWorkflows();
+
+      // Per-session insights (evaluateWorkflow ran for each of the 3 sessions).
+      const durationInsights = insights.filter((i) => i.key === "workflow_duration_ms");
+      expect(durationInsights).toHaveLength(3);
+
+      // Cross-session pattern insight, persisted once per workflow.
+      const patternInsight = insights.find((i) => i.key === "workflow_common_pattern");
+      expect(patternInsight).toBeDefined();
+      expect((patternInsight?.value as { pattern: string }).pattern).toBe("deploy");
+
+      const stored = store.getTool("wf1")?.insights ?? [];
+      expect(stored.some((i) => i.key === "workflow_common_pattern")).toBe(true);
+    });
+
+    it("does not learn a cross-session pattern below the occurrence threshold", () => {
+      // Only two sessions - below detectCommonPatterns' default minOccurrences of 3.
+      store.recordExecutionNode(node({ id: "s1-root", sessionId: "s1", workflowId: "wf1", durationMs: 100 }));
+      store.recordExecutionNode(node({ id: "s2-root", sessionId: "s2", workflowId: "wf1", durationMs: 200 }));
+
+      const insights = evaluator.evaluateAllWorkflows();
+      expect(insights.some((i) => i.key === "workflow_common_pattern")).toBe(false);
+    });
   });
 });

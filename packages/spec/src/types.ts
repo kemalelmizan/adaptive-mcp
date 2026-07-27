@@ -216,9 +216,34 @@ export interface FanOutReport {
   sequentialChains: ExecutionNode[][];
 }
 
+/**
+ * A recurring structural anti-pattern detected in a session's graph.
+ * Deliberately limited to two named shapes rather than general subgraph
+ * isomorphism (NP-hard, unnecessary for small execution DAGs).
+ */
+export interface AntiPattern {
+  type: "sequential_bottleneck" | "diamond_dependency";
+  nodes: ExecutionNode[];
+  severity: number;
+}
+
 export interface FailureCascade {
   rootCause: ExecutionNode;
   affectedNodes: ExecutionNode[];
+  blastRadius: number;
+}
+
+/**
+ * Ancestor-based causal ordering among the failed nodes of a session: a
+ * failed node with no failed ancestor is a root cause; a failed node
+ * downstream of a failed ancestor is a symptom of the nearest one. This is
+ * NOT counterfactual causal inference (which would require replaying
+ * execution without the trigger) — it's graph-ancestry ordering over the
+ * failures actually recorded.
+ */
+export interface CausalCascade {
+  rootCauses: ExecutionNode[];
+  symptoms: Array<{ node: ExecutionNode; causedBy: ExecutionNode }>;
   blastRadius: number;
 }
 
@@ -243,6 +268,22 @@ export interface WorkflowPattern {
   frequency: number;
   avgDurationMs: number;
   successRate: number;
+}
+
+/**
+ * A heuristic forecast for an in-progress workflow session, extrapolated
+ * from historical runs of the same workflow. NOT a trained/statistical
+ * model — a ratio-vs-baseline projection, in the same spirit as
+ * `detectAnomalies`'s duration/cost ratio checks.
+ */
+export interface WorkflowForecast {
+  workflowId: string;
+  /** Nodes seen so far / historical avg node count for this workflow, capped at 1. */
+  progressRatio: number;
+  projectedDurationMs: number;
+  projectedCost: number;
+  /** Blend of historical failure rate and this session's own failures observed so far. */
+  failureProbability: number;
 }
 
 /**
@@ -306,6 +347,8 @@ export interface Store {
   getNodesBySession?(sessionId: string): ExecutionNode[];
   /** Get all nodes for a workflow (across sessions). */
   getNodesByWorkflow?(workflowId: string): ExecutionNode[];
+  /** Get every distinct workflow ID that has at least one recorded execution node. */
+  getWorkflowIds?(): string[];
   /** Get children of a node. */
   getChildren?(parentId: string): ExecutionNode[];
   /** Get parent of a node. */

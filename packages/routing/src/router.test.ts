@@ -1,7 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { MemoryStore } from "@adaptivemcp/memory";
+import { GraphAnalyzer } from "@adaptivemcp/graph-analysis";
 import { Router } from "./router.js";
-import type { ToolExecutionEvent } from "@adaptivemcp/spec";
+import type { ToolExecutionEvent, ExecutionNode } from "@adaptivemcp/spec";
+
+function node(overrides: Partial<ExecutionNode> & { id: string }): ExecutionNode {
+  return {
+    toolName: "tool",
+    sessionId: "s1",
+    childrenIds: [],
+    timestamp: new Date().toISOString(),
+    status: "completed",
+    ...overrides,
+  };
+}
 
 function record(store: MemoryStore, toolName: string, opts: { calls: number; failRate: number; durationMs: number; cost: number }): void {
   store.ensureTool(toolName, "srv");
@@ -76,5 +88,31 @@ describe("@adaptivemcp/routing", () => {
     router.routeAll();
     expect(store.getTool("a")?.recommendations.some((r) => r.type === "model")).toBe(true);
     expect(store.getTool("b")?.recommendations.some((r) => r.type === "model")).toBe(true);
+  });
+
+  describe("routeByPosition (Phase 10.5)", () => {
+    it("gives the leaf the cheapest model and the critical-path node the lowest-latency model", () => {
+      // root -> branch (critical path, slow) ; root -> leaf (short, no children)
+      store.recordExecutionNode(node({ id: "root", toolName: "root_tool", durationMs: 10, childrenIds: ["branch", "leaf"] }));
+      store.recordExecutionNode(node({ id: "branch", toolName: "branch_tool", parentId: "root", durationMs: 5000, childrenIds: [] }));
+      store.recordExecutionNode(node({ id: "leaf", toolName: "leaf_tool", parentId: "root", durationMs: 10, childrenIds: [] }));
+
+      router = new Router({ memory: store });
+      const analyzer = new GraphAnalyzer(store);
+      const routings = router.routeByPosition("s1", analyzer);
+
+      const branchRouting = routings.find((r) => r.nodeId === "branch");
+      const leafRouting = routings.find((r) => r.nodeId === "leaf");
+      expect(branchRouting?.position).toBe("critical_path");
+      expect(branchRouting?.recommendedModel.id).toBe("gpt-5"); // lowest latencyWeight (0.6) among defaults
+      expect(leafRouting?.position).toBe("leaf");
+      expect(leafRouting?.recommendedModel.id).toBe("gpt-5-mini"); // lowest costWeight (1) among defaults
+    });
+
+    it("returns an empty array for a session with no recorded nodes", () => {
+      router = new Router({ memory: store });
+      const analyzer = new GraphAnalyzer(store);
+      expect(router.routeByPosition("nope", analyzer)).toEqual([]);
+    });
   });
 });

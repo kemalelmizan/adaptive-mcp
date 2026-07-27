@@ -1,4 +1,6 @@
 import type { Insight, Store, ToolRecord, ExecutionNode, ToolExecutionEvent } from "@adaptivemcp/spec";
+import { MemoryStore } from "@adaptivemcp/memory";
+import { GraphAnalyzer } from "@adaptivemcp/graph-analysis";
 
 export interface EvaluationOptions {
   memory: Store;
@@ -155,24 +157,64 @@ export class Evaluator {
     return insights;
   }
 
-  /** Evaluate all workflows that have graph data. */
+  /**
+   * Evaluate every workflow that has graph data: runs `evaluateWorkflow` for
+   * each session, then aggregates *across* sessions of the same workflow
+   * (the actual multi-session learning) by delegating to
+   * `GraphAnalyzer.getWorkflowStats`, which already computes `commonPatterns`
+   * across all of a workflow's sessions. This only activates when the store
+   * is a real `MemoryStore` (graph tracking + graph-analysis both require it).
+   */
   evaluateAllWorkflows(): Insight[] {
     const graphStore = this.memory as Store & {
-      getNodesBySession?: (sessionId: string) => ExecutionNode[];
+      getWorkflowIds?: () => string[];
+      getNodesByWorkflow?: (workflowId: string) => ExecutionNode[];
     };
-    
-    if (!graphStore.getNodesBySession) {
-      return [];
+
+    if (!graphStore.getWorkflowIds || !graphStore.getNodesByWorkflow) {
+      return []; // Graph tracking not enabled
     }
 
-    // Get all unique session IDs from execution nodes
-    // This is a simplified approach - in practice we'd want a more efficient query
-    const allTools = this.memory.allTools();
     const insights: Insight[] = [];
-    
-    // For now, we'll just evaluate tools that have workflow insights
-    // A more complete implementation would query the execution_nodes table directly
+    const workflowIds = graphStore.getWorkflowIds();
+
+    for (const workflowId of workflowIds) {
+      const nodes = graphStore.getNodesByWorkflow(workflowId);
+      const sessionIds = [...new Set(nodes.map((n) => n.sessionId))];
+      for (const sessionId of sessionIds) {
+        insights.push(...this.evaluateWorkflow(sessionId));
+      }
+      insights.push(...this.evaluateWorkflowPatterns(workflowId));
+    }
+
     return insights;
+  }
+
+  /**
+   * Cross-session pattern learning for a workflow: delegates to
+   * `GraphAnalyzer.getWorkflowStats`, which already aggregates
+   * `commonPatterns` across every session of the workflow, and persists the
+   * most frequent pattern as a workflow-level insight.
+   */
+  private evaluateWorkflowPatterns(workflowId: string): Insight[] {
+    if (!(this.memory instanceof MemoryStore)) return [];
+
+    const analyzer = new GraphAnalyzer(this.memory);
+    const stats = analyzer.getWorkflowStats(workflowId);
+    if (stats.commonPatterns.length === 0) return [];
+
+    const topPattern = stats.commonPatterns[0]!;
+    const insight: Insight = {
+      toolName: workflowId,
+      key: "workflow_common_pattern",
+      value: topPattern,
+      confidence: 0.7,
+      source: "evaluation",
+      observedAt: new Date().toISOString(),
+      sampleSize: stats.totalExecutions,
+    };
+    this.memory.addInsight(insight);
+    return [insight];
   }
 
   /** Detect repeated tool call sequences (repetition_detected insight) */

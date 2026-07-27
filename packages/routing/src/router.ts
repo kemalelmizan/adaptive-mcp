@@ -1,4 +1,15 @@
 import type { Store, ToolRecord } from "@adaptivemcp/spec";
+import type { GraphAnalyzer } from "@adaptivemcp/graph-analysis";
+
+export type WorkflowPosition = "critical_path" | "leaf" | "normal";
+
+export interface NodeRouting {
+  nodeId: string;
+  toolName: string;
+  position: WorkflowPosition;
+  recommendedModel: ModelOption;
+  rationale: string;
+}
 
 export interface ModelOption {
   id: string;
@@ -90,6 +101,45 @@ export class Router {
     if (budgetRec) {
       this.memory.addRecommendation(budgetRec);
     }
+  }
+
+  /**
+   * Route by a node's position in a *specific* execution's graph — critical
+   * path nodes get the lowest-latency model, leaves get the cheapest,
+   * everything else keeps the current default (cheapest available) model.
+   * This is deliberately a pure, computed-on-read result (like
+   * `GraphAnalyzer` itself), never persisted via `addRecommendation`:
+   * workflow position is per-session, but the `Recommendation` store is
+   * keyed per-tool, so persisting it would either need a schema change or
+   * produce misleading facts that don't generalize across the same tool's
+   * other sessions.
+   */
+  routeByPosition(sessionId: string, analyzer: GraphAnalyzer): NodeRouting[] {
+    const sessionNodes = this.memory.getNodesBySession?.(sessionId) ?? [];
+    if (sessionNodes.length === 0) return [];
+
+    const criticalPathIds = new Set(analyzer.getCriticalPath(sessionId).path.map((n) => n.id));
+    const cheapest = [...this.models].sort((a, b) => a.costWeight - b.costWeight)[0];
+    const lowestLatency = [...this.models].sort((a, b) => a.latencyWeight - b.latencyWeight)[0];
+
+    return sessionNodes.map((node) => {
+      const isLeaf = node.childrenIds.length === 0;
+      const position: WorkflowPosition = criticalPathIds.has(node.id) ? "critical_path" : isLeaf ? "leaf" : "normal";
+      const recommendedModel = (position === "critical_path" ? lowestLatency ?? cheapest : cheapest ?? lowestLatency) as ModelOption;
+      const rationale =
+        position === "critical_path"
+          ? `On the critical path for this run; lowest-latency model to avoid compounding the end-to-end delay.`
+          : position === "leaf"
+            ? `Leaf node for this run; cheapest model since it doesn't block downstream work.`
+            : `Not on the critical path or a leaf for this run; default model.`;
+      return {
+        nodeId: node.id,
+        toolName: node.toolName,
+        position,
+        recommendedModel,
+        rationale,
+      };
+    });
   }
 
   /** Choose the cheapest model whose latency weight is acceptable for the tool. */

@@ -148,6 +148,15 @@ describe("@adaptivemcp/memory", () => {
     expect(stats?.totalCost).toBeCloseTo(0.02);
   });
 
+  it("getWorkflowIds returns every distinct workflow id, excluding nulls", () => {
+    store.recordExecutionNode(makeNode({ id: "a", workflowId: "wf1" }));
+    store.recordExecutionNode(makeNode({ id: "b", workflowId: "wf1" }));
+    store.recordExecutionNode(makeNode({ id: "c", workflowId: "wf2" }));
+    store.recordExecutionNode(makeNode({ id: "d" })); // no workflowId
+
+    expect(store.getWorkflowIds().sort()).toEqual(["wf1", "wf2"]);
+  });
+
   describe("production hardening (Phase 9)", () => {
     let dir: string;
 

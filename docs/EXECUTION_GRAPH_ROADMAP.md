@@ -14,9 +14,9 @@ Transform telemetry from **request logging** into **execution intelligence** by 
 
 ---
 
-## Implementation Status: ✅ Phases 4-9 COMPLETE
+## Implementation Status: ✅ Phases 4-10 COMPLETE
 
-All foundation phases, plus Phase 9 (Production Hardening), have been implemented and validated with working scenarios and tests. Phases 10-12 (Advanced Intelligence, MCP Ecosystem Integration, Visualization) are not yet started — see below.
+All foundation phases, Phase 9 (Production Hardening), and Phase 10 (Advanced Graph Intelligence) have been implemented and validated with working scenarios and tests. Phases 11-12 (MCP Ecosystem Integration, Visualization) are not yet started — see below.
 
 ### What Was Built
 
@@ -26,7 +26,7 @@ All foundation phases, plus Phase 9 (Production Hardening), have been implemente
 | 4.2 | `@adaptivemcp/memory` | ✅ Done | New `execution_nodes` SQLite table with indexes. Methods: `recordExecutionNode`, `getExecutionNode`, `getNodesBySession`, `getNodesByWorkflow`, `getChildren`, `getParent`, `getRootNodes`, `getLeafNodes`, `updateChildrenIds`. |
 | 4.3 | `@adaptivemcp/telemetry` | ✅ Done | New `TelemetryRecorder` methods: `startWorkflow()`, `startChild(parentId)`, `completeNode()`, `failNode()` — auto-links parent/child. |
 | 5.1 | `@adaptivemcp/graph-analysis` | ✅ Done | **NEW** package with `GraphAnalyzer`: critical path, bottlenecks, fan-out, failure cascades, cost breakdown, workflow stats, pattern detection, anomaly detection. |
-| 5.2 | `@adaptivemcp/evaluation` | ✅ Done | Added `evaluateWorkflow(sessionId)` and `evaluateAllWorkflows()` — emits graph-level insights (`critical_path_duration_ms`, `bottleneck_tool`, `fan_out_factor`, `failure_blast_radius`, `cost_per_workflow`). |
+| 5.2 | `@adaptivemcp/evaluation` | ✅ Done | `evaluateWorkflow(sessionId)` emits per-session insights (`workflow_duration_ms`, `workflow_cost`, `workflow_failure_rate`, `critical_path_bottleneck`, `workflow_fan_out`). `evaluateAllWorkflows()` was a stub returning `[]` until Phase 10.4 — it now genuinely enumerates workflows and sessions and persists a cross-session `workflow_common_pattern` insight. (Corrected from an earlier version of this table, which listed insight keys — `critical_path_duration_ms`, `bottleneck_tool`, `fan_out_factor`, `failure_blast_radius`, `cost_per_workflow` — that never existed in the code.) |
 | 6.1 | `@adaptivemcp/extension` | ✅ Done | New MCP resources: `dev.adaptivemcp/execution-graph/{sessionId}`, `dev.adaptivemcp/workflow-graph/{workflowId}`, `dev.adaptivemcp/graph-insights/{sessionId}`, plus Mermaid diagram support. |
 | 7.1 | `@adaptivemcp/thin-client` | ✅ Done | New `GraphTrackingMiddleware` — auto-propagates `sessionId`/`parentId` via middleware chain hooks (`beforeCall`/`afterCall`/`onError`). |
 | 8.x | `examples` | ✅ Done | Three working scenarios: `execution-graph`, `failure-cascade`, `cost-optimization`. |
@@ -83,15 +83,17 @@ pnpm --filter @adaptivemcp/examples quickstart
 | 9.4 | `@adaptivemcp/thin-client` | Medium | ✅ `AsyncLocalStorage`-based context propagation in `GraphTrackingMiddleware`, fixing a confirmed concurrency bug where parallel tool calls corrupted a shared parent/child stack. Required wrapping each call's full lifecycle in `runInContext` in `ThinClient.run()` — `enterWith` alone doesn't isolate calls kicked off back-to-back (e.g. via `Promise.all`). |
 | 9.5 | `@adaptivemcp/memory` | Medium | ✅ `pruneExecutionNodes` + configurable `retention` option for TTL-based cleanup, backed by a new timestamp index. |
 
-### Phase 10: Advanced Graph Intelligence (Priority: MEDIUM)
+### Phase 10: Advanced Graph Intelligence — ✅ Done
+
+This codebase has zero ML/statistics dependencies anywhere in the workspace — everything is hand-rolled heuristic TypeScript. Two items below (10.1, 10.2) were descoped from their literal wording (counterfactual replay, trained forecasting) to honest heuristics in that same style, rather than pretending to build infrastructure that doesn't exist.
 
 | Task | Package | Effort | Description |
 |------|---------|--------|-------------|
-| 10.1 | `@adaptivemcp/graph-analysis` | High | **Causal inference**: Detect root causes vs symptoms in failure cascades using counterfactual reasoning |
-| 10.2 | `@adaptivemcp/graph-analysis` | High | **Predictive modeling**: Forecast workflow duration/cost/failure probability from partial graph |
-| 10.3 | `@adaptivemcp/graph-analysis` | Medium | **Subgraph isomorphism**: Detect recurring anti-patterns (e.g., "diamond dependency", "sequential bottleneck") |
-| 10.4 | `@adaptivemcp/evaluation` | Medium | **Multi-session learning**: Aggregate patterns across workflow runs to improve recommendations |
-| 10.5 | `@adaptivemcp/routing` | Medium | **Graph-aware routing**: Route based on workflow position (e.g., cheaper model for leaf nodes, premium for critical path) |
+| 10.1 | `@adaptivemcp/graph-analysis` | High | ✅ `getCausalCascade(sessionId)` — ancestor-based causal ordering (a failed node with no failed ancestor is a root cause; one downstream of a failure is a symptom of the nearest one), not counterfactual replay (infeasible from static logs alone). Kept alongside the existing `getFailureCascade`. |
+| 10.2 | `@adaptivemcp/graph-analysis` | High | ✅ `getWorkflowForecast(sessionId, workflowId)` — historical-baseline extrapolation (progress-proportional duration/cost projection, failure probability blended from historical rate + this session's failures so far), in the same ratio-vs-mean style as `detectAnomalies`. Not a trained model. |
+| 10.3 | `@adaptivemcp/graph-analysis` | Medium | ✅ `detectAntiPatterns(sessionId)` — exactly two named detectors (`sequential_bottleneck` reusing `getFanOutAnalysis`'s `sequentialChains`, `diamond_dependency` via depth-capped BFS reconvergence), not general subgraph isomorphism (NP-hard, unnecessary for small execution DAGs). |
+| 10.4 | `@adaptivemcp/evaluation` | Medium | ✅ `evaluateAllWorkflows()` now genuinely enumerates workflows (`MemoryStore.getWorkflowIds()`, new) and their sessions, then delegates to `GraphAnalyzer.getWorkflowStats` for the actual cross-session learning — persisted as a `workflow_common_pattern` insight. Also fixed a real bug in `detectCommonPatterns` that always attributed duration/success to the first session regardless of pattern. |
+| 10.5 | `@adaptivemcp/routing` | Medium | ✅ `Router.routeByPosition(sessionId, analyzer)` — pure, non-persisting (workflow position is per-session; `Recommendation` storage is per-tool, so persisting would misrepresent facts that don't generalize across sessions). Critical-path nodes get the lowest-latency model, leaves get the cheapest. |
 
 ### Phase 11: MCP Ecosystem Integration (Priority: MEDIUM)
 

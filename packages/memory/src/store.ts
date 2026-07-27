@@ -365,6 +365,14 @@ export class MemoryStore implements Store {
     return rows.map(deserializeExecutionNode);
   }
 
+  /** Get every distinct workflow ID that has at least one recorded execution node. */
+  getWorkflowIds(): string[] {
+    const rows = this.db
+      .prepare(`SELECT DISTINCT workflow_id FROM execution_nodes WHERE workflow_id IS NOT NULL`)
+      .all() as unknown as { workflow_id: string }[];
+    return rows.map((r) => r.workflow_id);
+  }
+
   /** Get children of a node. */
   getChildren(parentId: string): ExecutionNode[] {
     const parent = this.getExecutionNode(parentId);

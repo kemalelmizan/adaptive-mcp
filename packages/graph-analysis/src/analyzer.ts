@@ -1,5 +1,5 @@
 import type { MemoryStore } from "@adaptivemcp/memory";
-import type { ExecutionNode, CriticalPathResult, Bottleneck, FanOutReport, FailureCascade, CostBreakdown, WorkflowStats, WorkflowPattern } from "@adaptivemcp/spec";
+import type { ExecutionNode, CriticalPathResult, Bottleneck, FanOutReport, FailureCascade, CausalCascade, AntiPattern, CostBreakdown, WorkflowStats, WorkflowPattern, WorkflowForecast } from "@adaptivemcp/spec";
 
 /**
  * Analyzes execution graphs to derive insights about workflow performance,
@@ -190,6 +190,76 @@ export class GraphAnalyzer {
   }
 
   /**
+   * Detect two named structural anti-patterns — not general subgraph
+   * isomorphism (NP-hard, unnecessary for these small execution DAGs):
+   *
+   *  - `sequential_bottleneck`: a sequential chain (from `getFanOutAnalysis`)
+   *    whose own duration dominates the session's critical path.
+   *  - `diamond_dependency`: a node with >=2 children whose descendant paths
+   *    reconverge at a common node.
+   */
+  detectAntiPatterns(sessionId: string): AntiPattern[] {
+    const nodes = this.fetchSessionNodes(sessionId);
+    const patterns: AntiPattern[] = [];
+
+    const { sequentialChains } = this.getFanOutAnalysis(sessionId);
+    const { totalDurationMs: criticalPathMs } = this.getCriticalPath(sessionId);
+    for (const chain of sequentialChains) {
+      const chainDurationMs = chain.reduce((sum, n) => sum + (n.durationMs ?? 0), 0);
+      const ratio = criticalPathMs > 0 ? chainDurationMs / criticalPathMs : 0;
+      if (ratio > 0.5) {
+        patterns.push({ type: "sequential_bottleneck", nodes: chain, severity: ratio });
+      }
+    }
+
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    for (const apex of nodes) {
+      if (apex.childrenIds.length < 2) continue;
+      const join = this.findDiamondJoin(apex, nodeMap);
+      if (join) {
+        patterns.push({ type: "diamond_dependency", nodes: [apex, join], severity: apex.childrenIds.length });
+      }
+    }
+
+    return patterns;
+  }
+
+  /**
+   * BFS from each of `apex`'s children (depth-capped, these are small DAGs)
+   * looking for the first node reachable from >=2 distinct children — the
+   * point where the fan-out reconverges.
+   */
+  private findDiamondJoin(apex: ExecutionNode, nodeMap: Map<string, ExecutionNode>): ExecutionNode | undefined {
+    const MAX_DEPTH = 20;
+    const reachedByBranch = new Map<string, Set<number>>();
+
+    apex.childrenIds.forEach((startId, branchIndex) => {
+      const queue: Array<{ id: string; depth: number }> = [{ id: startId, depth: 0 }];
+      const visited = new Set<string>();
+      while (queue.length > 0) {
+        const { id, depth } = queue.shift()!;
+        if (visited.has(id) || depth > MAX_DEPTH) continue;
+        visited.add(id);
+
+        const branches = reachedByBranch.get(id) ?? new Set<number>();
+        branches.add(branchIndex);
+        reachedByBranch.set(id, branches);
+
+        const node = nodeMap.get(id);
+        if (!node) continue;
+        for (const childId of node.childrenIds) {
+          queue.push({ id: childId, depth: depth + 1 });
+        }
+      }
+    });
+
+    for (const [nodeId, branches] of reachedByBranch) {
+      if (branches.size >= 2) return nodeMap.get(nodeId);
+    }
+    return undefined;
+  }
+
+  /**
    * Analyze failure cascades - how failures propagate through the graph.
    */
   getFailureCascade(sessionId: string): FailureCascade[] {
@@ -208,6 +278,45 @@ export class GraphAnalyzer {
     }
 
     return cascades.sort((a, b) => b.blastRadius - a.blastRadius);
+  }
+
+  /**
+   * Ancestor-based causal ordering among a session's failed nodes: a failed
+   * node is a root cause if none of its ancestors also failed; otherwise it's
+   * a symptom of its nearest failed ancestor. `getFailureCascade` treats
+   * every failed node as an independent root cause — this distinguishes
+   * triggers from downstream fallout within one cascade.
+   */
+  getCausalCascade(sessionId: string): CausalCascade {
+    const nodes = this.fetchSessionNodes(sessionId);
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const failedNodes = nodes.filter(n => n.status === "failed");
+    const failedIds = new Set(failedNodes.map(n => n.id));
+
+    const rootCauses: ExecutionNode[] = [];
+    const symptoms: Array<{ node: ExecutionNode; causedBy: ExecutionNode }> = [];
+
+    for (const failed of failedNodes) {
+      let ancestorId = failed.parentId;
+      let nearestFailedAncestor: ExecutionNode | undefined;
+      while (ancestorId) {
+        if (failedIds.has(ancestorId)) {
+          nearestFailedAncestor = nodeMap.get(ancestorId);
+          break;
+        }
+        ancestorId = nodeMap.get(ancestorId)?.parentId;
+      }
+
+      if (nearestFailedAncestor) {
+        symptoms.push({ node: failed, causedBy: nearestFailedAncestor });
+      } else {
+        rootCauses.push(failed);
+      }
+    }
+
+    const blastRadius = rootCauses.reduce((sum, rc) => sum + this.getDescendants(rc.id, nodes).length, 0);
+
+    return { rootCauses, symptoms, blastRadius };
   }
 
   /**
@@ -288,6 +397,58 @@ export class GraphAnalyzer {
   }
 
   /**
+   * Heuristic forecast for an in-progress session, extrapolated from
+   * historical runs of the same workflow — not a trained model, just a
+   * ratio-vs-baseline projection (same spirit as `detectAnomalies`).
+   */
+  getWorkflowForecast(sessionId: string, workflowId: string): WorkflowForecast {
+    const sessionNodes = this.fetchSessionNodes(sessionId);
+    const workflowNodes = this.fetchWorkflowNodes(workflowId);
+
+    // Historical baseline excludes the in-progress session itself, so it
+    // doesn't skew its own forecast.
+    const historicalSessions = new Map<string, ExecutionNode[]>();
+    for (const n of workflowNodes) {
+      if (n.sessionId === sessionId) continue;
+      const arr = historicalSessions.get(n.sessionId) ?? [];
+      arr.push(n);
+      historicalSessions.set(n.sessionId, arr);
+    }
+    const historicalRuns = [...historicalSessions.values()];
+    const avgNodeCount =
+      historicalRuns.length > 0 ? historicalRuns.reduce((sum, run) => sum + run.length, 0) / historicalRuns.length : 0;
+    const avgDurationMs =
+      historicalRuns.length > 0
+        ? historicalRuns.reduce((sum, run) => sum + (run.find(n => !n.parentId)?.durationMs ?? 0), 0) / historicalRuns.length
+        : 0;
+    const avgCost =
+      historicalRuns.length > 0
+        ? historicalRuns.reduce((sum, run) => sum + run.reduce((s, n) => s + (n.cost?.amount ?? 0), 0), 0) / historicalRuns.length
+        : 0;
+    const historicalFailureRate =
+      historicalRuns.length > 0
+        ? historicalRuns.filter(run => run.some(n => n.status === "failed")).length / historicalRuns.length
+        : 0;
+
+    const progressRatio = avgNodeCount > 0 ? Math.min(1, sessionNodes.length / avgNodeCount) : sessionNodes.length > 0 ? 1 : 0;
+    const elapsedDurationMs = sessionNodes.reduce((sum, n) => sum + (n.durationMs ?? 0), 0);
+    const elapsedCost = sessionNodes.reduce((sum, n) => sum + (n.cost?.amount ?? 0), 0);
+
+    // Extrapolate proportionally to progress; once there's no historical
+    // baseline or the session already covers it, fall back to what's observed.
+    const projectedDurationMs =
+      progressRatio > 0 && progressRatio < 1 ? elapsedDurationMs / progressRatio : Math.max(elapsedDurationMs, avgDurationMs);
+    const projectedCost = progressRatio > 0 && progressRatio < 1 ? elapsedCost / progressRatio : Math.max(elapsedCost, avgCost);
+
+    const failedSoFar = sessionNodes.filter(n => n.status === "failed").length;
+    const observedFailureRatio = sessionNodes.length > 0 ? failedSoFar / sessionNodes.length : 0;
+    // A failure already observed in this session makes the outcome certain.
+    const failureProbability = failedSoFar > 0 ? 1 : (historicalFailureRate + observedFailureRatio) / 2;
+
+    return { workflowId, progressRatio, projectedDurationMs, projectedCost, failureProbability };
+  }
+
+  /**
    * Detect common workflow patterns.
    */
   detectCommonPatterns(workflowId: string, minOccurrences = 3): WorkflowPattern[] {
@@ -300,25 +461,25 @@ export class GraphAnalyzer {
       sessions.set(node.sessionId, sessionNodes);
     }
 
-    // Extract tool sequences for each session
-    const sequences: string[][] = [];
+    // Extract a tool sequence per session, keeping each sequence paired with
+    // the session's own nodes (needed below to attribute duration/success to
+    // the *right* session per pattern, not always the first one seen).
+    const sequences: Array<{ sequence: string[]; sessionNodes: ExecutionNode[] }> = [];
     for (const [, sessionNodes] of sessions) {
       const root = sessionNodes.find(n => !n.parentId);
       if (root) {
         const sequence = this.getToolSequence(root, sessionNodes);
-        sequences.push(sequence);
+        sequences.push({ sequence, sessionNodes });
       }
     }
 
     // Count pattern frequencies
     const patternCounts = new Map<string, { count: number; durations: number[]; successes: number }>();
-    
-    for (const sequence of sequences) {
+
+    for (const { sequence, sessionNodes } of sequences) {
       const key = sequence.join(" -> ");
       const existing = patternCounts.get(key) ?? { count: 0, durations: [], successes: 0 };
       existing.count++;
-      // Find root duration for this session
-      const sessionNodes = sessions.get(nodes.find(n => n.sessionId === sessions.keys().next().value)?.sessionId ?? "") ?? [];
       const root = sessionNodes.find(n => !n.parentId);
       if (root?.durationMs) existing.durations.push(root.durationMs);
       const hasFailure = sessionNodes.some(n => n.status === "failed");
