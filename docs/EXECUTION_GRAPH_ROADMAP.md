@@ -14,9 +14,9 @@ Transform telemetry from **request logging** into **execution intelligence** by 
 
 ---
 
-## Implementation Status: ✅ Phases 4-10 COMPLETE
+## Implementation Status: ✅ Phases 4-11 COMPLETE
 
-All foundation phases, Phase 9 (Production Hardening), and Phase 10 (Advanced Graph Intelligence) have been implemented and validated with working scenarios and tests. Phases 11-12 (MCP Ecosystem Integration, Visualization) are not yet started — see below.
+All foundation phases, Phase 9 (Production Hardening), Phase 10 (Advanced Graph Intelligence), and Phase 11 (MCP Ecosystem Integration) have been implemented and validated with working scenarios and tests, including a real end-to-end MCP client/server run (pagination, subscribe/notify). Phase 12 (Visualization & UX) is not yet started — see below.
 
 ### What Was Built
 
@@ -95,14 +95,16 @@ This codebase has zero ML/statistics dependencies anywhere in the workspace — 
 | 10.4 | `@adaptivemcp/evaluation` | Medium | ✅ `evaluateAllWorkflows()` now genuinely enumerates workflows (`MemoryStore.getWorkflowIds()`, new) and their sessions, then delegates to `GraphAnalyzer.getWorkflowStats` for the actual cross-session learning — persisted as a `workflow_common_pattern` insight. Also fixed a real bug in `detectCommonPatterns` that always attributed duration/success to the first session regardless of pattern. |
 | 10.5 | `@adaptivemcp/routing` | Medium | ✅ `Router.routeByPosition(sessionId, analyzer)` — pure, non-persisting (workflow position is per-session; `Recommendation` storage is per-tool, so persisting would misrepresent facts that don't generalize across sessions). Critical-path nodes get the lowest-latency model, leaves get the cheapest. |
 
-### Phase 11: MCP Ecosystem Integration (Priority: MEDIUM)
+### Phase 11: MCP Ecosystem Integration — ✅ Done
+
+This is the first phase requiring the MCP *protocol* itself (resources, pagination, subscribe/notify), not just library-level graph algorithms. `packages/mcp-binary` was ruled out as the integration point (explicitly documented as "the only sanctioned shell-out layer," a single-purpose CLI wrapper); `examples/src/server.ts`, which already registered the `tools-metadata` resource, was the correct existing extension point. Per `packages/spec/src/extensions.ts`'s own conservative stance (only `tools-metadata`/SEP-2133 is a formally proposed extension), the execution-graph resource here follows the same registration pattern but stays a demonstration in `examples/`, not a new formal SEP.
 
 | Task | Package | Effort | Description |
 |------|---------|--------|-------------|
-| 11.1 | `@adaptivemcp/extension` | Medium | Implement `dev.adaptivemcp/execution-graph` as a **readable MCP resource** with pagination/cursors |
-| 11.2 | `@adaptivemcp/extension` | Medium | Add **subscription/notification** for graph updates (SSE or MCP notifications) |
-| 11.3 | `@adaptivemcp/spec` | Low | Define standard `ExecutionGraph` schema for cross-server graph federation |
-| 11.4 | `@adaptivemcp/thin-client` | Medium | **Distributed tracing headers**: Propagate `traceparent`/`tracestate` (W3C TraceContext) across MCP servers |
+| 11.1 | `@adaptivemcp/extension` | Medium | ✅ `dev.adaptivemcp://execution-graph/{sessionId}` registered as an MCP `ResourceTemplate` in `examples/src/server.ts`, paginated over `nodes` via hand-rolled `cursor`/`pageSize` (the SDK has no built-in pagination for a single resource read — `resources/list`'s `cursor`/`nextCursor` schema exists but even `McpServer`'s default list handler ignores it). Edges are always returned in full regardless of the current page. |
+| 11.2 | `@adaptivemcp/extension` | Medium | ✅ `resources/subscribe`/`unsubscribe` + `notifications/resources/updated`, wired via the low-level `Server` `McpServer` exposes (`server.server`) since `McpServer` itself has no subscribe/notify convenience methods. Verified end-to-end with a real client/server run over stdio. |
+| 11.3 | `@adaptivemcp/spec` | Low | ✅ New `ExecutionGraphResource`/`buildExecutionGraph` (`packages/spec/src/execution-graph.ts`) replaces the dead Map-based `ExecutionGraph` type (zero consumers, not JSON-serializable). "Federation" means a shared, importable schema + builder other servers' code can construct against — not an implemented multi-server aggregation/discovery protocol, which would need infrastructure that doesn't exist here. |
+| 11.4 | `@adaptivemcp/thin-client` | Medium | ✅ Descoped from literal header propagation — no live MCP client/HTTP transport exists anywhere in this codebase to carry headers on. Instead, `GraphTrackingMiddleware` generates a valid W3C `traceparent` (deterministically derived from existing `ExecutionNode` UUIDs) recorded on `metadata.traceparent`/`traceId`/`spanId`/`parentSpanId`, surfaced through the execution-graph resource (`trace_parent` per node) — a data-plane correlation primitive ready for a future real transport to attach as a header. |
 
 ### Phase 12: Visualization & UX (Priority: LOW)
 
@@ -130,10 +132,11 @@ This codebase has zero ML/statistics dependencies anywhere in the workspace — 
 - [x] `failure_blast_radius` insight triggers approval recommendation
 - [x] Cost per workflow aggregated correctly across 100+ simulated runs
 - [x] Thin-client middleware automatically builds graph without manual instrumentation
-- [x] MCP client can fetch `dev.adaptivemcp/execution-graph/{sessionId}` resource
+- [x] MCP client can fetch `dev.adaptivemcp://execution-graph/{sessionId}` resource, paginated, over a real stdio client/server connection
+- [x] MCP client can subscribe and receive `notifications/resources/updated` for a session's execution graph
 - [x] WAL mode for file-backed stores (connection pooling n/a — `node:sqlite` is a single-connection driver)
 - [ ] Incremental graph analysis validated at 10,000+ node workflow scale (cache added in 9.2; not load-tested at this scale)
-- [ ] Cross-server trace propagation with W3C TraceContext (Phase 11.4, not started)
+- [x] Valid W3C `traceparent` recorded per node and surfaced through the execution-graph resource (Phase 11.4) — descoped from literal cross-server header propagation, since no live MCP transport exists in this codebase to carry headers on
 
 ---
 

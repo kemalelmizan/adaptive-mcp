@@ -1,6 +1,6 @@
 import yaml from "js-yaml";
 import { createHash } from "node:crypto";
-import type { ToolRecord } from "@adaptivemcp/spec";
+import type { ToolRecord, ExecutionGraphResource } from "@adaptivemcp/spec";
 
 /**
  * A single tool entry in the derived YAML tools-metadata view.
@@ -114,26 +114,13 @@ export interface ToolsMetadataDocument {
   };
 }
 
-/** Execution graph document for a single session. */
-export interface ExecutionGraphDocument {
-  version: string;
-  etag: string;
-  generated_at: string;
-  session_id: string;
-  workflow_id?: string;
-  nodes: Array<{
-    id: string;
-    tool: string;
-    server?: string;
-    parent?: string;
-    children: string[];
-    timestamp: string;
-    duration_ms?: number;
-    status: string;
-    cost?: number;
-  }>;
-  edges: Array<{ from: string; to: string }>;
-}
+/**
+ * Execution graph document for a single session. This is exactly
+ * `@adaptivemcp/spec`'s canonical `ExecutionGraphResource` wire schema — kept
+ * as a local alias so existing imports of `ExecutionGraphDocument` from this
+ * package don't need to change call sites.
+ */
+export type ExecutionGraphDocument = ExecutionGraphResource;
 
 /** Workflow graph document (aggregated across sessions). */
 export interface WorkflowGraphDocument {

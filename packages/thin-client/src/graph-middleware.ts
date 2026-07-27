@@ -28,6 +28,36 @@ interface GraphContext {
 
 const EMPTY_CONTEXT: GraphContext = { stack: [] };
 
+/** 32 lowercase hex chars from a UUID (its dashes stripped) — a valid W3C trace-id. */
+function hex32(uuid: string): string {
+  const hex = uuid.replace(/-/g, "");
+  return /^0+$/.test(hex) ? hex32(crypto.randomUUID()) : hex; // W3C: all-zero trace-id is invalid
+}
+
+/** First 16 lowercase hex chars from a UUID (its dashes stripped) — a valid W3C span-id. */
+function hex16(uuid: string): string {
+  const hex = hex32(uuid).slice(0, 16);
+  return /^0+$/.test(hex) ? hex16(crypto.randomUUID()) : hex; // W3C: all-zero span-id is invalid
+}
+
+/**
+ * Formats a W3C `traceparent` header value (https://www.w3.org/TR/trace-context/):
+ * `{version}-{trace-id}-{parent-id}-{flags}`. There's no live network transport
+ * in this codebase to carry this over the wire yet (see `runInContext`'s
+ * docstring) — this generates and threads valid trace context through the
+ * *recorded graph* instead, deterministically derived from the UUIDs
+ * `ExecutionNode.id`s already use, so any future real transport has
+ * ready-to-attach values instead of needing a separate ID scheme.
+ *
+ * Takes already-computed `traceId`/`spanId` hex strings (rather than raw
+ * UUIDs) so a caller that also records them separately in `metadata` can't
+ * end up with a `traceparent` string that disagrees with those fields on the
+ * rare occasion `hex32`/`hex16` regenerate for an all-zero collision.
+ */
+function formatTraceParent(traceId: string, spanId: string): string {
+  return `00-${traceId}-${spanId}-01`;
+}
+
 /**
  * Middleware that automatically tracks execution graph context.
  *
@@ -37,7 +67,10 @@ const EMPTY_CONTEXT: GraphContext = { stack: [] };
  *    call chains started via `Promise.all` don't corrupt each other's
  *    parent/child linkage the way a single shared stack would.
  * 3. Emits startChild/completeNode/failNode automatically
- * 4. Propagates context via MCP requestId / custom headers
+ * 4. Generates a W3C `traceparent` per node (see `getTraceParent`), recorded
+ *    on `ExecutionNode.metadata` — there's no live MCP transport in this
+ *    codebase to carry it over the wire yet, so this is a data-plane
+ *    correlation primitive a future real transport can attach as a header.
  */
 export class GraphTrackingMiddleware implements Middleware {
   name = "graph-tracking";
@@ -101,10 +134,23 @@ export class GraphTrackingMiddleware implements Middleware {
     return this.getContext().stack.length;
   }
 
+  /**
+   * The W3C `traceparent` for the currently active node in this async call
+   * chain, or `undefined` outside of a tracked call. See `formatTraceParent`.
+   */
+  getTraceParent(): string | undefined {
+    const rootNodeId = this.getRootNodeId();
+    const currentNodeId = this.getParentId();
+    return rootNodeId && currentNodeId ? formatTraceParent(hex32(rootNodeId), hex16(currentNodeId)) : undefined;
+  }
+
   /** Start a new workflow root node. */
   async startWorkflow(toolName: string, serverName?: string, model?: string): Promise<string> {
+    const id = crypto.randomUUID();
+    const traceId = hex32(id);
+    const spanId = hex16(id);
     const node: ExecutionNode = {
-      id: crypto.randomUUID(),
+      id,
       toolName,
       serverName,
       sessionId: this.sessionId,
@@ -113,9 +159,9 @@ export class GraphTrackingMiddleware implements Middleware {
       childrenIds: [],
       timestamp: new Date().toISOString(),
       status: "started",
-      metadata: {},
+      metadata: { traceId, spanId, traceparent: formatTraceParent(traceId, spanId) },
     };
-    
+
     this.store.recordExecutionNode(node);
     this.als.enterWith({ stack: [node.id], rootNodeId: node.id });
     return node.id;
@@ -127,8 +173,12 @@ export class GraphTrackingMiddleware implements Middleware {
     if (!parentId) {
       throw new Error("No parent node - call startWorkflow first or ensure middleware is in the chain");
     }
+    const rootNodeId = this.getRootNodeId() ?? parentId;
+    const id = crypto.randomUUID();
+    const traceId = hex32(rootNodeId);
+    const spanId = hex16(id);
     const node: ExecutionNode = {
-      id: crypto.randomUUID(),
+      id,
       toolName,
       serverName,
       sessionId: this.sessionId,
@@ -137,9 +187,14 @@ export class GraphTrackingMiddleware implements Middleware {
       childrenIds: [],
       timestamp: new Date().toISOString(),
       status: "started",
-      metadata: {},
+      metadata: {
+        traceId,
+        spanId,
+        parentSpanId: hex16(parentId),
+        traceparent: formatTraceParent(traceId, spanId),
+      },
     };
-    
+
     this.store.recordExecutionNode(node);
 
     // Update parent's children

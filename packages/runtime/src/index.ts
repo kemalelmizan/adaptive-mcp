@@ -24,6 +24,16 @@ export interface AdaptiveRuntimeOptions {
   yamlPath?: string;
   /** Middleware registered up-front (D2: explicit `use()`). */
   middleware?: Middleware[];
+  /**
+   * Enable execution graph tracking (`startWorkflow`/`startChild`/`completeNode`/`failNode`).
+   * Only takes effect when the backing store is a `MemoryStore` — graph
+   * persistence needs its concrete `execution_nodes` table, which arbitrary
+   * `Store` implementations aren't required to provide. Without `enableGraph:
+   * true` (or with a non-`MemoryStore` backing store), `startWorkflow`/
+   * `startChild` throw (per `TelemetryRecorder`'s existing behavior) —
+   * `completeNode`/`failNode` are no-ops instead.
+   */
+  enableGraph?: boolean;
 }
 
 /**
@@ -51,8 +61,10 @@ export class AdaptiveRuntime {
 
   constructor(options: AdaptiveRuntimeOptions = {}) {
     this.memory = options.store ?? new MemoryStore({ path: options.dbPath ?? ":memory:" });
+    const graphMemory = options.enableGraph && this.memory instanceof MemoryStore ? this.memory : undefined;
     this.telemetry = new TelemetryRecorder({
       store: new MemoryBackedTelemetryStore(this.memory),
+      memory: graphMemory,
     });
     this.evaluator = new Evaluator({ memory: this.memory });
     this.extension = new ExtensionController({
@@ -110,6 +122,54 @@ export class AdaptiveRuntime {
     // Surface middleware contributions (D3: YAML `middleware` map).
     this.extension.setMiddlewareView(this.middleware.contributeView());
     this.extension.sync();
+  }
+
+  /** Start a new workflow root node (requires `enableGraph: true` with a `MemoryStore`; else a no-op node id). */
+  startWorkflow(ctx: {
+    toolName: string;
+    serverName?: string;
+    workflowId?: string;
+    model?: string;
+    /** Reuse an existing session instead of generating a fresh one (adds another root node to it). */
+    sessionId?: string;
+  }): {
+    nodeId: string;
+    sessionId: string;
+  } {
+    const node = this.telemetry.startWorkflow({
+      toolName: ctx.toolName,
+      serverName: ctx.serverName,
+      workflowId: ctx.workflowId,
+      model: ctx.model,
+      sessionId: ctx.sessionId,
+    });
+    return { nodeId: node.id, sessionId: node.sessionId };
+  }
+
+  /** Start a child node in the workflow graph. */
+  startChild(ctx: { toolName: string; serverName?: string; model?: string }, parentId: string): { nodeId: string } {
+    const node = this.telemetry.startChild(
+      { toolName: ctx.toolName, serverName: ctx.serverName, model: ctx.model },
+      parentId,
+    );
+    return { nodeId: node.id };
+  }
+
+  /** Complete a node in the workflow graph. */
+  completeNode(
+    nodeId: string,
+    result: { durationMs: number; output?: unknown; cost?: { amount: number; currency?: string } },
+  ): void {
+    this.telemetry.completeNode(nodeId, {
+      durationMs: result.durationMs,
+      output: result.output,
+      cost: result.cost ? { amount: result.cost.amount, currency: result.cost.currency } : undefined,
+    });
+  }
+
+  /** Fail a node in the workflow graph. */
+  failNode(nodeId: string, error: { message: string; code?: string }): void {
+    this.telemetry.failNode(nodeId, error);
   }
 
   /** Enforcement hook: decide whether a planned tool call may proceed. */

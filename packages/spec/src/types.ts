@@ -183,19 +183,6 @@ export interface ExecutionNode {
 }
 
 /**
- * An execution graph (DAG) representing a complete workflow.
- */
-export interface ExecutionGraph {
-  workflowId: string;
-  sessionId: string;
-  rootNodeId: string;
-  nodes: Map<string, ExecutionNode>;
-  createdAt: string;
-  completedAt?: string;
-  status: "running" | "completed" | "failed" | "partial";
-}
-
-/**
  * Graph analysis results.
  */
 export interface CriticalPathResult {

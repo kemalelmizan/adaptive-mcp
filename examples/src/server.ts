@@ -1,5 +1,6 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SubscribeRequestSchema, UnsubscribeRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 import { TOOLS_METADATA_RESOURCE_URI, riskToToolAnnotations, type RiskLevel } from "@adaptivemcp/spec";
@@ -22,14 +23,43 @@ function withRisk(
  * lightweight; all adaptive behavior lives in the runtime (middleware).
  */
 export async function startServer(dbPath?: string, yamlPath?: string): Promise<McpServer> {
-  const runtime = new AdaptiveRuntime({ dbPath, yamlPath });
+  const runtime = new AdaptiveRuntime({ dbPath, yamlPath, enableGraph: true });
   const server = new McpServer(
     { name: "adaptive-example-server", version: "0.1.0" },
     // Advertise the Adaptive MCP extension via the SEP-2133 `extensions`
     // capability (present in @modelcontextprotocol/sdk >= 1.29.0). Clients that
     // don't parse capabilities still discover the resource via `resources/list`.
-    { capabilities: { extensions: { "dev.adaptivemcp/tools-metadata": {} } } },
+    // `resources.subscribe` must be declared here (before `connect()`) for the
+    // execution-graph resource's subscribe/notify demo below to work.
+    {
+      capabilities: {
+        extensions: { "dev.adaptivemcp/tools-metadata": {} },
+        resources: { subscribe: true, listChanged: true },
+      },
+    },
   );
+
+  // Phase 11.2: track subscribed resource URIs so completed tool calls can
+  // notify clients watching a session's execution graph. `McpServer` has no
+  // subscribe/notify convenience methods — this uses the low-level `Server`
+  // it exposes via the public `server.server` field.
+  const subscribedUris = new Set<string>();
+  server.server.setRequestHandler(SubscribeRequestSchema, async (request) => {
+    subscribedUris.add(request.params.uri);
+    return {};
+  });
+  server.server.setRequestHandler(UnsubscribeRequestSchema, async (request) => {
+    subscribedUris.delete(request.params.uri);
+    return {};
+  });
+
+  /** Notify a subscribed client that a session's execution graph changed. */
+  async function notifyExecutionGraphUpdated(sessionId: string): Promise<void> {
+    const uri = runtime.extension.executionGraphResourceUri(sessionId);
+    if (subscribedUris.has(uri)) {
+      await server.server.sendResourceUpdated({ uri });
+    }
+  }
 
   // Tool: deploy a service (high-risk, slow). Static risk is projected onto
   // core Tool.annotations via riskToToolAnnotations (Strategy 2 demo).
@@ -57,10 +87,21 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
         cost: { amount: 0.0021, currency: "USD" },
         error: failed ? { message: "rollout timed out" } : undefined,
       });
+
+      // Phase 11.2 demo: each call is its own execution-graph session/workflow
+      // root, so a client subscribed to that session's resource gets notified.
+      const { nodeId, sessionId } = runtime.startWorkflow({ toolName: "deploy_service", workflowId: "deploy_service" });
+      if (failed) {
+        runtime.failNode(nodeId, { message: "rollout timed out" });
+      } else {
+        runtime.completeNode(nodeId, { durationMs, cost: { amount: 0.0021, currency: "USD" } });
+      }
+      await notifyExecutionGraphUpdated(sessionId);
+
       return {
         content: failed
-          ? [{ type: "text", text: "deploy failed: rollout timed out" }]
-          : [{ type: "text", text: `deployed ${version} to ${environment}` }],
+          ? [{ type: "text", text: `deploy failed: rollout timed out (session: ${sessionId})` }]
+          : [{ type: "text", text: `deployed ${version} to ${environment} (session: ${sessionId})` }],
         isError: failed,
       };
     },
@@ -73,13 +114,19 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
     {
       title: "Search Customer",
       description: "Look up a customer by id.",
-      inputSchema: { customerId: z.string() },
+      inputSchema: {
+        customerId: z.string(),
+        // Demo-only: lets a client continue an existing execution-graph
+        // session (e.g. to exercise Phase 11.2's subscribe/notify against a
+        // session it already subscribed to) instead of always starting a new one.
+        sessionId: z.string().optional(),
+      },
       annotations: withRisk(
         { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
         "low",
       ),
     },
-    async ({ customerId }) => {
+    async ({ customerId, sessionId: continueSessionId }) => {
       const durationMs = 20 + Math.floor(Math.random() * 60);
       runtime.observeCompleted({
         toolName: "search_customer",
@@ -89,7 +136,16 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
         model: "gpt-5-mini",
         cost: { amount: 0.0003, currency: "USD" },
       });
-      return { content: [{ type: "text", text: `customer ${customerId}: active` }] };
+
+      const { nodeId, sessionId } = runtime.startWorkflow({
+        toolName: "search_customer",
+        workflowId: "search_customer",
+        sessionId: continueSessionId,
+      });
+      runtime.completeNode(nodeId, { durationMs, cost: { amount: 0.0003, currency: "USD" } });
+      await notifyExecutionGraphUpdated(sessionId);
+
+      return { content: [{ type: "text", text: `customer ${customerId}: active (session: ${sessionId})` }] };
     },
   );
 
@@ -106,6 +162,42 @@ export async function startServer(dbPath?: string, yamlPath?: string): Promise<M
     async (uri) => ({
       contents: [{ uri: uri.href, mimeType: "application/yaml", text: runtime.extension.resourceText() }],
     }),
+  );
+
+  // Adaptive MCP resource (Phase 11.1): a session's execution graph, paginated
+  // over `nodes` via `?cursor=`/`?pageSize=` query params (the SDK has no
+  // built-in pagination for a single resource read — see
+  // `ExtensionController.executionGraphResourceText`'s docstring). Also
+  // subscribable (Phase 11.2): `notifyExecutionGraphUpdated` fires
+  // `notifications/resources/updated` for subscribed sessions after each
+  // tool call above.
+  server.registerResource(
+    "execution-graph",
+    new ResourceTemplate("dev.adaptivemcp://execution-graph/{sessionId}", { list: undefined }),
+    {
+      title: "Adaptive MCP Execution Graph",
+      description: "Per-session execution graph (nodes/edges), paginated over `nodes` via ?cursor=/?pageSize=.",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      // Don't trust the SDK's matched `variables.sessionId`: its template
+      // matcher's regex for a plain `{var}` segment is `[^/]+`, which does
+      // NOT exclude `?` — a request URI with a query string (needed for
+      // pagination below) gets the whole `sessionId?cursor=...` tail
+      // captured as one variable. `URL` itself parses `pathname`/
+      // `searchParams` correctly, so use those instead.
+      const sessionId = decodeURIComponent(uri.pathname.replace(/^\//, ""));
+      const cursor = uri.searchParams.get("cursor") ?? undefined;
+      const pageSizeParam = uri.searchParams.get("pageSize");
+      const pageSize = pageSizeParam ? Number(pageSizeParam) : undefined;
+
+      const result = runtime.extension.executionGraphResourceText(sessionId, "application/json", {
+        cursor,
+        pageSize,
+      });
+      const text = typeof result === "string" ? result : JSON.stringify(result);
+      return { contents: [{ uri: uri.href, mimeType: "application/json", text }] };
+    },
   );
 
   // Adaptive MCP report channel: clients report tool observations back to the

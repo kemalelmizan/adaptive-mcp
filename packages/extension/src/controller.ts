@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { SPEC_VERSION, TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
+import { SPEC_VERSION, TOOLS_METADATA_RESOURCE_URI, buildExecutionGraph } from "@adaptivemcp/spec";
 import type { Annotation, Store, ExecutionNode, ToolRecord } from "@adaptivemcp/spec";
 import {
   renderToolsMetadata,
@@ -22,6 +22,13 @@ export interface NotModified {
 export interface ResourceReadOptions {
   /** When this matches the document's current etag, the method returns `{ notModified: true }` instead of the full document. */
   ifNoneMatch?: string;
+}
+
+export interface PaginatedResourceReadOptions extends ResourceReadOptions {
+  /** Opaque cursor from a previous read's `next_cursor` (the last node's id on that page). Nodes are returned strictly after it. An unknown/stale cursor falls back to the first page rather than erroring. */
+  cursor?: string;
+  /** Max nodes per page. Defaults to 50. */
+  pageSize?: number;
 }
 
 export interface ExtensionControllerOptions {
@@ -91,65 +98,75 @@ export class ExtensionController {
 
   /**
    * Get the execution graph for a session as an MCP resource.
-   * URI: `dev.adaptivemcp/execution-graph/{sessionId}`
+   * URI: `dev.adaptivemcp://execution-graph/{sessionId}`
    */
   executionGraphResourceUri(sessionId: string): string {
-    return `dev.adaptivemcp/execution-graph/${sessionId}`;
+    return `dev.adaptivemcp://execution-graph/${sessionId}`;
   }
 
-  /** Get the execution graph for a session in the requested format. */
+  /**
+   * Get the execution graph for a session in the requested format.
+   *
+   * Paginated over `nodes` (a session's node count is unbounded over a long
+   * enough run): pass `cursor` (a previous read's `next_cursor`) and/or
+   * `pageSize` in `options`. Edges are always returned in full regardless of
+   * the current node page — filtering them by page membership would silently
+   * disconnect the graph, and a client couldn't tell "no edge" from "edge
+   * hidden by pagination."
+   */
   executionGraphResourceText(
     sessionId: string,
     mimeType = "application/yaml",
-    options: ResourceReadOptions = {},
+    options: PaginatedResourceReadOptions = {},
   ): string | NotModified {
-    const doc = this.buildExecutionGraphDocument(sessionId);
+    const doc = this.buildExecutionGraphDocument(sessionId, options);
     if (options.ifNoneMatch && options.ifNoneMatch === doc.etag) {
       return { notModified: true, etag: doc.etag };
     }
     return toDocument(doc, mimeType);
   }
 
-  private buildExecutionGraphDocument(sessionId: string): ExecutionGraphDocument {
+  private buildExecutionGraphDocument(
+    sessionId: string,
+    pagination: { cursor?: string; pageSize?: number } = {},
+  ): ExecutionGraphDocument {
     const graphStore = this.memory as Store & {
       getNodesBySession?: (sessionId: string) => ExecutionNode[];
       getRootNodes?: (sessionId: string) => ExecutionNode[];
     };
 
-    const nodes = graphStore.getNodesBySession && graphStore.getRootNodes ? graphStore.getNodesBySession(sessionId) : [];
+    const allNodes = graphStore.getNodesBySession && graphStore.getRootNodes ? graphStore.getNodesBySession(sessionId) : [];
 
-    const workflowId = nodes[0]?.workflowId ?? "unknown";
-    const renderedNodes = nodes.map(n => ({
-      id: n.id,
-      tool: n.toolName,
-      server: n.serverName,
-      parent: n.parentId,
-      children: n.childrenIds,
-      timestamp: n.timestamp,
-      duration_ms: n.durationMs,
-      status: n.status,
-      cost: n.cost?.amount,
-      model: n.model,
-    }));
-    const edges = nodes.flatMap(n => n.childrenIds.map(childId => ({ from: n.id, to: childId })));
+    const pageSize = pagination.pageSize ?? 50;
+    let startIndex = 0;
+    if (pagination.cursor) {
+      const cursorIndex = allNodes.findIndex((n) => n.id === pagination.cursor);
+      startIndex = cursorIndex === -1 ? 0 : cursorIndex + 1;
+    }
+    const pageNodes = allNodes.slice(startIndex, startIndex + pageSize);
+    const hasMore = startIndex + pageNodes.length < allNodes.length;
+    const nextCursor = hasMore ? pageNodes[pageNodes.length - 1]?.id : undefined;
 
-    return {
-      version: SPEC_VERSION,
-      etag: computeEtag({ version: SPEC_VERSION, session_id: sessionId, workflow_id: workflowId, nodes: renderedNodes, edges }),
-      generated_at: new Date().toISOString(),
-      session_id: sessionId,
-      workflow_id: workflowId,
-      nodes: renderedNodes,
-      edges,
-    };
+    const doc = buildExecutionGraph(pageNodes, { version: SPEC_VERSION, sessionId, nextCursor });
+    // Edges reflect the full graph, not just this page (see docstring above).
+    doc.edges = allNodes.flatMap((n) => n.childrenIds.map((childId) => ({ from: n.id, to: childId })));
+
+    doc.etag = computeEtag({
+      version: doc.version,
+      session_id: doc.session_id,
+      workflow_id: doc.workflow_id,
+      nodes: doc.nodes,
+      edges: doc.edges,
+    });
+    return doc;
   }
 
   /**
    * Get the execution graph as Mermaid diagram.
-   * URI: `dev.adaptivemcp/execution-graph/{sessionId}/mermaid`
+   * URI: `dev.adaptivemcp://execution-graph/{sessionId}/mermaid`
    */
   executionGraphMermaidResourceUri(sessionId: string): string {
-    return `dev.adaptivemcp/execution-graph/${sessionId}/mermaid`;
+    return `dev.adaptivemcp://execution-graph/${sessionId}/mermaid`;
   }
 
   /** Get the execution graph as Mermaid diagram text. */
@@ -195,10 +212,10 @@ export class ExtensionController {
 
   /**
    * Get workflow graph (aggregated across sessions).
-   * URI: `dev.adaptivemcp/workflow-graph/{workflowId}`
+   * URI: `dev.adaptivemcp://workflow-graph/{workflowId}`
    */
   workflowGraphResourceUri(workflowId: string): string {
-    return `dev.adaptivemcp/workflow-graph/${workflowId}`;
+    return `dev.adaptivemcp://workflow-graph/${workflowId}`;
   }
 
   /** Get the workflow graph in the requested format. */
@@ -277,10 +294,10 @@ export class ExtensionController {
 
   /**
    * Get graph insights for a session.
-   * URI: `dev.adaptivemcp/graph-insights/{sessionId}`
+   * URI: `dev.adaptivemcp://graph-insights/{sessionId}`
    */
   graphInsightsResourceUri(sessionId: string): string {
-    return `dev.adaptivemcp/graph-insights/${sessionId}`;
+    return `dev.adaptivemcp://graph-insights/${sessionId}`;
   }
 
   /** Get graph insights for a session. */

@@ -128,4 +128,51 @@ describe("@adaptivemcp/thin-client GraphTrackingMiddleware", () => {
     expect(depthInside).toBe(2);
     expect(middleware.getDepth()).toBe(0);
   });
+
+  describe("getTraceParent (Phase 11.4)", () => {
+    const TRACEPARENT_RE = /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/;
+
+    it("returns undefined outside of a tracked call", () => {
+      const middleware = new GraphTrackingMiddleware(store, { sessionId: "s1" });
+      expect(middleware.getTraceParent()).toBeUndefined();
+    });
+
+    it("generates a valid W3C traceparent for the root node", async () => {
+      const middleware = new GraphTrackingMiddleware(store, { sessionId: "s1" });
+      const rootCall: PlannedCall = { toolName: "root", input: {} };
+
+      const traceparent = await middleware.runInContext(async () => {
+        await middleware.beforeCall(rootCall, {} as never);
+        return middleware.getTraceParent();
+      });
+
+      expect(traceparent).toMatch(TRACEPARENT_RE);
+      const rootId = store.getRootNodes("s1")[0]?.id;
+      expect(store.getExecutionNode(rootId!)?.metadata?.traceparent).toBe(traceparent);
+    });
+
+    it("keeps the same traceId across a workflow but gives each node its own spanId, and records parentSpanId on children", async () => {
+      const middleware = new GraphTrackingMiddleware(store, { sessionId: "s1" });
+      const rootCall: PlannedCall = { toolName: "root", input: {} };
+
+      await middleware.runInContext(async () => {
+        await middleware.beforeCall(rootCall, {} as never);
+        const childCall: PlannedCall = { toolName: "child", input: {} };
+        await middleware.beforeCall(childCall, {} as never);
+        await middleware.afterCall({ ok: true }, childCall, {} as never);
+        await middleware.afterCall({ ok: true }, rootCall, {} as never);
+      });
+
+      const nodes = store.getNodesBySession("s1");
+      const root = nodes.find((n) => n.toolName === "root")!;
+      const child = nodes.find((n) => n.toolName === "child")!;
+
+      expect(root.metadata?.traceparent).toMatch(TRACEPARENT_RE);
+      expect(child.metadata?.traceparent).toMatch(TRACEPARENT_RE);
+      expect(root.metadata?.traceId).toBe(child.metadata?.traceId);
+      expect(root.metadata?.spanId).not.toBe(child.metadata?.spanId);
+      expect(child.metadata?.parentSpanId).toBe(root.metadata?.spanId);
+      expect(root.metadata?.parentSpanId).toBeUndefined();
+    });
+  });
 });

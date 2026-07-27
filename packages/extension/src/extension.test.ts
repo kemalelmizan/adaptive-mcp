@@ -226,4 +226,74 @@ describe("@adaptivemcp/extension", () => {
       expect(etagAfter).not.toBe(etagBefore);
     });
   });
+
+  describe("execution graph pagination (Phase 11.1)", () => {
+    function seedChainOfNodes(count: number): void {
+      let parentId: string | undefined;
+      for (let i = 0; i < count; i++) {
+        const id = `n${i}`;
+        store.recordExecutionNode(
+          node({
+            id,
+            parentId,
+            workflowId: "wf1",
+            timestamp: new Date(2026, 0, 1, 0, 0, i).toISOString(),
+            childrenIds: [],
+          }),
+        );
+        if (parentId) {
+          const parent = store.getExecutionNode(parentId)!;
+          store.updateChildrenIds(parentId, [...parent.childrenIds, id]);
+        }
+        parentId = id;
+      }
+    }
+
+    it("returns at most pageSize nodes and a next_cursor when more remain", () => {
+      seedChainOfNodes(5);
+      const controller = new ExtensionController({ memory: store });
+      const doc = JSON.parse(controller.executionGraphResourceText("s1", "application/json", { pageSize: 2 }) as string);
+
+      expect(doc.nodes.map((n: { id: string }) => n.id)).toEqual(["n0", "n1"]);
+      expect(doc.next_cursor).toBe("n1");
+    });
+
+    it("resumes from a cursor and omits next_cursor on the last page", () => {
+      seedChainOfNodes(5);
+      const controller = new ExtensionController({ memory: store });
+      const doc = JSON.parse(
+        controller.executionGraphResourceText("s1", "application/json", { cursor: "n2", pageSize: 2 }) as string,
+      );
+
+      expect(doc.nodes.map((n: { id: string }) => n.id)).toEqual(["n3", "n4"]);
+      expect(doc.next_cursor).toBeUndefined();
+    });
+
+    it("falls back to the first page for an unknown/stale cursor", () => {
+      seedChainOfNodes(3);
+      const controller = new ExtensionController({ memory: store });
+      const doc = JSON.parse(
+        controller.executionGraphResourceText("s1", "application/json", { cursor: "does-not-exist", pageSize: 2 }) as string,
+      );
+
+      expect(doc.nodes.map((n: { id: string }) => n.id)).toEqual(["n0", "n1"]);
+    });
+
+    it("always returns every edge, regardless of the current node page", () => {
+      seedChainOfNodes(5);
+      const controller = new ExtensionController({ memory: store });
+      const doc = JSON.parse(controller.executionGraphResourceText("s1", "application/json", { pageSize: 2 }) as string);
+
+      expect(doc.edges).toHaveLength(4); // 5 nodes chained -> 4 edges, all present despite a 2-node page
+    });
+
+    it("defaults to a full page (pageSize 50) when no pagination options are given", () => {
+      seedChainOfNodes(3);
+      const controller = new ExtensionController({ memory: store });
+      const doc = JSON.parse(controller.executionGraphResourceText("s1", "application/json") as string);
+
+      expect(doc.nodes).toHaveLength(3);
+      expect(doc.next_cursor).toBeUndefined();
+    });
+  });
 });

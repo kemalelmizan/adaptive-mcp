@@ -1,13 +1,22 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { ResourceUpdatedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { AdaptiveRuntime } from "@adaptivemcp/runtime";
 import { TOOLS_METADATA_RESOURCE_URI } from "@adaptivemcp/spec";
+
+/** Pull the `(session: <uuid>)` suffix the example server's tools append to their result text. */
+function extractSessionId(text: string): string | undefined {
+  return text.match(/\(session: ([^)]+)\)/)?.[1];
+}
 
 /**
  * A minimal MCP client that:
  *  1. connects to the example server over stdio;
  *  2. lists and calls tools;
- *  3. reads the Adaptive MCP `tools-metadata.yaml` resource.
+ *  3. reads the Adaptive MCP `tools-metadata.yaml` resource;
+ *  4. reads a session's execution-graph resource, paginated (Phase 11.1);
+ *  5. subscribes to that resource and observes a live update notification
+ *     fire after another tool call in the same session (Phase 11.2).
  *
  * It also demonstrates the same adaptive loop locally (AdaptiveRuntime) so the
  * example runs without spawning a child process.
@@ -34,7 +43,46 @@ export async function runClient(): Promise<void> {
   console.log("\n--- tools-metadata.yaml (from server resource) ---\n");
   console.log(text);
 
+  await demoExecutionGraphResource(client);
+
   await client.close();
+}
+
+/** Phase 11.1/11.2 demo: paginated resource read + live subscribe/notify. */
+async function demoExecutionGraphResource(client: Client): Promise<void> {
+  // Call the tool twice in one session so the graph has 2 nodes to paginate over.
+  const first = await client.callTool({ name: "search_customer", arguments: { customerId: "graph-demo" } });
+  const firstText = (first.content as Array<{ text: string }>)[0]?.text ?? "";
+  const sessionId = extractSessionId(firstText);
+  if (!sessionId) {
+    console.log("\n--- execution-graph demo skipped: could not extract a session id ---\n");
+    return;
+  }
+  const uri = `dev.adaptivemcp://execution-graph/${sessionId}`;
+  console.log(`\n--- execution-graph resource (session: ${sessionId}) ---\n`);
+
+  let notified = false;
+  client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification) => {
+    if (notification.params.uri === uri) notified = true;
+  });
+  await client.subscribeResource({ uri });
+
+  // Continue the *same* session (the demo tool accepts an explicit `sessionId`
+  // to make this possible) so the server's `notifyExecutionGraphUpdated` call
+  // matches this subscription's uri and actually fires.
+  await client.callTool({ name: "search_customer", arguments: { customerId: "graph-demo-2", sessionId } });
+  await new Promise((resolve) => setTimeout(resolve, 50)); // let the notification arrive
+  console.log(`subscribed and received a resources/updated notification: ${notified}`);
+  await client.unsubscribeResource({ uri });
+
+  // Now the session has 2 nodes - page through them one at a time.
+  const page1 = await client.readResource({ uri: `${uri}?pageSize=1` });
+  const page1Doc = JSON.parse((page1.contents[0] as { text: string }).text);
+  console.log(`page 1: ${page1Doc.nodes.length} node(s), next_cursor=${page1Doc.next_cursor}`);
+
+  const page2 = await client.readResource({ uri: `${uri}?pageSize=1&cursor=${page1Doc.next_cursor}` });
+  const page2Doc = JSON.parse((page2.contents[0] as { text: string }).text);
+  console.log(`page 2: ${page2Doc.nodes.length} node(s), next_cursor=${page2Doc.next_cursor}`);
 }
 
 // Local, no-child-process demonstration of the adaptive loop.
