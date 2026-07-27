@@ -185,29 +185,83 @@ export class ExtensionController {
       return "graph TD\n  A[Session not found]";
     }
 
-    const nodeMap = new Map(nodes.map(n => [n.id, n]));
     let mermaid = "graph TD\n";
-    
+
     // Add nodes
     for (const node of nodes) {
       const label = `${node.toolName}\\n${node.durationMs ?? 0}ms`;
       const status = node.status === "failed" ? ":::failed" : node.status === "completed" ? ":::completed" : ":::running";
       mermaid += `  ${node.id.replace(/-/g, "_")}[${label}]${status}\n`;
     }
-    
+
     // Add edges
     for (const node of nodes) {
       for (const childId of node.childrenIds) {
         mermaid += `  ${node.id.replace(/-/g, "_")} --> ${childId.replace(/-/g, "_")}\n`;
       }
     }
-    
+
     // Add styles
     mermaid += "  classDef failed fill:#ffcccc,stroke:#ff0000;\n";
     mermaid += "  classDef completed fill:#ccffcc,stroke:#00ff00;\n";
     mermaid += "  classDef running fill:#ffffcc,stroke:#ffaa00;\n";
-    
+
     return mermaid;
+  }
+
+  /**
+   * Get the execution graph as a GraphViz DOT diagram, alongside Mermaid.
+   * URI: `dev.adaptivemcp://execution-graph/{sessionId}/dot`
+   */
+  executionGraphDotResourceUri(sessionId: string): string {
+    return `dev.adaptivemcp://execution-graph/${sessionId}/dot`;
+  }
+
+  /**
+   * Get the execution graph as GraphViz DOT text. Unpaginated, like the
+   * Mermaid export — a diagram export should show the whole graph, unlike
+   * the paginated JSON/YAML data resource (`executionGraphResourceText`).
+   * Uses quoted node identifiers rather than Mermaid's hyphen-stripping
+   * hack, since DOT allows arbitrary characters in quoted identifiers.
+   */
+  executionGraphDotResourceText(sessionId: string): string {
+    const graphStore = this.memory as Store & {
+      getNodesBySession?: (sessionId: string) => ExecutionNode[];
+      getRootNodes?: (sessionId: string) => ExecutionNode[];
+    };
+
+    if (!graphStore.getNodesBySession || !graphStore.getRootNodes) {
+      return 'digraph execution_graph {\n  "not_enabled" [label="Graph tracking not enabled"];\n}\n';
+    }
+
+    const nodes = graphStore.getNodesBySession(sessionId);
+    if (nodes.length === 0) {
+      return 'digraph execution_graph {\n  "not_found" [label="Session not found"];\n}\n';
+    }
+
+    const colorFor = (status: string): { fill: string; stroke: string } =>
+      status === "failed"
+        ? { fill: "#ffcccc", stroke: "#ff0000" }
+        : status === "completed"
+          ? { fill: "#ccffcc", stroke: "#00ff00" }
+          : { fill: "#ffffcc", stroke: "#ffaa00" };
+
+    let dot = "digraph execution_graph {\n  rankdir=TB;\n";
+
+    for (const node of nodes) {
+      const label = `${node.toolName}\\n${node.durationMs ?? 0}ms`;
+      const { fill, stroke } = colorFor(node.status);
+      dot += `  "${node.id}" [label="${label}", style=filled, fillcolor="${fill}", color="${stroke}"];\n`;
+    }
+
+    for (const node of nodes) {
+      for (const childId of node.childrenIds) {
+        dot += `  "${node.id}" -> "${childId}";\n`;
+      }
+    }
+
+    dot += "}\n";
+    return dot;
   }
 
   /**

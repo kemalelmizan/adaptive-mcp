@@ -14,9 +14,9 @@ Transform telemetry from **request logging** into **execution intelligence** by 
 
 ---
 
-## Implementation Status: ✅ Phases 4-11 COMPLETE
+## Implementation Status: ✅ Phases 4-12 COMPLETE
 
-All foundation phases, Phase 9 (Production Hardening), Phase 10 (Advanced Graph Intelligence), and Phase 11 (MCP Ecosystem Integration) have been implemented and validated with working scenarios and tests, including a real end-to-end MCP client/server run (pagination, subscribe/notify). Phase 12 (Visualization & UX) is not yet started — see below.
+All phases of this roadmap — foundation (4-8), Production Hardening (9), Advanced Graph Intelligence (10), MCP Ecosystem Integration (11), and Visualization & UX (12) — have been implemented and validated with working scenarios, tests, and (for 12.1) a production build of the docs site. This roadmap has no further unstarted phases.
 
 ### What Was Built
 
@@ -106,13 +106,15 @@ This is the first phase requiring the MCP *protocol* itself (resources, paginati
 | 11.3 | `@adaptivemcp/spec` | Low | ✅ New `ExecutionGraphResource`/`buildExecutionGraph` (`packages/spec/src/execution-graph.ts`) replaces the dead Map-based `ExecutionGraph` type (zero consumers, not JSON-serializable). "Federation" means a shared, importable schema + builder other servers' code can construct against — not an implemented multi-server aggregation/discovery protocol, which would need infrastructure that doesn't exist here. |
 | 11.4 | `@adaptivemcp/thin-client` | Medium | ✅ Descoped from literal header propagation — no live MCP client/HTTP transport exists anywhere in this codebase to carry headers on. Instead, `GraphTrackingMiddleware` generates a valid W3C `traceparent` (deterministically derived from existing `ExecutionNode` UUIDs) recorded on `metadata.traceparent`/`traceId`/`spanId`/`parentSpanId`, surfaced through the execution-graph resource (`trace_parent` per node) — a data-plane correlation primitive ready for a future real transport to attach as a header. |
 
-### Phase 12: Visualization & UX (Priority: LOW)
+### Phase 12: Visualization & UX — ✅ Done
+
+12.1 lives in a **separate git repository** (`adaptivemcp.github.io`, a sibling directory with its own history and GitHub Pages deployment) rather than this monorepo — its changes are committed there independently.
 
 | Task | Package | Effort | Description |
 |------|---------|--------|-------------|
-| 12.1 | `adaptivemcp.github.io` | Medium | Interactive graph explorer in docs (Mermaid + D3.js) |
-| 12.2 | `@adaptivemcp/extension` | Low | GraphViz DOT export alongside Mermaid |
-| 12.3 | `examples` | Low | Scenario: "debugging a failed deployment" — walk through graph inspection |
+| 12.1 | `adaptivemcp.github.io` | Medium | ✅ New `/guide/graph-explorer` page: a static Mermaid diagram plus the site's first custom Vue component (`<GraphExplorer>`), rendering a hand-authored sample `ExecutionGraphResource` (matching the canonical Phase 11.3 wire schema) via D3 force-directed layout with drag/zoom/click-for-details. No live backend/data pipeline exists to feed this site real execution-graph data, so it's scoped to a static sample dataset rather than pretending to wire up live data. Verified with a production `vitepress build`. |
+| 12.2 | `@adaptivemcp/extension` | Low | ✅ `executionGraphDotResourceUri`/`executionGraphDotResourceText` — GraphViz DOT export alongside Mermaid, at `dev.adaptivemcp://execution-graph/{sessionId}/dot`. Mirrors the existing (unpaginated) Mermaid export's pattern rather than the paginated JSON/YAML resource, since a diagram export should show the whole graph. |
+| 12.3 | `examples` | Low | ✅ New `debugging-deployment` scenario, deliberately exercising the Phase 10 methods no other scenario touches: `getCausalCascade` (root causes vs. symptoms across two independent failure chains), `detectAntiPatterns` (a real `sequential_bottleneck` on the apply→wait→rollback chain), `getWorkflowForecast` against 3 seeded historical runs, plus Mermaid/DOT diagram output. |
 
 ---
 

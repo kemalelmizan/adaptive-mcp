@@ -296,4 +296,39 @@ describe("@adaptivemcp/extension", () => {
       expect(doc.next_cursor).toBeUndefined();
     });
   });
+
+  describe("execution graph DOT export (Phase 12.2)", () => {
+    it("returns a minimal placeholder digraph when graph tracking is not enabled", () => {
+      const controller = new ExtensionController({ memory: {} as never });
+      const dot = controller.executionGraphDotResourceText("s1");
+      expect(dot).toContain("digraph execution_graph {");
+      expect(dot).toContain("Graph tracking not enabled");
+    });
+
+    it("returns a minimal placeholder digraph for an unknown session", () => {
+      const controller = new ExtensionController({ memory: store });
+      const dot = controller.executionGraphDotResourceText("nope");
+      expect(dot).toContain("digraph execution_graph {");
+      expect(dot).toContain("Session not found");
+    });
+
+    it("emits a quoted, labeled node per execution node and an edge per parent-child link", () => {
+      store.recordExecutionNode(node({ id: "root", toolName: "deploy", durationMs: 100, status: "completed", childrenIds: ["a"] }));
+      store.recordExecutionNode(node({ id: "a", parentId: "root", toolName: "k8s.apply", status: "failed", childrenIds: [] }));
+      const controller = new ExtensionController({ memory: store });
+
+      const dot = controller.executionGraphDotResourceText("s1");
+      expect(dot).toContain('"root" [label="deploy\\n100ms", style=filled, fillcolor="#ccffcc", color="#00ff00"];');
+      expect(dot).toContain('"a" [label="k8s.apply\\n0ms", style=filled, fillcolor="#ffcccc", color="#ff0000"];');
+      expect(dot).toContain('"root" -> "a";');
+      expect(dot.trim().startsWith("digraph execution_graph {")).toBe(true);
+      expect(dot.trim().endsWith("}")).toBe(true);
+    });
+
+    it("exposes the /dot resource URI alongside the /mermaid one", () => {
+      const controller = new ExtensionController({ memory: store });
+      expect(controller.executionGraphDotResourceUri("s1")).toBe("dev.adaptivemcp://execution-graph/s1/dot");
+      expect(controller.executionGraphMermaidResourceUri("s1")).toBe("dev.adaptivemcp://execution-graph/s1/mermaid");
+    });
+  });
 });

@@ -83,13 +83,24 @@ export class AdaptiveRuntime {
     this.extension.sync();
   }
 
-  /** Start a new workflow root node (for graph tracking). */
-  startWorkflow(ctx: { toolName: string; serverName?: string; workflowId?: string; model?: string }): { nodeId: string; sessionId: string } {
+  /**
+   * Start a new workflow root node (for graph tracking). Pass `sessionId` to
+   * reuse an existing session instead of generating a fresh one — the node
+   * still lands as a second, parentless root within that session.
+   */
+  startWorkflow(ctx: {
+    toolName: string;
+    serverName?: string;
+    workflowId?: string;
+    model?: string;
+    sessionId?: string;
+  }): { nodeId: string; sessionId: string } {
     const node = this.telemetry.startWorkflow({
       toolName: ctx.toolName,
       serverName: ctx.serverName,
       workflowId: ctx.workflowId,
       model: ctx.model,
+      sessionId: ctx.sessionId,
     });
     return { nodeId: node.id, sessionId: node.sessionId };
   }
