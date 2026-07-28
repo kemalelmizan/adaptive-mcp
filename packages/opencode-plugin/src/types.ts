@@ -5,6 +5,8 @@ export interface OpencodePluginOptions {
   yamlPath?: string;
   /** Enable execution graph tracking. */
   enableGraph?: boolean;
+  /** Default workflow ID to seed graph tracking with, if `enableGraph` is set. */
+  workflowId?: string;
   /** Custom approval policy. */
   approvalPolicy?: {
     confirmRiskLevels?: Array<"low" | "medium" | "high">;

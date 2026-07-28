@@ -23,32 +23,7 @@ import { ApprovalGate } from "@adaptivemcp/approval";
 import { GraphAnalyzer } from "@adaptivemcp/graph-analysis";
 import { ThinClient, GraphTrackingMiddleware } from "@adaptivemcp/thin-client";
 import { MiddlewareChain } from "@adaptivemcp/middleware";
-
-export interface OpencodePluginOptions {
-  /** SQLite path for the SSOT. Defaults to in-memory. */
-  dbPath?: string;
-  /** Where to write the derived YAML view. */
-  yamlPath?: string;
-  /** Enable execution graph tracking. */
-  enableGraph?: boolean;
-  /** Custom approval policy. */
-  approvalPolicy?: {
-    confirmRiskLevels?: Array<"low" | "medium" | "high">;
-    flakyFailureRate?: number;
-    denyTools?: string[];
-  };
-  /** OAuth client configurations for credential injection. */
-  oauthConfigs?: Record<string, {
-    clientId: string;
-    clientSecret: string;
-    authUrl: string;
-    tokenUrl: string;
-    redirectUri: string;
-    scopes: string[];
-  }>;
-  /** Servers that require OAuth. */
-  oauthRequiredServers?: string[];
-}
+import type { OpencodePluginOptions } from "./types.js";
 
 /**
  * OpenCode plugin for Adaptive MCP.
@@ -172,12 +147,10 @@ export class OpencodePlugin {
     }
 
     // Record telemetry start
-    this.telemetry.start({
-      toolName,
-      serverName,
-      sessionId: this.currentSessionId,
-      workflowId: this.currentWorkflowId,
-    }, { input });
+    this.telemetry.start(
+      { toolName, serverName, sessionId: this.currentSessionId },
+      { input, workflowId: this.currentWorkflowId },
+    );
 
     // Run middleware beforeCall hooks
     await this.middlewareChain.runBefore({
@@ -203,8 +176,9 @@ export class OpencodePlugin {
 
     // Record telemetry completion
     this.telemetry.complete(
-      { toolName, serverName, sessionId: sessionId ?? this.currentSessionId, workflowId: this.currentWorkflowId },
-      { durationMs, output, cost: cost ? { amount: cost, currency: "USD" } : undefined }
+      { toolName, serverName, sessionId: sessionId ?? this.currentSessionId },
+      { durationMs, output, cost: cost ? { amount: cost, currency: "USD" } : undefined },
+      { workflowId: this.currentWorkflowId },
     );
 
     // Complete graph tracking
@@ -217,8 +191,8 @@ export class OpencodePlugin {
 
     // Run middleware afterCall hooks
     await this.middlewareChain.runAfter(
-      { ok: true, output },
-      { toolName, serverName, input: {} } // input would be tracked separately
+      { ok: true },
+      { toolName, serverName, input: {}, output } // input would be tracked separately
     );
 
     // Evaluate and sync
@@ -243,8 +217,9 @@ export class OpencodePlugin {
 
     // Record telemetry failure
     this.telemetry.fail(
-      { toolName, serverName, sessionId: sessionId ?? this.currentSessionId, workflowId: this.currentWorkflowId },
-      { message: error.message, code: (error as any).code }
+      { toolName, serverName, sessionId: sessionId ?? this.currentSessionId },
+      { message: error.message, code: (error as any).code },
+      { workflowId: this.currentWorkflowId },
     );
 
     // Fail graph tracking
@@ -323,7 +298,8 @@ export class OpencodePlugin {
     if (sessionId) this.currentSessionId = sessionId;
     if (workflowId) this.currentWorkflowId = workflowId;
 
-    return this.thinClient.run(
+    let recordedError: string | undefined;
+    const result = await this.thinClient.run(
       toolName,
       async (input) => {
         // This would be replaced with actual MCP tool call in real usage
@@ -331,11 +307,16 @@ export class OpencodePlugin {
         throw new Error("Tool execution not implemented - use OpenCode's native tool runner");
       },
       input,
-      (ok, error, output) => {
-        // Callback for recording result
+      (_ok, error) => {
+        recordedError = error;
       },
       serverName
     );
+
+    if (!result.executed) {
+      return { ok: false, error: recordedError ?? `Blocked (${result.decision})` };
+    }
+    return { ok: true, output: result.output };
   }
 
   /**
@@ -374,4 +355,4 @@ export function createOpencodePlugin(options: OpencodePluginOptions = {}): Openc
   return new OpencodePlugin(options);
 }
 
-export { OpencodePluginOptions } from "./types.js";
+export type { OpencodePluginOptions };
