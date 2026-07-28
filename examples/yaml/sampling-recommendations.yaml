@@ -1,0 +1,79 @@
+version: 0.1.0
+etag: 510dcc086256989bce3221e05b857be06289918a
+generated_at: 2026-07-28T03:32:50.700Z
+tools:
+  - name: deploy_service
+    server: platform
+    annotation:
+      require_approval: true
+      sampling:
+        temperature: 0.2
+        topP: 0.5
+    insights:
+      observed_failure_rate:
+        value: 0.2
+        confidence: 0.7
+        source: evaluation
+      avg_cost_per_invocation:
+        value: 0.0021000000000000003
+        confidence: 0.7
+        source: telemetry
+      avg_duration_ms_baseline:
+        value: 505.7
+        confidence: 0.7
+        source: telemetry
+      avg_output_tokens:
+        value: 0
+        confidence: 0.7
+        source: telemetry
+      avg_duration_ms:
+        value: 506
+        confidence: 0.7
+        source: telemetry
+    recommendations:
+      - type: approval
+        payload:
+          decision: require_confirmation
+        rationale: High-risk or flaky tool; human confirmation required before execution.
+      - type: sampling
+        payload:
+          temperature: 0.2
+          topP: 0.5
+        rationale: high observed failure rate (0.21) — lower temperature/top_p for more deterministic tool-call arguments
+    stats:
+      invocations: 43
+      failures: 9
+      failure_rate: 0.2093
+      avg_duration_ms: 498.3255813953488
+      total_cost: 0.08400000000000002
+      last_observed_at: 2026-07-28T03:32:50.699Z
+    updated_at: 2026-07-28T03:32:50.699Z
+  - name: search_customer
+    server: crm
+    annotation: {}
+    insights:
+      avg_cost_per_invocation:
+        value: 0.0003
+        confidence: 0.7
+        source: telemetry
+      avg_duration_ms_baseline:
+        value: 232.225
+        confidence: 0.7
+        source: telemetry
+      avg_output_tokens:
+        value: 0
+        confidence: 0.7
+        source: telemetry
+      avg_duration_ms:
+        value: 232
+        confidence: 0.7
+        source: telemetry
+    recommendations: []
+    stats:
+      invocations: 40
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 232.225
+      total_cost: 0.011999999999999999
+      last_observed_at: 2026-07-28T03:32:50.684Z
+    updated_at: 2026-07-28T03:32:50.698Z

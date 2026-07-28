@@ -47,6 +47,27 @@ describe("@adaptivemcp/extension", () => {
     expect(view.stats.failure_rate).toBe(0);
   });
 
+  it("promotes a `sampling` recommendation into annotation.sampling", () => {
+    store.ensureTool("flaky_tool", "srv");
+    store.addRecommendation({
+      toolName: "flaky_tool",
+      serverName: "srv",
+      type: "sampling",
+      payload: { temperature: 0.4, topP: 0.7 },
+      rationale: "moderate observed failure rate",
+      confidence: 0.8,
+      generatedAt: new Date().toISOString(),
+    });
+    const view = toToolMetadataView(store.getTool("flaky_tool")!);
+    expect(view.annotation.sampling).toEqual({ temperature: 0.4, topP: 0.7 });
+  });
+
+  it("omits annotation.sampling when there is no `sampling` recommendation", () => {
+    store.ensureTool("healthy_tool", "srv");
+    const view = toToolMetadataView(store.getTool("healthy_tool")!);
+    expect(view.annotation.sampling).toBeUndefined();
+  });
+
   it("renderToolsMetadata wraps tools with version + timestamp", () => {
     store.ensureTool("search_customer", "crm");
     const doc = renderToolsMetadata(store.allTools(), SPEC_VERSION);

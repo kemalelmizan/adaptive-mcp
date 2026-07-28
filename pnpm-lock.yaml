@@ -390,6 +390,9 @@ importers:
       '@adaptivemcp/orchestration':
         specifier: workspace:*
         version: link:../orchestration
+      '@adaptivemcp/routing':
+        specifier: workspace:*
+        version: link:../routing
       '@adaptivemcp/spec':
         specifier: workspace:*
         version: link:../spec

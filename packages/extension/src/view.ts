@@ -1,6 +1,6 @@
 import yaml from "js-yaml";
 import { createHash } from "node:crypto";
-import type { ToolRecord, ExecutionGraphResource } from "@adaptivemcp/spec";
+import type { ToolRecord, ExecutionGraphResource, SamplingRecommendationPayload } from "@adaptivemcp/spec";
 
 /**
  * A single tool entry in the derived YAML tools-metadata view.
@@ -28,6 +28,8 @@ export interface ToolMetadataView {
     budget?: { limit: number; currency: string };
     /** Whether this tool requires approval before execution */
     require_approval?: boolean;
+    /** Suggested sampling parameters for this tool's next LLM turn (from a `sampling` recommendation). */
+    sampling?: SamplingRecommendationPayload;
   };
   /** Learned from observed behavior. */
   insights: Record<string, { value: unknown; confidence: number; source: string }>;
@@ -64,7 +66,8 @@ export function toToolMetadataView(
   // Extract budget and approval recommendations
   const budgetRec = record.recommendations.find(r => r.type === "routing" && r.payload && typeof r.payload === "object" && "perToolLimit" in r.payload);
   const approvalRec = record.recommendations.find(r => r.type === "approval" && r.payload && typeof r.payload === "object" && "decision" in r.payload);
-  
+  const samplingRec = record.recommendations.find(r => r.type === "sampling");
+
   return {
     name: record.toolName,
     server: record.serverName,
@@ -75,6 +78,7 @@ export function toToolMetadataView(
       description: record.annotation.description,
       budget: budgetRec ? { limit: (budgetRec.payload as any).perToolLimit, currency: "USD" } : undefined,
       require_approval: approvalRec ? (approvalRec.payload as any).decision === "require_confirmation" : undefined,
+      sampling: samplingRec ? (samplingRec.payload as SamplingRecommendationPayload) : undefined,
     },
     insights,
     recommendations: record.recommendations.map((r) => ({

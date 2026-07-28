@@ -15,3 +15,5 @@ export { GraphTrackingMiddleware, createGraphTrackingMiddleware } from "./graph-
 export type { } from "./graph-middleware.js";
 export { OAuthMiddleware, InMemoryOAuthTokenStore, createOAuthMiddleware } from "./oauth-middleware.js";
 export type { OAuthClientConfig, OAuthToken, OAuthTokenStore } from "./oauth-middleware.js";
+export { SamplingAdvisor } from "@adaptivemcp/routing";
+export type { SamplingAdvisorOptions, SamplingThresholds } from "@adaptivemcp/routing";

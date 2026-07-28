@@ -7,3 +7,5 @@
  */
 export { Router } from "./router.js";
 export type { ModelOption, BudgetPolicy, RoutingOptions, WorkflowPosition, NodeRouting } from "./router.js";
+export { SamplingAdvisor } from "./sampling-advisor.js";
+export type { SamplingAdvisorOptions, SamplingThresholds } from "./sampling-advisor.js";

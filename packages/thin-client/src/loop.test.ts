@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { MemoryStore } from "@adaptivemcp/memory";
 import { ApprovalGate } from "@adaptivemcp/approval";
 import { Orchestrator } from "@adaptivemcp/orchestration";
+import { SamplingAdvisor } from "@adaptivemcp/routing";
 import { ThinClient } from "./loop.js";
 import type { Middleware, PlannedCall } from "@adaptivemcp/middleware";
-import type { ToolExecutionEvent } from "@adaptivemcp/spec";
+import type { Recommendation, ToolExecutionEvent } from "@adaptivemcp/spec";
 
 function record(store: MemoryStore, toolName: string, failRate: number, calls: number): void {
   store.ensureTool(toolName, "srv");
@@ -127,5 +128,148 @@ describe("@adaptivemcp/thin-client", () => {
     );
     expect(res.output).toBe("HELLO");
     expect(seen).toEqual(["after"]);
+  });
+
+  describe("sampling recommendations", () => {
+    function recordTelemetry(toolName: string, serverName: string | undefined, ok: boolean, error?: string): void {
+      store.recordExecution({
+        id: `${toolName}-${Math.random()}`,
+        toolName,
+        serverName,
+        timestamp: new Date().toISOString(),
+        durationMs: 100,
+        status: ok ? "completed" : "failed",
+        error: error ? { message: error } : undefined,
+      });
+    }
+
+    it("does not invoke onSamplingRecommendation when samplingAdvisor is unset", async () => {
+      record(store, "search_customer", 0, 40);
+      const seen: Recommendation[] = [];
+      client = new ThinClient({ memory: store, gate, onSamplingRecommendation: (rec) => void seen.push(rec) });
+      await client.run(
+        "search_customer",
+        async () => ({ ok: true, output: "result" }),
+        {},
+        (ok, error) => recordTelemetry("search_customer", "srv", ok, error),
+        "srv",
+      );
+      expect(seen).toHaveLength(0);
+    });
+
+    it("does not invoke the hook while the failure rate stays below threshold", async () => {
+      record(store, "search_customer", 0, 40);
+      const advisor = new SamplingAdvisor({ memory: store });
+      const seen: Recommendation[] = [];
+      client = new ThinClient({
+        memory: store,
+        gate,
+        samplingAdvisor: advisor,
+        onSamplingRecommendation: (rec) => void seen.push(rec),
+      });
+      await client.run(
+        "search_customer",
+        async () => ({ ok: true, output: "result" }),
+        {},
+        (ok, error) => recordTelemetry("search_customer", "srv", ok, error),
+        "srv",
+      );
+      expect(seen).toHaveLength(0);
+    });
+
+    it("invokes the hook with the current sampling recommendation once the failure rate crosses the threshold", async () => {
+      // 6/40 = 0.15, already above the default moderate threshold (0.1).
+      record(store, "flaky_tool", 0.15, 40);
+      const advisor = new SamplingAdvisor({ memory: store });
+      const seen: Recommendation[] = [];
+      client = new ThinClient({
+        memory: store,
+        gate,
+        samplingAdvisor: advisor,
+        onSamplingRecommendation: (rec, ctx) => void seen.push({ ...rec, toolName: ctx.toolName }),
+      });
+      await client.run(
+        "flaky_tool",
+        async () => ({ ok: true, output: "result" }),
+        {},
+        (ok, error) => recordTelemetry("flaky_tool", "srv", ok, error),
+        "srv",
+      );
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.payload).toEqual({ temperature: 0.4, topP: 0.7 });
+    });
+
+    it("reflects this call's own outcome, not stale pre-call stats", async () => {
+      // 9 prior successful calls: below minInvocations (10), so advise() would
+      // be a no-op if computed now. The 10th call below is what pushes this
+      // tool over both minInvocations and the failure-rate threshold at once.
+      record(store, "regression_tool", 0, 9);
+      const advisor = new SamplingAdvisor({ memory: store });
+      expect(advisor.advise("regression_tool", "srv")).toBeUndefined();
+
+      const seen: Recommendation[] = [];
+      client = new ThinClient({
+        memory: store,
+        gate,
+        samplingAdvisor: advisor,
+        onSamplingRecommendation: (rec) => void seen.push(rec),
+      });
+      await client.run(
+        "regression_tool",
+        async () => ({ ok: false, error: "boom" }),
+        {},
+        (ok, error) => recordTelemetry("regression_tool", "srv", ok, error),
+        "srv",
+      );
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.payload).toEqual({ temperature: 0.4, topP: 0.7 });
+      expect(store.getTool("regression_tool", "srv")?.stats.invocations).toBe(10);
+    });
+
+    it("does not invoke the hook on a denied call", async () => {
+      record(store, "deploy_service", 0, 40);
+      gate = new ApprovalGate({ memory: store, policy: { denyTools: ["deploy_service"] } });
+      const advisor = new SamplingAdvisor({ memory: store });
+      const seen: Recommendation[] = [];
+      client = new ThinClient({
+        memory: store,
+        gate,
+        samplingAdvisor: advisor,
+        onSamplingRecommendation: (rec) => void seen.push(rec),
+      });
+      const res = await client.run(
+        "deploy_service",
+        async () => ({ ok: true }),
+        {},
+        (ok, error) => recordTelemetry("deploy_service", "srv", ok, error),
+        "srv",
+      );
+      expect(res.decision).toBe("deny");
+      expect(seen).toHaveLength(0);
+    });
+
+    it("awaits an async onSamplingRecommendation before run() resolves", async () => {
+      record(store, "flaky_tool", 0.15, 40);
+      const advisor = new SamplingAdvisor({ memory: store });
+      let settled = false;
+      client = new ThinClient({
+        memory: store,
+        gate,
+        samplingAdvisor: advisor,
+        onSamplingRecommendation: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          settled = true;
+        },
+      });
+      await client.run(
+        "flaky_tool",
+        async () => ({ ok: true, output: "result" }),
+        {},
+        (ok, error) => recordTelemetry("flaky_tool", "srv", ok, error),
+        "srv",
+      );
+      expect(settled).toBe(true);
+    });
   });
 });

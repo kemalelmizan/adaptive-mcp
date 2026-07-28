@@ -1,7 +1,8 @@
-import type { Store } from "@adaptivemcp/spec";
+import type { Store, Recommendation } from "@adaptivemcp/spec";
 import type { ApprovalGate, ApprovalDecision } from "@adaptivemcp/approval";
 import type { RetryPolicy } from "@adaptivemcp/orchestration";
 import { MiddlewareChain, type Middleware, type PlannedCall, type CallResult } from "@adaptivemcp/middleware";
+import type { SamplingAdvisor } from "@adaptivemcp/routing";
 import { GraphTrackingMiddleware } from "./graph-middleware.js";
 
 export interface ToolHandler {
@@ -23,6 +24,27 @@ export interface ThinClientOptions {
   middleware?: Middleware[];
   /** Optional graph tracking middleware for execution graph intelligence. */
   graphTracking?: GraphTrackingMiddleware;
+  /**
+   * Optional sampling-parameter advisor. When set, ThinClient recomputes the
+   * `sampling` recommendation for this tool immediately after this call's
+   * telemetry is recorded (i.e. using stats that include *this* call), then —
+   * if `onSamplingRecommendation` is also set — invokes it.
+   *
+   * This is advisory-only: ThinClient never makes an LLM call itself. The
+   * host must read the payload from the hook (or from the recommendation in
+   * the store / tools-metadata.yaml) and pass it into its own next
+   * completion request for it to have any effect.
+   */
+  samplingAdvisor?: SamplingAdvisor;
+  /**
+   * Called after `run()` records this call's telemetry and (if
+   * `samplingAdvisor` is set) recomputes the `sampling` recommendation —
+   * representing "here is the suggested sampling config for your next LLM
+   * turn involving this tool." Not called when `samplingAdvisor` is unset or
+   * produces no recommendation, or when the call was denied/blocked before
+   * execution.
+   */
+  onSamplingRecommendation?: (rec: Recommendation, ctx: { toolName: string; serverName?: string }) => void | Promise<void>;
 }
 
 /**
@@ -47,6 +69,11 @@ export class ThinClient {
   private defaultRetry: RetryPolicy;
   private chain: MiddlewareChain;
   private graphTracking?: GraphTrackingMiddleware;
+  private samplingAdvisor?: SamplingAdvisor;
+  private onSamplingRecommendation?: (
+    rec: Recommendation,
+    ctx: { toolName: string; serverName?: string },
+  ) => void | Promise<void>;
 
   constructor(options: ThinClientOptions) {
     this.memory = options.memory;
@@ -62,6 +89,8 @@ export class ThinClient {
       this.chain.use(mw);
     }
     this.graphTracking = options.graphTracking;
+    this.samplingAdvisor = options.samplingAdvisor;
+    this.onSamplingRecommendation = options.onSamplingRecommendation;
   }
 
   /**
@@ -128,6 +157,14 @@ export class ThinClient {
       }
 
       record(result.ok, result.error, call.output);
+
+      if (this.samplingAdvisor) {
+        const rec = this.samplingAdvisor.advise(toolName, serverName);
+        if (rec && this.onSamplingRecommendation) {
+          await this.onSamplingRecommendation(rec, { toolName, serverName });
+        }
+      }
+
       return { decision, executed: true, output: call.output };
     };
 

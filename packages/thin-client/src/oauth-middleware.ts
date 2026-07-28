@@ -199,8 +199,8 @@ export class OAuthMiddleware implements Middleware {
         throw new Error(`Token refresh failed: ${response.status} ${response.statusText}`);
       }
 
-      const data: Record<string, unknown> = await response.json();
-      
+      const data = (await response.json()) as Record<string, unknown>;
+
       const newToken: OAuthToken = {
         accessToken: data.access_token as string,
         refreshToken: (data.refresh_token as string) ?? token.refreshToken,
@@ -262,7 +262,7 @@ export class OAuthMiddleware implements Middleware {
       throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
     }
 
-    const data: Record<string, unknown> = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     const token: OAuthToken = {
       accessToken: data.access_token as string,

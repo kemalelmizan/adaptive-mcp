@@ -119,7 +119,7 @@ export interface Annotation {
   metadata?: Record<string, unknown>;
 }
 
-export type RecommendationType = "model" | "approval" | "workflow" | "routing";
+export type RecommendationType = "model" | "approval" | "workflow" | "routing" | "sampling";
 
 /**
  * A suggested adaptation derived from accumulated knowledge.
@@ -132,6 +132,25 @@ export interface Recommendation {
   rationale: string;
   confidence: number;
   generatedAt: string;
+}
+
+/**
+ * Payload shape for `Recommendation.type === "sampling"`: suggested LLM
+ * sampling parameters for the *next* generation turn involving this tool.
+ * All fields optional — an advisor only emits the parameters it has an
+ * opinion about; a host applying this should treat an absent field as "no
+ * change from your own default," never as "set to undefined/null."
+ *
+ * Advisory only: nothing in this repo makes an LLM completion call, so this
+ * payload has no effect unless a host reads it and applies it to its own
+ * request.
+ */
+export interface SamplingRecommendationPayload {
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  presencePenalty?: number;
+  repetitionPenalty?: number;
 }
 
 /**
