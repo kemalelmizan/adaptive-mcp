@@ -865,23 +865,41 @@ until 8d telemetry has accumulated.**
 
 ### 13d. Code gaps to close (prerequisites, maps 1:1 to ROADMAP Phase 8)
 
-1. Rename `SamplingAdvisor` → `DecodingAdvisor`; change its output from raw
-   `SamplingRecommendationPayload` to `DecodingProfile` (ROADMAP 8a).
-2. New `ModelCapabilities` type + `DecodingResolver.resolve()` with at least
-   two backend tables from the start (ROADMAP 8b).
-3. New `DecodingRecommendation` wrapper type; `@deprecated` tag on
-   `SamplingRecommendationPayload` (ROADMAP 8c).
-4. Structured `reasons[]` trace through the advisor → resolver hand-off
-   (ROADMAP 8f).
-5. Optional `decoding` field on `ToolExecutionEvent`, recording *resolved*
+1. [x] Rename `SamplingAdvisor` → `DecodingAdvisor`; change its output from raw
+   `SamplingRecommendationPayload` to `DecodingProfile` (ROADMAP 8a). Landed
+   as a same-day addition alongside `SamplingAdvisor` (kept, deprecated) —
+   `packages/routing/src/decoding-advisor.ts`.
+2. [x] New `ModelCapabilities` type + `DecodingResolver.resolve()` with at least
+   two backend tables from the start (ROADMAP 8b). Shipped with three
+   (`OPENAI_CAPABILITIES`/`LLAMA_CPP_CAPABILITIES`/`VLLM_CAPABILITIES`) —
+   `packages/routing/src/decoding-resolver.ts`.
+3. [x] New `DecodingRecommendation` wrapper type; `@deprecated` tag on
+   `SamplingRecommendationPayload` (ROADMAP 8c). One correction found during
+   implementation: `resolved` uses a new `ResolvedDecodingSettings` type, not
+   `SamplingRecommendationPayload` as sketched in 13b's snippet above — the
+   deprecated type lacks `minP`/`frequencyPenalty`, which the resolver needs
+   for non-OpenAI-style backends. `ResolvedDecodingSettings` is a strict
+   superset (same field names), so this doesn't change D5's reasoning, just
+   the exact type used.
+4. [x] Structured `reasons[]` trace through the advisor → resolver hand-off
+   (ROADMAP 8f). Shipped as the `reasons: string[]` array only (no separate
+   `trace` object) — `toDecodingRecommendation()` in
+   `packages/routing/src/decoding-resolver.ts` composes it from
+   `Recommendation.rationale.split("; ")`.
+5. [ ] Optional `decoding` field on `ToolExecutionEvent`, recording *resolved*
    values + `resolverVersion` so past decisions stay reproducible after
-   resolver tables change (ROADMAP 8d).
-6. Decoding analyzer as a new, pure, computed-on-read pass — needs #5 to have
-   accumulated real data first (ROADMAP 8e).
+   resolver tables change (ROADMAP 8d). Not started.
+6. [ ] Decoding analyzer as a new, pure, computed-on-read pass — needs #5 to have
+   accumulated real data first (ROADMAP 8e). Not started.
 
-**Status:** `open` / planned. D1-D8 above are `decided` (this conversation);
-implementation is unscheduled beyond the ROADMAP Phase 8 entry. Revisit this
-section if any D-decision turns out wrong once 8a/8b are actually built.
+**Status:** `decided` for D1-D8; **1-4 done (2026-07-28)**, 5-6 `open` / planned
+— blocked on #4 first accumulating real usage, same shape as §6's stabilization
+gate. Not wired into `ThinClient`/`tools-metadata.yaml` yet — 8a-8c/8f shipped
+as standalone types + computation classes only (`@adaptivemcp/routing`),
+consistent with how the ROADMAP items themselves are scoped. Tests:
+`packages/routing/src/decoding-advisor.test.ts`,
+`decoding-resolver.test.ts`. Demo: `examples/src/scenarios/decoding-policy.ts`
+(`pnpm --filter @adaptivemcp/examples scenario:decoding-policy`).
 
 ## 5. Raw notes (kept from earlier)
 

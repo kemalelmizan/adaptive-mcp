@@ -17,3 +17,5 @@ export { OAuthMiddleware, InMemoryOAuthTokenStore, createOAuthMiddleware } from 
 export type { OAuthClientConfig, OAuthToken, OAuthTokenStore } from "./oauth-middleware.js";
 export { SamplingAdvisor } from "@adaptivemcp/routing";
 export type { SamplingAdvisorOptions, SamplingThresholds } from "@adaptivemcp/routing";
+export { DecodingAdvisor, DecodingResolver, toDecodingRecommendation, DECODING_RESOLVER_VERSION, OPENAI_CAPABILITIES, LLAMA_CPP_CAPABILITIES, VLLM_CAPABILITIES } from "@adaptivemcp/routing";
+export type { DecodingAdvisorOptions, DecodingThresholds, DecodingProfileId } from "@adaptivemcp/routing";

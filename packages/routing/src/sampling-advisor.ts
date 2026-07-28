@@ -22,6 +22,11 @@ export interface SamplingAdvisorOptions {
  * Deliberately advisory-only: this class never touches an LLM. It only writes
  * a `Recommendation` a host can read (directly, via the YAML view, or via
  * `ThinClient`'s `onSamplingRecommendation` hook) and apply itself.
+ *
+ * @deprecated Superseded by `DecodingAdvisor` (Phase 8, see docs/ROADMAP.md
+ * and docs/doubts.md §13 D1/D5). Kept working — a shipped public export
+ * shouldn't break existing consumers for a rename — but new code should use
+ * `DecodingAdvisor` + `DecodingResolver` instead.
  */
 export class SamplingAdvisor {
   private memory: Store;

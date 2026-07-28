@@ -1,0 +1,74 @@
+version: 0.1.0
+etag: cb13cd2911615b5f0e22330c071b1bc9b136f92d
+generated_at: 2026-07-28T04:38:29.989Z
+tools:
+  - name: deploy_service
+    server: platform
+    annotation: {}
+    insights:
+      observed_failure_rate:
+        value: 0.225
+        confidence: 0.7
+        source: evaluation
+      avg_cost_per_invocation:
+        value: 0.0021000000000000003
+        confidence: 0.7
+        source: telemetry
+      avg_duration_ms_baseline:
+        value: 504.075
+        confidence: 0.7
+        source: telemetry
+      avg_output_tokens:
+        value: 0
+        confidence: 0.7
+        source: telemetry
+      avg_duration_ms:
+        value: 504
+        confidence: 0.7
+        source: telemetry
+    recommendations:
+      - type: decoding
+        payload:
+          id: deterministic
+        rationale: 'intent baseline: creative; high observed failure rate (0.23) overrides the baseline toward deterministic'
+    stats:
+      invocations: 40
+      failures: 9
+      failure_rate: 0.225
+      avg_duration_ms: 504.075
+      total_cost: 0.08400000000000002
+      last_observed_at: 2026-07-28T04:38:29.987Z
+    updated_at: 2026-07-28T04:38:29.988Z
+  - name: search_customer
+    server: crm
+    annotation: {}
+    insights:
+      avg_cost_per_invocation:
+        value: 0.0003
+        confidence: 0.7
+        source: telemetry
+      avg_duration_ms_baseline:
+        value: 211.6
+        confidence: 0.7
+        source: telemetry
+      avg_output_tokens:
+        value: 0
+        confidence: 0.7
+        source: telemetry
+      avg_duration_ms:
+        value: 212
+        confidence: 0.7
+        source: telemetry
+    recommendations:
+      - type: decoding
+        payload:
+          id: creative
+        rationale: 'intent baseline: creative'
+    stats:
+      invocations: 40
+      failures: 0
+      failure_rate: 0
+      avg_duration_ms: 211.6
+      total_cost: 0.011999999999999999
+      last_observed_at: 2026-07-28T04:38:29.973Z
+    updated_at: 2026-07-28T04:38:29.988Z

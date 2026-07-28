@@ -483,10 +483,10 @@ future effort — not an implicit part of 8a.
 
 | # | Item | Level | Risk | Effort | Payoff |
 | --- | --- | --- | --- | --- | --- |
-| 8a | `DecodingAdvisor` replaces `SamplingAdvisor`; emits a symbolic `DecodingProfile`, not numbers | 1 | Low — same failure-rate heuristic, new output shape | Low — rename + payload change | Medium — unblocks 8b; no user-visible behavior change yet |
-| 8b | `DecodingResolver`: static, table-driven `(profile, ModelCapabilities) -> ResolvedDecodingSettings` | 1 | Low — pure lookup logic, no learning | Low/Medium — new `ModelCapabilities` type + per-backend tables | High — the actual backend-agnostic payoff |
-| 8c | `DecodingRecommendation` wrapper (`profile`, `resolved`, `resolverVersion`, `confidence`, `reasons[]`); deprecate (don't remove) `SamplingRecommendationPayload` | 1 | Medium — touches a payload shape external middleware may already depend on | Low/Medium — additive type + `@deprecated` tag | High — confidence/reasons let a host decide when to trust an override |
-| 8f | Structured decision trace (intent → base profile → telemetry adjustment → resolved params → resolver version) | 1 | Low — presentational, no new data beyond 8a-8c | Low/Medium — richer `reasons[]`, or a trace object if that proves insufficient | Medium/High — the explainability feature that differentiates this from "middleware silently changed your temperature" |
+| 8a | ✅ done — `DecodingAdvisor` replaces `SamplingAdvisor`; emits a symbolic `DecodingProfile`, not numbers | 1 | Low — same failure-rate heuristic, new output shape | Low — rename + payload change | Medium — unblocks 8b; no user-visible behavior change yet |
+| 8b | ✅ done — `DecodingResolver`: static, table-driven `(profile, ModelCapabilities) -> ResolvedDecodingSettings` | 1 | Low — pure lookup logic, no learning | Low/Medium — new `ModelCapabilities` type + per-backend tables | High — the actual backend-agnostic payoff |
+| 8c | ✅ done — `DecodingRecommendation` wrapper (`profile`, `resolved`, `resolverVersion`, `confidence`, `reasons[]`); deprecate (don't remove) `SamplingRecommendationPayload` | 1 | Medium — touches a payload shape external middleware may already depend on | Low/Medium — additive type + `@deprecated` tag | High — confidence/reasons let a host decide when to trust an override |
+| 8f | ✅ done — Structured decision trace (intent → base profile → telemetry adjustment → resolved params → resolver version) | 1 | Low — presentational, no new data beyond 8a-8c | Low/Medium — richer `reasons[]`, or a trace object if that proves insufficient | Medium/High — the explainability feature that differentiates this from "middleware silently changed your temperature" |
 | 8d | Extend `ToolExecutionEvent` with optional `decoding: {profile, resolverVersion, resolved}` | 2 | Medium — schema addition (additive/optional, no migration) | Low — mirrors existing optional fields (`model`, `metadata`) | Medium — enables 8e; makes past decisions reproducible even after resolver tables change |
 | 8e | Decoding analyzer: cross-execution report grouped by (tool, profile, model) — retry rate, latency, suggested profile | 3 | Medium/High — first real analysis pass on brand-new data; needs 8d to have accumulated real telemetry first | Medium — mirrors `GraphAnalyzer`'s pure, computed-on-read shape | High — the "evidence, not auto-tuning" story |
 
@@ -495,7 +495,12 @@ together (Level 1, no telemetry schema change); 8d (Level 2) unlocks 8e
 (Level 3), which needs real accumulated data to be meaningful and is
 naturally last.
 
-### 8a. `DecodingAdvisor` (replaces `SamplingAdvisor`)
+**8a/8b/8c/8f shipped 2026-07-28** (Level 1, all together, per the dependency
+note above). `SamplingAdvisor` and `SamplingRecommendationPayload` were kept
+alongside (deprecated, not removed) exactly as decided — nothing that shipped
+on 2026-07-28 (the v0 interim) was broken. 8d/8e remain unbuilt.
+
+### 8a. `DecodingAdvisor` (replaces `SamplingAdvisor`) — ✅ done
 
 - Rename `packages/routing/src/sampling-advisor.ts` → `decoding-advisor.ts`
   (`SamplingAdvisor` → `DecodingAdvisor`). Keeps the same `minInvocations`-gated
@@ -511,8 +516,12 @@ naturally last.
   sampling) and must not get lost when intent is introduced.
 - New `RecommendationType` member `"decoding"` (keep `"sampling"` too, for one
   release — see 8c).
+- **Shipped as designed**, with one refinement: a moderate failure rate also
+  tempers a `creative` baseline down to `balanced` (not just the high-failure
+  → `deterministic` override), so there's a two-tier response instead of an
+  all-or-nothing one. Tests: `packages/routing/src/decoding-advisor.test.ts`.
 
-### 8b. `DecodingResolver`
+### 8b. `DecodingResolver` — ✅ done
 
 - New `ModelCapabilities` type — which sampler knobs a given backend/model
   actually exposes: `{ supports: { temperature?, topP?, topK?, minP?,
@@ -526,13 +535,26 @@ naturally last.
   `topK`/`minP`) so the fallback logic is exercised by more than one shape from
   the start, instead of being designed against a single backend and guessed
   for the rest.
+- **Shipped as designed** (`packages/routing/src/decoding-resolver.ts`) with
+  three capability presets (`OPENAI_CAPABILITIES`, `LLAMA_CPP_CAPABILITIES`,
+  `VLLM_CAPABILITIES`) and a versioned `DECODING_RESOLVER_VERSION` constant.
+  The "fallback rule" is deliberately just "drop knobs the backend doesn't
+  support" — no cross-knob approximation (`minP` is never substituted for
+  `topP`; they aren't equivalent), tested explicitly in
+  `packages/routing/src/decoding-resolver.test.ts`.
 
-### 8c. `DecodingRecommendation` + deprecating `SamplingRecommendationPayload`
+### 8c. `DecodingRecommendation` + deprecating `SamplingRecommendationPayload` — ✅ done
 
 - `DecodingRecommendation { profile: DecodingProfile; resolved:
-  SamplingRecommendationPayload; resolverVersion: string; confidence: number;
+  ResolvedDecodingSettings; resolverVersion: string; confidence: number;
   reasons: string[] }` — what `DecodingAdvisor` + `DecodingResolver` jointly
-  produce, replacing the bare payload as the unit a host consumes.
+  produce, replacing the bare payload as the unit a host consumes. **Note:**
+  `resolved` uses the new `ResolvedDecodingSettings` type (`packages/spec/src/
+  types.ts`), not `SamplingRecommendationPayload` as originally sketched in
+  doubts.md §13 — the deprecated type is missing `minP`/`frequencyPenalty`,
+  which the resolver needs to actually emit for non-OpenAI-style backends.
+  `ResolvedDecodingSettings` is a strict superset with the same field names,
+  so nothing that read `temperature`/`topP` off the old shape breaks.
 - **Deprecate, don't migrate** `SamplingRecommendationPayload`
   (`packages/spec/src/types.ts`): mark it `@deprecated` in its doc comment,
   keep it exported and working as-is. It's already a shipped public shape
@@ -544,11 +566,17 @@ naturally last.
   of the advisor's word being final — consistent with the "advisory only,
   never enforced" precedent everywhere else in this codebase (`Router`'s model
   recommendations, the sampling hook itself).
+- **Shipped as designed**, plus a small composer function,
+  `toDecodingRecommendation(rec, resolver, capabilities)`
+  (`packages/routing/src/decoding-resolver.ts`), since `DecodingAdvisor` and
+  `DecodingResolver` deliberately don't know about each other (D1) — something
+  has to combine their outputs into the full `DecodingRecommendation`, and it
+  isn't either class's job.
 
 ### 8d. Extend telemetry with `decoding`
 
 - Add optional `decoding?: { profile: DecodingProfile["id"]; resolverVersion:
-  string; resolved: SamplingRecommendationPayload }` to `ToolExecutionEvent`
+  string; resolved: ResolvedDecodingSettings }` to `ToolExecutionEvent`
   (`packages/spec/src/types.ts`) — additive, no migration, same pattern as the
   existing optional `model`/`metadata` fields.
 - Recording the *resolved* values (not just the profile id) is what keeps old
@@ -571,7 +599,7 @@ naturally last.
 - Needs real accumulated 8d telemetry to be meaningful — naturally the last
   item in this phase.
 
-### 8f. Structured decision trace
+### 8f. Structured decision trace — ✅ done
 
 - Extend the "why" from a single `rationale: string` (today's shape, e.g.
   `SamplingAdvisor`'s `"high observed failure rate (0.20) — lower
@@ -582,6 +610,14 @@ naturally last.
   dedicated `trace` object if that proves insufficient for a real UI — avoid
   building a bespoke trace schema speculatively before there's a consumer that
   needs it.
+- **Shipped as the `reasons[]` array only** (no separate `trace` object yet,
+  per the "start simple" note above): `DecodingAdvisor` records each
+  composition step (`"intent baseline: X"`, then an override/temper reason if
+  telemetry changed it) as a separate string, and
+  `toDecodingRecommendation`/`Recommendation.rationale.split("; ")` turns that
+  back into `DecodingRecommendation.reasons`. See
+  `examples/src/scenarios/decoding-policy.ts` for the full trace printed
+  end-to-end across two backends.
 
 ### Deliberately not scheduled: `ExecutionPolicy` generalization
 

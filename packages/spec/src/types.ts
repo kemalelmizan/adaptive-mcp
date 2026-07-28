@@ -119,7 +119,7 @@ export interface Annotation {
   metadata?: Record<string, unknown>;
 }
 
-export type RecommendationType = "model" | "approval" | "workflow" | "routing" | "sampling";
+export type RecommendationType = "model" | "approval" | "workflow" | "routing" | "sampling" | "decoding";
 
 /**
  * A suggested adaptation derived from accumulated knowledge.
@@ -144,6 +144,12 @@ export interface Recommendation {
  * Advisory only: nothing in this repo makes an LLM completion call, so this
  * payload has no effect unless a host reads it and applies it to its own
  * request.
+ *
+ * @deprecated Superseded by `DecodingProfile` + `DecodingResolver` (Phase 8,
+ * see docs/ROADMAP.md and docs/doubts.md §13 D5). Kept exported and working —
+ * a shipped public shape shouldn't break existing consumers for a rename —
+ * but new code should produce/consume `DecodingRecommendation` instead. Will
+ * be removed at the next `SPEC_VERSION` major bump.
  */
 export interface SamplingRecommendationPayload {
   temperature?: number;
@@ -151,6 +157,69 @@ export interface SamplingRecommendationPayload {
   topK?: number;
   presencePenalty?: number;
   repetitionPenalty?: number;
+}
+
+/**
+ * A symbolic, backend-agnostic decoding intent. `DecodingAdvisor` emits this
+ * instead of raw sampling numbers — nothing backend-specific belongs here.
+ * `DecodingResolver` is the only thing that translates it into concrete
+ * knobs for a specific backend. See docs/doubts.md §13 D1.
+ */
+export interface DecodingProfile {
+  id: "deterministic" | "balanced" | "creative";
+}
+
+/**
+ * Which decoding knobs a specific model/inference backend actually exposes.
+ * `DecodingResolver` uses this to translate a `DecodingProfile` into
+ * `ResolvedDecodingSettings`, dropping (never approximating) knobs a backend
+ * doesn't support — e.g. `minP` and `topP` aren't equivalent, so one is never
+ * substituted for the other.
+ */
+export interface ModelCapabilities {
+  supports: {
+    temperature?: boolean;
+    topP?: boolean;
+    topK?: boolean;
+    minP?: boolean;
+    presencePenalty?: boolean;
+    repetitionPenalty?: boolean;
+    frequencyPenalty?: boolean;
+  };
+}
+
+/**
+ * Concrete, backend-specific decoding parameters produced by a
+ * `DecodingResolver`. Superset of the deprecated `SamplingRecommendationPayload`
+ * (adds `minP`/`frequencyPenalty`) — all fields optional, absent means "no
+ * opinion," never "set to null."
+ */
+export interface ResolvedDecodingSettings {
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  minP?: number;
+  presencePenalty?: number;
+  repetitionPenalty?: number;
+  frequencyPenalty?: number;
+}
+
+/**
+ * What `DecodingAdvisor` + `DecodingResolver` jointly produce: a suggested
+ * decoding profile, its concrete resolved settings for a specific backend,
+ * the resolver version that produced them (so past decisions stay
+ * reproducible after the resolver's tables change), and enough evidence
+ * (`confidence`/`reasons`) for a host to decide whether to trust it.
+ *
+ * Advisory only, same as `SamplingRecommendationPayload` — nothing here is
+ * auto-applied; a host reads this and chooses whether to act on it.
+ */
+export interface DecodingRecommendation {
+  profile: DecodingProfile;
+  resolved: ResolvedDecodingSettings;
+  resolverVersion: string;
+  confidence: number;
+  reasons: string[];
 }
 
 /**

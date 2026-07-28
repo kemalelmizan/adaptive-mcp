@@ -21,7 +21,8 @@
     "scenario:middleware": "node dist/scenarios/middleware.js",
     "scenario:cost-optimization": "node dist/scenarios/cost-optimization.js",
     "scenario:debugging-deployment": "node dist/scenarios/debugging-deployment.js",
-    "scenario:sampling-recommendations": "node dist/scenarios/sampling-recommendations.js"
+    "scenario:sampling-recommendations": "node dist/scenarios/sampling-recommendations.js",
+    "scenario:decoding-policy": "node dist/scenarios/decoding-policy.js"
   },
   "dependencies": {
     "@adaptivemcp/spec": "workspace:*",
