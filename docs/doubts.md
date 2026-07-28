@@ -688,6 +688,201 @@ export interface Compressor {
 **Status:** `open` / planned for next milestone. Decisions D1–D6 need user
 confirmation (recommendations noted above). Implementation blocked on D1–D6.
 
+## 13. Decoding Policy (Phase 8) — design conversation (2026-07-28)
+
+**Goal:** generalize `SamplingAdvisor`'s "failure rate → raw sampling numbers"
+heuristic into an intent-aware, backend-agnostic decoding policy: an advisor
+emits a symbolic profile, a separate resolver translates that profile into
+whatever knobs a specific backend actually exposes. Full item breakdown lives
+in `docs/ROADMAP.md` Phase 8 (8a-8f); this section is the doubts/decisions
+record for how that phase's shape was chosen, mirroring §12e's format.
+
+### 13a. Current state (why this is needed)
+
+- `SamplingAdvisor` (`packages/routing/src/sampling-advisor.ts`, shipped
+  2026-07-28) computes `SamplingRecommendationPayload` (`temperature`/`topP`)
+  directly from `ToolStats.failureRate` — no notion of backend capabilities,
+  no notion of caller intent, numbers hardcoded per threshold tier.
+- `ThinClient` never makes an LLM call itself (confirmed while scoping this —
+  no LLM SDK anywhere in this repo), so delivery is necessarily advisory: a
+  host that owns both `ThinClient` and its own completion call reads
+  `onSamplingRecommendation`'s payload and applies it, or doesn't.
+- The raw-numbers shape doesn't generalize: a request for "be more
+  deterministic" means different concrete knobs on different backends
+  (`top_p` on one, `min_p` on another, neither on a third). Baking specific
+  numbers into the advisor couples a backend-agnostic signal (observed
+  reliability) to backend-specific mechanics.
+
+### 13b. Chosen design
+
+Two-stage split, both stages backend-agnostic *except* the resolver, which is
+where all backend-specific knowledge concentrates:
+
+```ts
+interface DecodingProfile {
+  id: "deterministic" | "balanced" | "creative";
+}
+
+interface ModelCapabilities {
+  supports: {
+    temperature?: boolean;
+    topP?: boolean;
+    topK?: boolean;
+    minP?: boolean;
+    presencePenalty?: boolean;
+    repetitionPenalty?: boolean;
+    frequencyPenalty?: boolean;
+  };
+}
+
+interface DecodingResolver {
+  resolve(profile: DecodingProfile, capabilities: ModelCapabilities): ResolvedDecodingSettings;
+}
+
+interface DecodingRecommendation {
+  profile: DecodingProfile;
+  resolved: SamplingRecommendationPayload; // @deprecated type, reused as the leaf shape — see D5
+  resolverVersion: string;
+  confidence: number;
+  reasons: string[];
+}
+```
+
+`DecodingAdvisor` (renamed from `SamplingAdvisor`) owns profile *selection*
+(intent baseline + telemetry adjustment); `DecodingResolver` owns profile
+*translation* (static tables, no telemetry access, no learning). See D1/D2/D4
+below for why they're split this way and D6 for `confidence`/`reasons`.
+
+### 13c. Open decisions + pros/cons (2026-07-28)
+
+**D1 — Symbolic profile vs. raw params emitted directly** → **decided: symbolic
+profile + separate resolver.**
+- *Option A: advisor emits raw params directly (today's v0 `SamplingAdvisor`).*
+  ✅ one hop, simplest to ship (already shipped); ❌ backend-specific knowledge
+  leaks into the telemetry/intent layer — doesn't generalize once a second
+  backend with different sampler knobs (e.g. `min_p` instead of `top_p`) shows
+  up.
+- *Option B (chosen): advisor emits `DecodingProfile`; `DecodingResolver`
+  translates `(profile, capabilities) → ResolvedDecodingSettings`.* ✅ advisor
+  stays backend-agnostic, translation is isolated, swappable, and table-driven;
+  ❌ two hops instead of one, more moving pieces for a v1.
+
+**D2 — Where telemetry plugs into the pipeline** → **decided: telemetry
+adjusts the intent-supplied baseline, it doesn't replace or get replaced by
+it.**
+- *Option A: intent alone determines the profile; telemetry is reporting-only
+  (see 13c D8's analyzer).* ❌ loses the exact failure-rate-driven adjustment
+  that motivated `SamplingAdvisor` in the first place — regresses behavior
+  that already shipped.
+- *Option B (chosen): observed per-tool failure rate can pull the *effective*
+  profile toward `deterministic` regardless of the caller-supplied intent
+  baseline.* ✅ preserves the original value prop, composes rather than
+  discards a working signal; ❌ needs an explicit composition rule (baseline +
+  override, not just "vote") — left as an `DecodingAdvisor` implementation
+  detail, not further specified here.
+
+**D3 — Automatic intent classification vs. explicit caller-supplied hint** →
+**decided: explicit hint only, no classifier.**
+- *Option A: classify intent automatically from free text.* ❌ would be the
+  first ML/statistics dependency anywhere in this codebase (Phase 7 explicitly
+  notes "this codebase has no ML/statistics dependencies anywhere") — adds an
+  unvalidated new failure mode (misclassification) with nothing yet in place
+  to catch it.
+- *Option B (chosen): intent is a caller-supplied hint/parameter (e.g. host
+  passes `"architecture review"` → `balanced` explicitly).* ✅ zero new
+  dependencies, deterministic, trivially testable; ❌ pushes a small UX burden
+  onto the caller to supply intent, rather than inferring it for free.
+
+**D4 — Does the resolver learn, or stay static?** → **decided: resolver never
+learns; telemetry only ever feeds profile *selection* (the advisor), never
+profile *translation* (the resolver).**
+- *Option A: let the resolver's own per-backend tables adapt from observed
+  telemetry (e.g. auto-tune what "balanced" maps to on llama.cpp).* ❌
+  conflates two different kinds of correctness — deterministic backend-
+  capability facts vs. probabilistic behavior evidence — and makes resolver
+  output non-reproducible without extra bookkeeping.
+- *Option B (chosen): resolver stays pure/static/table-driven and versioned
+  (`resolverVersion`); all learning happens one layer up, in *which* profile
+  gets selected, never in *how* a profile resolves to numbers.* ✅ resolver
+  stays trivially testable and outputs are reproducible given a version; ❌ a
+  wrong per-backend mapping requires a manual table edit + version bump, not
+  an automatic correction.
+
+**D5 — Migrate vs. deprecate `SamplingRecommendationPayload`** → **decided:
+deprecate, don't migrate.**
+- *Option A: rename/replace the type in place (breaking change).* ❌ it's
+  already a shipped public shape (2026-07-28) — breaking any external
+  middleware written against it for comparatively little gain, since the
+  shape itself doesn't need to change, just its role.
+- *Option B (chosen): keep `SamplingRecommendationPayload` exported and
+  working, mark it `@deprecated`, nest it as `DecodingRecommendation.resolved`;
+  remove only at the next `SPEC_VERSION` major bump.* ✅ gentler migration,
+  consistent with treating a shipped type as a real public API; ❌ carries a
+  legacy type + a `"sampling"` `RecommendationType` member alongside the new
+  `"decoding"` one for at least one release (see ROADMAP 8c).
+
+**D6 — Binary apply/ignore vs. confidence-gated override** → **decided: add
+`confidence` + `reasons[]`, host owns the threshold policy.**
+- *Option A: `DecodingRecommendation` is binary — a host either applies it
+  wholesale or ignores it, no granularity.* ❌ no way to express "trust this
+  only when the evidence is strong," which is exactly the kind of surprise-
+  avoidance this feature exists to provide (advisory, never enforced — same
+  precedent as `Router`'s model recommendations).
+- *Option B (chosen): `confidence: number` + `reasons: string[]` on
+  `DecodingRecommendation`, so a host can pick its own threshold (e.g. only
+  auto-apply above 0.9).* ✅ predictable, host-controlled; ❌ does not itself
+  define a *default* threshold — left to the host, an explicit non-decision.
+
+**D7 — Generalize into `ExecutionPolicy` now, or defer?** → **decided:
+defer, not scheduled.**
+- *Option A: build a unifying `ExecutionPolicy` (`ContextProfile`,
+  `ToolSelectionProfile`, `RetryProfile`, `TimeoutProfile`, `MemoryProfile`,
+  `CostProfile`) alongside `DecodingProfile` now.* ❌ premature — most of
+  those already exist as independent, working mechanisms (`RetryPolicy`/
+  `Orchestrator` off failure rate, `BudgetPolicy`/`Router` off cost) with no
+  shared-abstraction pain today; there would be exactly one real instance
+  (Decoding) to generalize a shape from.
+- *Option B (chosen): defer `ExecutionPolicy`; revisit only once a second
+  real profile type is actually being built.* ✅ avoids overfitting a shared
+  shape to a single example; ❌ if unification ever happens, it costs a
+  refactor across Decoding + whatever ships second, rather than being
+  designed in from the start.
+
+**D8 — Where the decoding analyzer lives / how it's triggered** → **decided:
+pure computed-on-read report, not a persisted `Recommendation`, deferred
+until 8d telemetry has accumulated.**
+- *Option A: persist the analyzer's suggestion as a `Recommendation` (like
+  `DecodingAdvisor`/`Router` do), so it's automatically visible in
+  `tools-metadata.yaml`.* ❌ conflates a one-off diagnostic report — grouped
+  by (tool, profile, model), not just by tool — with the existing per-tool
+  recommendation model; would need a `Recommendation` schema change to carry
+  a composite key it wasn't designed for.
+- *Option B (chosen): pure, computed-on-read function/class mirroring
+  `GraphAnalyzer`, invoked explicitly by whoever wants the report, not stored.*
+  ✅ no schema strain, matches an existing precedent exactly; ❌ not
+  ambiently surfaced anywhere the way advisor recommendations are — must be
+  explicitly queried.
+
+### 13d. Code gaps to close (prerequisites, maps 1:1 to ROADMAP Phase 8)
+
+1. Rename `SamplingAdvisor` → `DecodingAdvisor`; change its output from raw
+   `SamplingRecommendationPayload` to `DecodingProfile` (ROADMAP 8a).
+2. New `ModelCapabilities` type + `DecodingResolver.resolve()` with at least
+   two backend tables from the start (ROADMAP 8b).
+3. New `DecodingRecommendation` wrapper type; `@deprecated` tag on
+   `SamplingRecommendationPayload` (ROADMAP 8c).
+4. Structured `reasons[]` trace through the advisor → resolver hand-off
+   (ROADMAP 8f).
+5. Optional `decoding` field on `ToolExecutionEvent`, recording *resolved*
+   values + `resolverVersion` so past decisions stay reproducible after
+   resolver tables change (ROADMAP 8d).
+6. Decoding analyzer as a new, pure, computed-on-read pass — needs #5 to have
+   accumulated real data first (ROADMAP 8e).
+
+**Status:** `open` / planned. D1-D8 above are `decided` (this conversation);
+implementation is unscheduled beyond the ROADMAP Phase 8 entry. Revisit this
+section if any D-decision turns out wrong once 8a/8b are actually built.
+
 ## 5. Raw notes (kept from earlier)
 
 - Q: is yaml even good for model

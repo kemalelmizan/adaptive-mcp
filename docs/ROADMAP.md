@@ -212,10 +212,10 @@ list at the end holds items that cannot be scheduled by our own effort at all.
 | --- | --- | --- | --- | --- |
 | 6a | Pattern matching in `ApprovalPolicy` | Low — isolated to `approval`, precedence order unchanged | Low — matcher + tests | Medium — ergonomic, immediate |
 | 6b | Context-cost tracked dimension | Low — additive field, no external dependency | Low — extend fold + threshold insight | Medium — unlocks a recommendation type, but needs a real token/byte source to be useful |
-| 6c | More insight types: cost drift, latency regression, approval friction | Low — additive, same shape as existing insights | Low/Medium — one evaluator pass per insight | Medium — broadens what the YAML surfaces, no new package |
+| 6c | ✅ done — More insight types: cost drift, latency regression, approval friction | Low — additive, same shape as existing insights | Low/Medium — one evaluator pass per insight | Medium — broadens what the YAML surfaces, no new package |
 | 6d | `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Medium — sequence detection is new logic, not a fold-in-place stat | Medium/High — new capability, feeds `ApprovalGate` |
 | 6e | Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Medium — need scenarios simulating hosts that ignore the extension | Medium — confidence/trust, not new capability |
-| 6f | Emit `budget` / `require_approval` in the reference impl | Medium — touches the wire schema tracked for SEP graduation | Medium — extend `ExtensionController` view + `spec` types | High — unblocks the SEP stabilization gate (see Blocked list) |
+| 6f | ✅ done — Emit `budget` / `require_approval` in the reference impl | Medium — touches the wire schema tracked for SEP graduation | Medium — extend `ExtensionController` view + `spec` types | High — unblocks the SEP stabilization gate (see Blocked list) |
 | 6g | Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Medium/High | Medium/High — real multi-server hosts need this |
 | 6h | Client OAuth delegation flow | Medium — credential handling is security-sensitive | Medium/High — the hook point exists (Phase 5); the flow itself doesn't | Medium — unblocks one integration, not the core loop |
 | 6i | Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures, only known from docs, not verified against real code | High — new package, needs real-world validation | High — proves the loop on a real, popular agent instead of only synthetic demos |
@@ -251,6 +251,13 @@ disable it," the thing OpenCode users do by hand today via
 - Pairs naturally with 6c's "cost drift" idea below.
 
 ### 6c. More insight types: cost drift, latency regression, approval friction
+
+**Status update (2026-07-28): already done.** `evaluateRecord()`
+(`packages/evaluation/src/evaluator.ts`, ~lines 321-469) already emits
+`cost_drift`, `avg_cost_per_invocation`, `latency_regression`,
+`avg_duration_ms_baseline`, and `approval_friction` for every tool crossing
+`minInvocations * 2`. This entry was stale (found while scoping Phase 8);
+kept below for history.
 
 Formerly README's "What's next" list (now folded in here so planned work lives
 in one document). Same shape as existing insights (`observed_failure_rate` /
@@ -294,6 +301,13 @@ resources. That claim is currently untested.
   doubts.md §6 (see the Blocked list below).
 
 ### 6f. Emit `budget` / `require_approval` in the reference impl
+
+**Status update (2026-07-28): already done.** `packages/extension/src/view.ts`'s
+`toToolMetadataView()` (~lines 64-77) already promotes `budget`/`require_approval`
+from `routing`/`approval` recommendations into `ToolMetadataView.annotation`.
+This entry was stale (found while scoping Phase 8); kept below for history.
+Whether this actually unblocks the SEP stabilization gate mentioned below is a
+separate question this update doesn't resolve.
 
 Known gap from doubts.md §8 / §11: the reference impl (`@adaptivemcp/extension`)
 does not yet emit the `budget` or `require_approval` fields in the
@@ -440,4 +454,145 @@ not an implemented cross-server aggregation/discovery protocol.
 **Validated by:** the full test suite (146 tests across all packages), all
 four example scenarios, and a real stdio MCP client/server run exercising
 resource pagination and subscribe/notify end-to-end.
+
+## Phase 8: Decoding Policy (intent-aware sampling, backend-agnostic)
+
+Generalizes the model-routing precedent (`@adaptivemcp/routing`'s `Router`,
+Phase 2 — pick *which model* from observed stats) to *how the model decodes*.
+Originated from a 2026-07-28 design conversation about correlating telemetry
+with LLM sampling parameters (temperature/top_p/top_k/presence_penalty/
+repetition_penalty) for a client/harness that owns both `ThinClient` and its
+own completion call.
+
+**Interim v0, shipped 2026-07-28 (now superseded by 8a-8c below):**
+`SamplingAdvisor` (`packages/routing/src/sampling-advisor.ts`) emits a
+`type: "sampling"` `Recommendation` with a raw `SamplingRecommendationPayload`
+(`temperature`/`topP`) computed directly from `ToolStats.failureRate`,
+delivered via `ThinClient`'s `samplingAdvisor`/`onSamplingRecommendation` hook
+(`packages/thin-client/src/loop.ts`) and surfaced in `tools-metadata.yaml`
+(`packages/extension/src/view.ts`). This conflates two concerns Phase 8 splits
+apart: *which behavior is wanted* (backend-agnostic) vs. *which knobs express
+that behavior on a specific backend* (backend-specific) — see 8a/8b.
+
+**Explicit non-goal:** intent (e.g. "architecture review") is a
+**caller-supplied hint**, never automatically classified from free text. This
+codebase has no ML/statistics dependencies anywhere (Phase 7, "descoped
+honestly") — a text classifier for intent would be the first one. Automatic
+intent classification, if ever wanted, is a separate, explicitly-scoped
+future effort — not an implicit part of 8a.
+
+| # | Item | Level | Risk | Effort | Payoff |
+| --- | --- | --- | --- | --- | --- |
+| 8a | `DecodingAdvisor` replaces `SamplingAdvisor`; emits a symbolic `DecodingProfile`, not numbers | 1 | Low — same failure-rate heuristic, new output shape | Low — rename + payload change | Medium — unblocks 8b; no user-visible behavior change yet |
+| 8b | `DecodingResolver`: static, table-driven `(profile, ModelCapabilities) -> ResolvedDecodingSettings` | 1 | Low — pure lookup logic, no learning | Low/Medium — new `ModelCapabilities` type + per-backend tables | High — the actual backend-agnostic payoff |
+| 8c | `DecodingRecommendation` wrapper (`profile`, `resolved`, `resolverVersion`, `confidence`, `reasons[]`); deprecate (don't remove) `SamplingRecommendationPayload` | 1 | Medium — touches a payload shape external middleware may already depend on | Low/Medium — additive type + `@deprecated` tag | High — confidence/reasons let a host decide when to trust an override |
+| 8f | Structured decision trace (intent → base profile → telemetry adjustment → resolved params → resolver version) | 1 | Low — presentational, no new data beyond 8a-8c | Low/Medium — richer `reasons[]`, or a trace object if that proves insufficient | Medium/High — the explainability feature that differentiates this from "middleware silently changed your temperature" |
+| 8d | Extend `ToolExecutionEvent` with optional `decoding: {profile, resolverVersion, resolved}` | 2 | Medium — schema addition (additive/optional, no migration) | Low — mirrors existing optional fields (`model`, `metadata`) | Medium — enables 8e; makes past decisions reproducible even after resolver tables change |
+| 8e | Decoding analyzer: cross-execution report grouped by (tool, profile, model) — retry rate, latency, suggested profile | 3 | Medium/High — first real analysis pass on brand-new data; needs 8d to have accumulated real telemetry first | Medium — mirrors `GraphAnalyzer`'s pure, computed-on-read shape | High — the "evidence, not auto-tuning" story |
+
+Ordered by dependency, not strictly by risk/effort: 8a → 8b → 8c → 8f can ship
+together (Level 1, no telemetry schema change); 8d (Level 2) unlocks 8e
+(Level 3), which needs real accumulated data to be meaningful and is
+naturally last.
+
+### 8a. `DecodingAdvisor` (replaces `SamplingAdvisor`)
+
+- Rename `packages/routing/src/sampling-advisor.ts` → `decoding-advisor.ts`
+  (`SamplingAdvisor` → `DecodingAdvisor`). Keeps the same `minInvocations`-gated
+  shape as `Router`/`SamplingAdvisor` today.
+- `advise()`/`adviseAll()` compute a `DecodingProfile` (`{ id: "deterministic" |
+  "balanced" | "creative" }`) instead of raw `{temperature, topP}` — nothing
+  backend-specific belongs in this package.
+- **Composition, not replacement:** telemetry adjusts a profile, it doesn't
+  originate one. An explicit caller-supplied `intentProfile` (e.g. "architecture
+  review" → `balanced`) is the baseline; observed per-tool failure rate can pull
+  the *effective* profile toward `deterministic` regardless of that baseline.
+  This is the piece the v0 heuristic already had (failure rate → stricter
+  sampling) and must not get lost when intent is introduced.
+- New `RecommendationType` member `"decoding"` (keep `"sampling"` too, for one
+  release — see 8c).
+
+### 8b. `DecodingResolver`
+
+- New `ModelCapabilities` type — which sampler knobs a given backend/model
+  actually exposes: `{ supports: { temperature?, topP?, topK?, minP?,
+  presencePenalty?, repetitionPenalty?, frequencyPenalty? } }`.
+- New `DecodingResolver.resolve(profile: DecodingProfile, capabilities:
+  ModelCapabilities): ResolvedDecodingSettings`. Deliberately dumb: fallback
+  rules, backend quirks, default values, table-driven — no learning, no
+  telemetry access at all.
+- Ship at least two backend tables at once (e.g. an OpenAI-style backend with
+  only `temperature`/`topP`, and a llama.cpp-style backend with `temperature`/
+  `topK`/`minP`) so the fallback logic is exercised by more than one shape from
+  the start, instead of being designed against a single backend and guessed
+  for the rest.
+
+### 8c. `DecodingRecommendation` + deprecating `SamplingRecommendationPayload`
+
+- `DecodingRecommendation { profile: DecodingProfile; resolved:
+  SamplingRecommendationPayload; resolverVersion: string; confidence: number;
+  reasons: string[] }` — what `DecodingAdvisor` + `DecodingResolver` jointly
+  produce, replacing the bare payload as the unit a host consumes.
+- **Deprecate, don't migrate** `SamplingRecommendationPayload`
+  (`packages/spec/src/types.ts`): mark it `@deprecated` in its doc comment,
+  keep it exported and working as-is. It's already a shipped public shape
+  (2026-07-28) — breaking published middleware that already depends on it for
+  a rename gains little. Remove only at the next major version (`SPEC_VERSION`
+  bump).
+- `confidence`/`reasons[]` let a host apply an explicit override policy (e.g.
+  "only auto-apply above 0.9, otherwise leave the user's config alone") instead
+  of the advisor's word being final — consistent with the "advisory only,
+  never enforced" precedent everywhere else in this codebase (`Router`'s model
+  recommendations, the sampling hook itself).
+
+### 8d. Extend telemetry with `decoding`
+
+- Add optional `decoding?: { profile: DecodingProfile["id"]; resolverVersion:
+  string; resolved: SamplingRecommendationPayload }` to `ToolExecutionEvent`
+  (`packages/spec/src/types.ts`) — additive, no migration, same pattern as the
+  existing optional `model`/`metadata` fields.
+- Recording the *resolved* values (not just the profile id) is what keeps old
+  events reproducible after the resolver's tables change — the core reason
+  this is a distinct field rather than reusing `metadata`.
+- `resolverVersion` needs an actual version string to bump — simplest is a
+  hardcoded constant alongside the resolver's static tables (mirrors
+  `SPEC_VERSION`'s pattern in `packages/spec/src/version.ts`), bumped by hand
+  whenever 8b's tables change.
+
+### 8e. Decoding analyzer
+
+- New pass, likely in `@adaptivemcp/evaluation` or a small new module — reads
+  accumulated `decoding` telemetry across many events for the same
+  (tool, profile, model) tuple, unlike `evaluateRecord()`'s per-tool aggregate.
+- Pure, computed-on-read, like `GraphAnalyzer` — **not** persisted as a
+  `Recommendation`. This is a diagnostic report a developer reads (retry rate /
+  avg latency / avg tokens per grouping, plus a suggested-profile line), never
+  a state written back into a tool's record or auto-applied.
+- Needs real accumulated 8d telemetry to be meaningful — naturally the last
+  item in this phase.
+
+### 8f. Structured decision trace
+
+- Extend the "why" from a single `rationale: string` (today's shape, e.g.
+  `SamplingAdvisor`'s `"high observed failure rate (0.20) — lower
+  temperature/top_p..."`) into a trace with distinct stages: intent's base
+  profile, the telemetry adjustment (if any) and its reason, the resolver's
+  backend + resolved output, and the resolver version.
+- Start with 8c's `reasons: string[]` (already human-readable) and only add a
+  dedicated `trace` object if that proves insufficient for a real UI — avoid
+  building a bespoke trace schema speculatively before there's a consumer that
+  needs it.
+
+### Deliberately not scheduled: `ExecutionPolicy` generalization
+
+Generalizing `DecodingProfile` into a full `ExecutionPolicy` (`ContextProfile`,
+`ToolSelectionProfile`, `RetryProfile`, `TimeoutProfile`, `MemoryProfile`,
+`CostProfile`) was discussed and explicitly deferred (2026-07-28): several of
+these already exist as independent, working mechanisms (`RetryPolicy`/
+`Orchestrator` off failure rate, `BudgetPolicy`/`Router` off cost), each
+already wired into `ThinClient` its own way. Wrapping them in a shared
+abstraction now would buy naming symmetry with no behavior change, before even
+8a-8f exist for decoding alone. Revisit only if/when a second real profile type
+(e.g. `ContextProfile`) is actually being built, so the shared shape is
+inferred from two real cases instead of guessed upfront.
 
