@@ -1,8 +1,6 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
-const root = fileURLToPath(new URL(".", import.meta.url));
-
 // Vite 5.x does not recognize `node:sqlite` as a builtin and tries to resolve it
 // as the bare package `sqlite`. Alias it to a runtime shim that loads the
 // builtin via createRequire (resolved by Node, not Vite's bundler).

@@ -135,7 +135,7 @@ export class ThinClient {
       await this.chain.runBefore(call);
 
       if (this.graphTracking) {
-        await this.graphTracking.beforeCall(call, { store: this.memory, toolName, serverName });
+        await this.graphTracking.beforeCall(call);
       }
 
       const policy = this.retryPolicyFor(toolName, serverName);
@@ -146,13 +146,9 @@ export class ThinClient {
       if (this.graphTracking) {
         const callResult: CallResult = { ok: result.ok, error: result.error };
         if (result.ok) {
-          await this.graphTracking.afterCall(callResult, call, { store: this.memory, toolName, serverName });
+          await this.graphTracking.afterCall(callResult, call);
         } else {
-          await this.graphTracking.onError(new Error(result.error ?? "Unknown error"), call, {
-            store: this.memory,
-            toolName,
-            serverName,
-          });
+          await this.graphTracking.onError(new Error(result.error ?? "Unknown error"));
         }
       }
 

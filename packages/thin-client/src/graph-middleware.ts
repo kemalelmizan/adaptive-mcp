@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Store, ExecutionNode } from "@adaptivemcp/spec";
-import type { Middleware, MiddlewareContext, PlannedCall, CallResult } from "@adaptivemcp/middleware";
+import type { Middleware, PlannedCall, CallResult } from "@adaptivemcp/middleware";
 
 /** Store with graph methods enabled. */
 interface GraphStore extends Store {
@@ -159,6 +159,7 @@ export class GraphTrackingMiddleware implements Middleware {
       childrenIds: [],
       timestamp: new Date().toISOString(),
       status: "started",
+      model,
       metadata: { traceId, spanId, traceparent: formatTraceParent(traceId, spanId) },
     };
 
@@ -187,6 +188,7 @@ export class GraphTrackingMiddleware implements Middleware {
       childrenIds: [],
       timestamp: new Date().toISOString(),
       status: "started",
+      model,
       metadata: {
         traceId,
         spanId,
@@ -249,7 +251,7 @@ export class GraphTrackingMiddleware implements Middleware {
   }
 
   /** Middleware hook: runs before each tool call. */
-  async beforeCall(call: PlannedCall, ctx: MiddlewareContext): Promise<void> {
+  async beforeCall(call: PlannedCall): Promise<void> {
     const { stack, rootNodeId } = this.getContext();
     // If this is the first call in the chain and we don't have a root yet,
     // start the workflow
@@ -262,13 +264,13 @@ export class GraphTrackingMiddleware implements Middleware {
   }
 
   /** Middleware hook: runs after each tool call (success or failure). */
-  async afterCall(result: CallResult, call: PlannedCall, ctx: MiddlewareContext): Promise<void> {
+  async afterCall(result: CallResult, call: PlannedCall): Promise<void> {
     const nodeId = this.getParentId();
     if (!nodeId) return;
 
     if (result.ok) {
       await this.completeNode(nodeId, {
-        durationMs: 0, // Duration would be tracked by the caller
+        durationMs: this.elapsedMs(nodeId),
         output: call.output,
       });
     } else {
@@ -279,13 +281,21 @@ export class GraphTrackingMiddleware implements Middleware {
   }
 
   /** Middleware hook: runs after a thrown execution error. */
-  async onError(err: unknown, call: PlannedCall, ctx: MiddlewareContext): Promise<void> {
+  async onError(err: unknown): Promise<void> {
     const nodeId = this.getParentId();
     if (!nodeId) return;
 
     await this.failNode(nodeId, {
       message: err instanceof Error ? err.message : String(err),
     });
+  }
+
+  /** Wall-clock elapsed time since `nodeId` was started, from its recorded `timestamp`. */
+  private elapsedMs(nodeId: string): number {
+    const node = this.store.getExecutionNode(nodeId);
+    if (!node) return 0;
+    const started = Date.parse(node.timestamp);
+    return Number.isNaN(started) ? 0 : Math.max(0, Date.now() - started);
   }
 }
 

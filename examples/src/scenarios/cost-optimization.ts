@@ -141,6 +141,7 @@ async function runWorkflow(
     serverName: "ci-cd",
     workflowId,
     model: "gpt-5",
+    sessionId,
   });
   parentId = rootId;
 

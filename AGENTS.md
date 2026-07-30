@@ -213,9 +213,9 @@ Package naming:
 Examples:
 
 ```text
-@adaptivemcp/sdk
 @adaptivemcp/spec
 @adaptivemcp/telemetry
+@adaptivemcp/middleware
 ```
 
 Monorepo structure:

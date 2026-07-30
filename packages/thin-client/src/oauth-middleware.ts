@@ -1,5 +1,4 @@
-import type { Store } from "@adaptivemcp/spec";
-import type { Middleware, MiddlewareContext, PlannedCall, CallResult } from "@adaptivemcp/middleware";
+import type { Middleware, PlannedCall, CallResult } from "@adaptivemcp/middleware";
 
 /**
  * OAuth token storage interface.
@@ -88,11 +87,11 @@ export class OAuthMiddleware implements Middleware {
     return serverName ? this.serverRequiresOAuth.has(serverName) : false;
   }
 
-  async init(ctx: MiddlewareContext): Promise<void> {
+  async init(): Promise<void> {
     // No initialization needed
   }
 
-  async beforeCall(call: PlannedCall, ctx: MiddlewareContext): Promise<void> {
+  async beforeCall(call: PlannedCall): Promise<void> {
     const serverName = call.serverName;
     if (!serverName || !this.requiresOAuth(serverName)) {
       return; // No OAuth required for this server
@@ -121,7 +120,7 @@ export class OAuthMiddleware implements Middleware {
     };
   }
 
-  async afterCall(result: CallResult, call: PlannedCall, ctx: MiddlewareContext): Promise<void> {
+  async afterCall(result: CallResult, call: PlannedCall): Promise<void> {
     // Check for 401 responses and attempt token refresh
     if (!result.ok && result.error?.includes("401")) {
       const serverName = call.serverName;
@@ -139,14 +138,14 @@ export class OAuthMiddleware implements Middleware {
     }
   }
 
-  async onError(err: unknown, call: PlannedCall, ctx: MiddlewareContext): Promise<void> {
+  async onError(err: unknown, call: PlannedCall): Promise<void> {
     // Log OAuth errors for debugging
     if (err instanceof Error && err.message.includes("OAUTH")) {
       console.error(`[OAuth] Error for ${call.serverName}:`, err.message);
     }
   }
 
-  contributeView(ctx: MiddlewareContext): unknown {
+  contributeView(): unknown {
     return {
       configuredServers: Array.from(this.clientConfigs.keys()),
       requiredServers: Array.from(this.serverRequiresOAuth),
@@ -155,7 +154,7 @@ export class OAuthMiddleware implements Middleware {
 
   /** Get a valid access token, refreshing if necessary */
   private async getValidToken(serverName: string, config: OAuthClientConfig): Promise<OAuthToken | null> {
-    let token = await this.tokenStore.getToken(serverName);
+    const token = await this.tokenStore.getToken(serverName);
     
     if (!token) {
       return null; // No token stored
@@ -240,6 +239,10 @@ export class OAuthMiddleware implements Middleware {
 
   /** Handle OAuth callback and exchange code for tokens */
   async handleCallback(serverName: string, code: string, state: string): Promise<OAuthToken> {
+    if (!state) {
+      throw new Error("Missing OAuth state parameter");
+    }
+
     const config = this.clientConfigs.get(serverName);
     if (!config) {
       throw new Error(`No OAuth config for server: ${serverName}`);

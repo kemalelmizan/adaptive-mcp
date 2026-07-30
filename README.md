@@ -215,6 +215,9 @@ human-readable projection consumed by out-of-band MCP clients.
 | `@adaptivemcp/orchestration` | `Orchestrator`: retry-policy (`workflow`) recommendations |
 | `@adaptivemcp/approval` | `ApprovalGate`: enforcement (allow / deny / require_confirmation) |
 | `@adaptivemcp/thin-client` | `ThinClient`: client-side execution loop with gate + retry |
+| `@adaptivemcp/graph-analysis` | `GraphAnalyzer`: causal cascade, bottleneck/anti-pattern detection, and forecasting over execution DAGs |
+| `@adaptivemcp/middleware` | `MiddlewareChain`: pluggable hooks (`beforeCall`/`afterCall`/`onError`/`contributeView`) for transform/gate/inject-auth/observe concerns |
+| `@adaptivemcp/mcp-binary` | Wraps an existing CLI binary as an MCP server over stdio — the only sanctioned shell-out layer |
 
 ### Adaptation behaviors
 
@@ -345,7 +348,21 @@ live npm badge.
 | `@adaptivemcp/orchestration` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/orchestration)](https://www.npmjs.com/package/@adaptivemcp/orchestration) | Composition and execution strategies for Adaptive MCP. |
 | `@adaptivemcp/approval` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/approval)](https://www.npmjs.com/package/@adaptivemcp/approval) | Intent, plan, and tool approval boundaries for Adaptive MCP. |
 | `@adaptivemcp/thin-client` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/thin-client)](https://www.npmjs.com/package/@adaptivemcp/thin-client) | Minimal client-side execution loop for Adaptive MCP. |
+| `@adaptivemcp/middleware` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/middleware)](https://www.npmjs.com/package/@adaptivemcp/middleware) | Pluggable middleware chain for Adaptive MCP (Transform I/O, gate, inject-auth, observe). |
+| `@adaptivemcp/mcp-binary` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/mcp-binary)](https://www.npmjs.com/package/@adaptivemcp/mcp-binary) | Generic CLI-binary -> MCP-server stdio wrapper (the only sanctioned shell-out layer). |
 <!-- packages:published:end -->
+
+### Not yet published
+
+- **`@adaptivemcp/graph-analysis`** — fully implemented and tested (`GraphAnalyzer`:
+  causal cascade, anti-pattern detection, workflow forecasting), and already a
+  dependency of `routing`/`evaluation`/`opencode-plugin`, but not yet added to
+  `PUBLISHABLE_PACKAGES`.
+- **`@adaptivemcp/opencode-plugin`** — an experimental adapter mapping
+  [OpenCode](https://opencode.ai)'s hook system onto Adaptive MCP. It is not
+  published, has no test coverage, and has not been validated against a real
+  OpenCode host — treat it as a reference implementation, not a supported
+  integration.
 
 ## How to build, test, and run
 
@@ -393,10 +410,14 @@ adaptive-mcp/
 
 ## Status
 
-All planned packages are implemented and wired into `AdaptiveRuntime`. The
+The core adaptation loop (telemetry → evaluation → memory → extension) plus
+the pluggable `middleware` chain are implemented and wired into
+`AdaptiveRuntime`. `graph-analysis` (execution-graph intelligence) and
+`thin-client` (client-side execution loop + graph tracking) are implemented
+and tested but consumed separately, not through `AdaptiveRuntime` itself. The
 `examples` scenarios validate the full adaptation loop end to end. See
-`docs/ROADMAP.md` for the phased status and `examples/README.md` for the scenario
-walkthrough.
+`docs/ROADMAP.md` for the phased status and `examples/README.md` for the
+scenario walkthrough.
 
 This project was introduced publicly in the talk *"Self-Improving MCP Agents"*
 at the [MCP Dev Summit Seoul 2026](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).

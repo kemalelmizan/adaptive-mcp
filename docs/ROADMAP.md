@@ -109,10 +109,10 @@ stdio server/client example. The YAML view evolves automatically; the human
   capabilities (the `@modelcontextprotocol/sdk` already includes `extensions` in
   its `ServerCapabilities` schema).
 
-> Two follow-ups from this phase are still open and tracked in Phase 6: the
-> reference impl doesn't yet emit `budget`/`require_approval` (6f), and
+> One follow-up from this phase is still open and tracked in Phase 6:
 > graduating the SEP to Final is blocked on an upstream SDK PR (see
-> "Blocked / external dependency" at the end of Phase 6).
+> "Blocked / external dependency" at the end of Phase 6). Emitting
+> `budget`/`require_approval` (6f) is done — see the Phase 6 table.
 
 ## Phase 5: Extensible middleware (complete)
 
@@ -216,10 +216,10 @@ list at the end holds items that cannot be scheduled by our own effort at all.
 | 6d | `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Medium — sequence detection is new logic, not a fold-in-place stat | Medium/High — new capability, feeds `ApprovalGate` |
 | 6e | Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Medium — need scenarios simulating hosts that ignore the extension | Medium — confidence/trust, not new capability |
 | 6f | ✅ done — Emit `budget` / `require_approval` in the reference impl | Medium — touches the wire schema tracked for SEP graduation | Medium — extend `ExtensionController` view + `spec` types | High — unblocks the SEP stabilization gate (see Blocked list) |
-| 6g | Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Medium/High | Medium/High — real multi-server hosts need this |
-| 6h | Client OAuth delegation flow | Medium — credential handling is security-sensitive | Medium/High — the hook point exists (Phase 5); the flow itself doesn't | Medium — unblocks one integration, not the core loop |
-| 6i | Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures, only known from docs, not verified against real code | High — new package, needs real-world validation | High — proves the loop on a real, popular agent instead of only synthetic demos |
-| 6j | Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation`; co-occurrence shape still TBD | High — design pass required before implementation | Medium — research-oriented (AGENTS.md open question), less immediately actionable; **depends on 6i** for real session boundaries |
+| 6g | 🟡 partially done — Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Low remaining — `ExtensionController.aggregateViews()` already implements the composite-key merge; needs tests + a consumer | Medium/High — real multi-server hosts need this |
+| 6h | 🟡 partially done — Client OAuth delegation flow | Medium — credential handling is security-sensitive | Low remaining — `OAuthMiddleware` (`packages/thin-client/src/oauth-middleware.ts`) already implements authorize/callback/refresh/token-storage; needs test coverage and a real-provider validation pass | Medium — unblocks one integration, not the core loop |
+| 6i | 🟡 partially done — Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures, only known from docs, not verified against real code | Low remaining — `@adaptivemcp/opencode-plugin` already exists and maps the hooks described below; still has 0 tests and has never been run against a real OpenCode host | High — proves the loop on a real, popular agent instead of only synthetic demos |
+| 6j | Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation`; co-occurrence shape still TBD | Medium — `sessionId` already exists on `ToolExecutionEvent`/`ExecutionNode` and is threaded through `TelemetryRecorder`; only the co-occurrence evaluation pass itself is unbuilt | Medium — research-oriented (AGENTS.md open question), less immediately actionable; **depends on 6i** for real session boundaries |
 
 ### 6a. Pattern matching in `ApprovalPolicy`
 
@@ -327,12 +327,19 @@ Formerly README's "What's next" list. Today, `ExtensionController` derives one
 `tools-metadata.yaml` per store; there's no notion of merging views **across**
 multiple MCP servers into one aggregate a host could read in one place.
 
-- Design the merge/key-collision rule (recall the `(tool_name, server_name)`
-  composite key already exists specifically because two servers can expose a
-  same-named tool — the aggregation view needs to preserve that distinction,
-  not flatten it).
-- Likely lands as a new method on `ExtensionController` or a small aggregator
-  that composes multiple `Store`s, rather than a new package.
+**Update (2026-07-30):** the merge itself already exists —
+`ExtensionController.aggregateViews(stores, version?)`
+(`packages/extension/src/controller.ts`) composes multiple `Store`s and
+de-duplicates on the `(tool_name, server_name)` composite key, exactly the
+collision rule described below. What's still missing:
+
+- Test coverage — no test file references `aggregateViews` today.
+- A real consumer/example — nothing in `examples/` or the docs calls it, so it
+  hasn't been exercised end to end.
+
+Original design note (still accurate): recall the `(tool_name, server_name)`
+composite key exists specifically because two servers can expose a same-named
+tool — the aggregation view needs to preserve that distinction, not flatten it.
 
 ### 6h. Client OAuth delegation flow
 
@@ -340,11 +347,19 @@ Phase 5 shipped the `beforeCall` credential-injection **hook point** for
 middleware but deliberately deferred the actual OAuth flow ("design the hook
 point now, specify the exact flow later" — doubts.md §12).
 
-- Design and implement the flow itself: token acquisition, refresh, and
-  storage for a middleware that needs to inject credentials into a tool call.
+**Update (2026-07-30):** the flow itself has since been implemented —
+`OAuthMiddleware` (`packages/thin-client/src/oauth-middleware.ts`) covers
+`authorize`/`handleCallback` (with CSRF `state` validation), token refresh, and
+pluggable token storage (`OAuthTokenStore`, with an `InMemoryOAuthTokenStore`
+default). What's still missing:
+
+- Test coverage — no test file references `OAuthMiddleware` today.
+- Validation against a real OAuth provider (only unit-level logic has been
+  reviewed, not an end-to-end authorize/callback/refresh cycle against a live
+  server).
 - Security-sensitive — this is the one item in Phase 6 that touches credential
-  handling directly, hence the elevated risk grade despite reusing an existing
-  hook point.
+  handling directly, hence the elevated risk grade despite the flow now being
+  implemented.
 
 ### 6i. Host adapter: prove the loop on a real harness
 
@@ -354,28 +369,35 @@ shape Adaptive MCP's `@adaptivemcp/middleware` `Middleware` interface mirrors
 (`beforeCall`/`afterCall` ≈ OpenCode's `tool.execute.before`/`tool.execute.after`),
 loaded from `.opencode/plugins/` or an npm package.
 
-- New package: `@adaptivemcp/opencode-plugin` — maps OpenCode's
-  `tool.execute.before`/`tool.execute.after` hooks onto
-  `TelemetryRecorder`/`MiddlewareChain`, and `session.*` hooks onto the
-  session-tagging work in 6j.
-- Follows the mcp-binary precedent: a thin, sanctioned adapter at the edge: no
-  core package depends on it.
+**Update (2026-07-30):** `@adaptivemcp/opencode-plugin` already exists and maps
+OpenCode's `tool.execute.before`/`tool.execute.after` hooks onto
+`TelemetryRecorder`/`MiddlewareChain`/`GraphTrackingMiddleware`/`OAuthMiddleware`,
+following the mcp-binary precedent (a thin, sanctioned adapter at the edge — no
+core package depends on it). It is still genuinely unproven, though:
+
+- Zero test coverage (the package has a `test` script but no test files).
+- Never run against a real OpenCode host — the hook shapes are implemented
+  from OpenCode's documented API only, not verified against OpenCode's actual
+  source or a live plugin load.
 - Highest ceiling of any Phase 6 item — the difference between "library with
   good internal design" and something that learns from a real, popular agent
-  instead of only local demos — but graded medium/high risk+effort here because
-  it is the only item resting on an external API only seen through docs, not
-  verified against OpenCode's actual source.
+  instead of only local demos — but still graded medium/high risk here because
+  the code exists but is unvalidated, not because it's unwritten. See README's
+  "Not yet published" section for the same caveat surfaced to users.
 
 ### 6j. Session-scoped telemetry
 
 OpenCode treats sessions as first-class (`session.created` / `session.idle` /
-`session.compacted` / `session.deleted`). Adaptive MCP's telemetry is per-invocation
-with no session tag, so there is currently no data model to answer the
-AGENTS.md open question *"which tools naturally cluster together?"* — the data
-needed to compute co-occurrence doesn't exist yet.
+`session.compacted` / `session.deleted`). Adaptive MCP's telemetry needs a
+session tag to answer the AGENTS.md open question *"which tools naturally
+cluster together?"* — the co-occurrence analysis itself doesn't exist yet.
 
-- Add an optional `sessionId` to `ToolExecutionEvent` (`@adaptivemcp/spec`) and
-  thread it through `TelemetryRecorder`.
+**Update (2026-07-30):** the data model is already in place —
+`ToolExecutionEvent.sessionId` and `ExecutionNode.sessionId`
+(`@adaptivemcp/spec`) exist today, and `TelemetryRecorder.completeNode`/
+`failNode` already thread `sessionId` through into recorded events. What's
+still missing:
+
 - New evaluation pass: co-occurrence of tools within the same `sessionId`,
   surfaced as a `Recommendation` (`type: "workflow"`?) or a new insight —
   exact shape TBD, needs a design pass before implementation.

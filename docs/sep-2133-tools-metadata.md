@@ -97,10 +97,10 @@ tools:
         unit: <"calls"|"usd"|"tokens">?  # what `limit` counts
         window: <ISO-8601 duration>?     # e.g. "PT1H", "P1D" (RFC 3339 duration)
       require_approval: <boolean?>  # server SUGGESTS confirmation before call
-    # NOTE: `budget` and `require_approval` are part of the schema but are NOT
-    # yet emitted by the reference implementation (`@adaptivemcp/extension`);
-    # the server MAY populate them, but clients MUST treat them as optional and
-    # the reference impl currently omits them. See the SEP's implementation notes.
+    # NOTE: `budget` and `require_approval` are populated by the reference
+    # implementation (`@adaptivemcp/extension`) from routing/approval
+    # recommendations once one exists for a tool (see ROADMAP Phase 6f). They
+    # remain optional per the schema; clients MUST treat them as suggestions.
     insights:                # CLIENT-REPORTED: learned from observed behavior
       <key>:
         value: <any>

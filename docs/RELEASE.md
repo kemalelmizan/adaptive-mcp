@@ -17,8 +17,8 @@ the publish path:
 
 Publishable set (defined once in `scripts/lib/workspace.ts` →
 `PUBLISHABLE_PACKAGES`): `spec · memory · telemetry · evaluation · extension ·
-runtime · routing · orchestration · approval · thin-client`. `examples` and
-`apps` stay private.
+runtime · routing · orchestration · approval · thin-client · middleware ·
+mcp-binary`. `examples` and `apps` stay private.
 
 > **Changed-only publishing.** `release.ts` publishes ONLY the packages named
 > in pending changesets — not every publishable package. A changeset that
@@ -182,9 +182,10 @@ What `release.ts` does, in order:
 3. Applies pending changesets (`pnpm changeset version`).
 4. `npm publish --access public --ignore-scripts` each package in the publish
    set, in dependency order (`spec → memory → telemetry → evaluation →
-   extension → runtime → routing → orchestration → approval → thin-client`).
-   Versions that are already on the registry are skipped (resume-safe), so a
-   re-run after a mid-publish failure only publishes what's left.
+   extension → runtime → routing → orchestration → approval → thin-client →
+   middleware → mcp-binary`). Versions that are already on the registry are
+   skipped (resume-safe), so a re-run after a mid-publish failure only
+   publishes what's left.
 
 The build is **not** part of this script — `dist/` must already exist from the
 separate `pnpm build:publishable` step above. This keeps the publish path short
@@ -200,7 +201,7 @@ npm view @adaptivemcp/extension version        # should show the new version
 npm view @adaptivemcp/extension dist-tags       # latest should point at it
 ```
 
-Open `https://www.npmjs.com/org/adaptivemcp` and confirm each of the 5 packages
+Open `https://www.npmjs.com/org/adaptivemcp` and confirm each published package
 shows the new version **and** renders its `README.md` (the `files` allowlist in
 each published `package.json` includes `README.md`, so the npm page is not
 blank).
@@ -290,17 +291,18 @@ build back into `release.ts` — it only burns OTP time before the publish.
 ### 5. README must ship in the tarball
 
 npm shows "This package does not have a README" if `README.md` isn't in the
-`files` allowlist. All 10 publishable packages include `"README.md"` alongside
+`files` allowlist. All 12 publishable packages include `"README.md"` alongside
 `"dist"` in `files`. If you add a package to `PUBLISHABLE_PACKAGES`, copy that
-allowlist.
+allowlist — and make sure the package actually has a `README.md` file, not
+just the allowlist entry (both parts have drifted independently before).
 
 ### 6. Dependency order matters
 
 Publish order is `spec → memory → telemetry → evaluation → extension → runtime
-→ routing → orchestration → approval → thin-client`. Don't reorder or publish
-by hand. A package can't depend on a version that isn't published yet. (Only the
-packages named in the changeset are published, but they still go out in this
-order.)
+→ routing → orchestration → approval → thin-client → middleware →
+mcp-binary`. Don't reorder or publish by hand. A package can't depend on a
+version that isn't published yet. (Only the packages named in the changeset
+are published, but they still go out in this order.)
 
 ### 7. Never publish by hand
 

@@ -1,4 +1,4 @@
-import type { Insight, Store, ToolRecord, ExecutionNode, ToolExecutionEvent } from "@adaptivemcp/spec";
+import type { Insight, Store, ToolRecord, ExecutionNode } from "@adaptivemcp/spec";
 import { MemoryStore } from "@adaptivemcp/memory";
 import { GraphAnalyzer } from "@adaptivemcp/graph-analysis";
 
@@ -69,7 +69,6 @@ export class Evaluator {
     // Calculate workflow-level stats
     const totalDuration = root.durationMs ?? 0;
     const totalCost = nodes.reduce((sum, n) => sum + (n.cost?.amount ?? 0), 0);
-    const hasFailure = nodes.some(n => n.status === "failed");
     const failureCount = nodes.filter(n => n.status === "failed").length;
 
     // Workflow duration insight
@@ -247,7 +246,7 @@ export class Evaluator {
             value: { pattern, count: data.count, length: patternLen },
             confidence: 0.7,
             source: "evaluation",
-            observedAt: new Date().toISOString(),
+            observedAt: now,
             sampleSize: data.count,
           });
         }

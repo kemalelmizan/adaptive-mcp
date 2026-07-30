@@ -12,7 +12,6 @@
  * This is a thin adapter at the edge - no core package depends on it.
  */
 
-import type { Store } from "@adaptivemcp/spec";
 import { MemoryStore } from "@adaptivemcp/memory";
 import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/telemetry";
 import { Evaluator } from "@adaptivemcp/evaluation";
@@ -21,7 +20,7 @@ import { Router } from "@adaptivemcp/routing";
 import { Orchestrator } from "@adaptivemcp/orchestration";
 import { ApprovalGate } from "@adaptivemcp/approval";
 import { GraphAnalyzer } from "@adaptivemcp/graph-analysis";
-import { ThinClient, GraphTrackingMiddleware } from "@adaptivemcp/thin-client";
+import { ThinClient, GraphTrackingMiddleware, OAuthMiddleware, createOAuthMiddleware, type ToolHandler } from "@adaptivemcp/thin-client";
 import { MiddlewareChain } from "@adaptivemcp/middleware";
 import type { OpencodePluginOptions } from "./types.js";
 
@@ -43,7 +42,7 @@ export class OpencodePlugin {
   private thinClient: ThinClient;
   private middlewareChain: MiddlewareChain;
   private graphTracking?: GraphTrackingMiddleware;
-  private oauthMiddleware?: any; // OAuthMiddleware from thin-client
+  private oauthMiddleware?: OAuthMiddleware;
   private currentSessionId?: string;
   private currentWorkflowId?: string;
 
@@ -82,7 +81,6 @@ export class OpencodePlugin {
 
     // Set up OAuth middleware if configured
     if (options.oauthConfigs && Object.keys(options.oauthConfigs).length > 0) {
-      const { OAuthMiddleware, createOAuthMiddleware } = require("@adaptivemcp/thin-client");
       this.oauthMiddleware = createOAuthMiddleware(
         options.oauthConfigs,
         options.oauthRequiredServers ?? []
@@ -94,7 +92,9 @@ export class OpencodePlugin {
     this.thinClient = new ThinClient({
       memory: this.memory,
       gate: this.approval,
-      middleware: [this.graphTracking, this.oauthMiddleware].filter(Boolean),
+      middleware: [this.graphTracking, this.oauthMiddleware].filter(
+        (mw): mw is GraphTrackingMiddleware | OAuthMiddleware => mw != null,
+      ),
       graphTracking: this.graphTracking,
     });
   }
@@ -140,7 +140,7 @@ export class OpencodePlugin {
         this.currentSessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       }
       if (!this.graphTracking.getDepth()) {
-        await this.graphTracking.startWorkflow(toolName, serverName, this.currentWorkflowId);
+        await this.graphTracking.startWorkflow(toolName, serverName);
       } else {
         await this.graphTracking.startChild(toolName, serverName);
       }
@@ -215,18 +215,20 @@ export class OpencodePlugin {
   }): Promise<void> {
     const { toolName, serverName, error, durationMs, sessionId } = params;
 
+    const code = "code" in error ? String((error as Error & { code?: unknown }).code) : undefined;
+
     // Record telemetry failure
     this.telemetry.fail(
       { toolName, serverName, sessionId: sessionId ?? this.currentSessionId },
-      { message: error.message, code: (error as any).code },
-      { workflowId: this.currentWorkflowId },
+      { message: error.message, code },
+      { workflowId: this.currentWorkflowId, durationMs },
     );
 
     // Fail graph tracking
     if (this.graphTracking && this.graphTracking.getDepth() > 0) {
       const nodeId = this.graphTracking.getParentId();
       if (nodeId) {
-        await this.graphTracking.failNode(nodeId, { message: error.message, code: (error as any).code });
+        await this.graphTracking.failNode(nodeId, { message: error.message, code });
       }
     }
 
@@ -266,7 +268,7 @@ export class OpencodePlugin {
    * OpenCode hook: session.compacted
    * Called when session history is compacted.
    */
-  async onSessionCompacted(params: { sessionId: string }): Promise<void> {
+  async onSessionCompacted(): Promise<void> {
     // Could trigger cleanup of old execution nodes
   }
 
@@ -283,17 +285,20 @@ export class OpencodePlugin {
   }
 
   /**
-   * Execute a tool through the full Adaptive MCP pipeline.
-   * This is the main entry point for OpenCode to run tools.
+   * Execute a tool through the full Adaptive MCP pipeline (approval gate,
+   * retry, middleware, telemetry). The caller supplies `execute`, which
+   * performs the actual tool invocation (e.g. via OpenCode's native tool
+   * runner) — this plugin owns the surrounding lifecycle, not the transport.
    */
   async executeTool(params: {
     toolName: string;
     serverName?: string;
     input: unknown;
+    execute: ToolHandler;
     sessionId?: string;
     workflowId?: string;
   }): Promise<{ ok: boolean; error?: string; output?: unknown }> {
-    const { toolName, serverName, input, sessionId, workflowId } = params;
+    const { toolName, serverName, input, execute, sessionId, workflowId } = params;
 
     if (sessionId) this.currentSessionId = sessionId;
     if (workflowId) this.currentWorkflowId = workflowId;
@@ -301,11 +306,7 @@ export class OpencodePlugin {
     let recordedError: string | undefined;
     const result = await this.thinClient.run(
       toolName,
-      async (input) => {
-        // This would be replaced with actual MCP tool call in real usage
-        // For now, we simulate by calling the OpenCode tool directly
-        throw new Error("Tool execution not implemented - use OpenCode's native tool runner");
-      },
+      execute,
       input,
       (_ok, error) => {
         recordedError = error;

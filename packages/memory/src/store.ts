@@ -293,7 +293,6 @@ export class MemoryStore implements Store {
 
   /** Record an execution node in the graph. */
   recordExecutionNode(node: ExecutionNode): ExecutionNode {
-    const now = new Date().toISOString();
     this.db
       .prepare(
         `INSERT OR REPLACE INTO execution_nodes (id, tool_name, server_name, session_id, workflow_id, parent_id, children_ids, timestamp, duration_ms, status, input, output, error, model, cost, metadata)

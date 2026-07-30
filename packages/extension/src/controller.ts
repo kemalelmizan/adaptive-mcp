@@ -560,6 +560,6 @@ export class ExtensionController {
       }
     }
     
-    return renderToolsMetadata(allTools, SPEC_VERSION);
+    return renderToolsMetadata(allTools, version);
   }
 }

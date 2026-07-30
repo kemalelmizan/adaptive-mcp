@@ -11,12 +11,6 @@ export interface TelemetryRecorderOptions {
   memory?: MemoryStore;
 }
 
-interface GraphContext {
-  sessionId: string;
-  workflowId?: string;
-  parentId?: string;
-}
-
 /**
  * Records tool execution events into a telemetry store. Provides a thin,
  * ergonomic surface for the SDK middleware to emit observations.

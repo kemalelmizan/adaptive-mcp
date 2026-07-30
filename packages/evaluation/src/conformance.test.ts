@@ -92,14 +92,14 @@ describe("Conformance: Graceful Degradation", () => {
       // These may throw on closed DB - that's acceptable behavior
       // The important thing is they don't crash the process
       expect(() => {
-        try { memory.getTool("test"); } catch (e) { /* expected */ }
+        try { memory.getTool("test"); } catch { /* expected */ }
       }).not.toThrow();
       expect(() => {
-        try { memory.allTools(); } catch (e) { /* expected */ }
+        try { memory.allTools(); } catch { /* expected */ }
       }).not.toThrow();
       // ensureTool may throw on closed DB, that's acceptable
       expect(() => {
-        try { memory.ensureTool("test"); } catch (e) { /* expected */ }
+        try { memory.ensureTool("test"); } catch { /* expected */ }
       }).not.toThrow();
     });
   });

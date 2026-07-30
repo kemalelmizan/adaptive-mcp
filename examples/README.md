@@ -241,6 +241,13 @@ own `tools-metadata.*.yaml` next to them so you can diff the view across phases.
 | `node dist/scenarios/insights.js` | telemetry · evaluation · extension | Telemetry folds events into the store; evaluation emits `observed_failure_rate` / `avg_duration_ms` insights as sample size grows. |
 | `node dist/scenarios/annotation.js` | spec · extension | Human `Annotation` (static) vs. learned `Insight` (dynamic) live side by side; only insights move on their own. |
 | `node dist/scenarios/adaptive.js` | routing · orchestration · approval · thin-client | **Full adaptive stack**: model selection + budget, retry policy for flaky tools, the approval gate enforcement hook, and the thin-client loop that consults both. |
+| `node dist/scenarios/execution-graph.js` | spec · memory · graph-analysis · extension | **Execution graph intelligence**: builds a DAG from tool invocations; critical-path, bottleneck, and fan-out/fan-in analysis; failure cascades; per-workflow cost breakdown; workflow pattern detection. |
+| `node dist/scenarios/failure-cascade.js` | graph-analysis · approval | **Failure cascade analysis**: simulates a failure partway through a deployment workflow graph and traces its blast radius, showing how approval recommendations trigger for upstream nodes. |
+| `node dist/scenarios/middleware.js` | middleware · thin-client · mcp-binary | **Middleware plumbing**: explicit `use()` registration and hook ordering, `call.output` mutation, and the YAML `middleware` `contributeView` map — plus `HeadroomMiddleware` (context compression) and `createRtkWrapper` (wraps the [`rtk`](https://rtk-ai.app) CLI as an MCP server). |
+| `node dist/scenarios/cost-optimization.js` | graph-analysis | **Cost attribution**: builds a CI/CD workflow with varying per-tool costs and breaks it down by tool, node, and critical path across multiple runs. |
+| `node dist/scenarios/debugging-deployment.js` | graph-analysis | **Debugging a failed deployment**: causal cascade (root causes vs. symptoms across independent failure chains), anti-pattern detection, and workflow forecasting, with Mermaid/DOT diagram exports of the failed graph. |
+| `node dist/scenarios/sampling-recommendations.js` | routing · thin-client | **Sampling-parameter recommendations**: turns observed failure rates into an advisory `temperature`/`top_p` recommendation that `ThinClient` reads back via `onSamplingRecommendation`. Advisory only — nothing here makes an LLM call. |
+| `node dist/scenarios/decoding-policy.js` | routing | **Decoding policy**: `DecodingAdvisor` picks a backend-agnostic `DecodingProfile` from intent + observed failure rate; `DecodingResolver` separately translates it into concrete backend knobs (OpenAI vs. llama.cpp), composed only by `toDecodingRecommendation`. |
 
 Run them all:
 
@@ -250,6 +257,13 @@ node dist/scenarios/store.js
 node dist/scenarios/insights.js
 node dist/scenarios/annotation.js
 node dist/scenarios/adaptive.js
+node dist/scenarios/execution-graph.js
+node dist/scenarios/failure-cascade.js
+node dist/scenarios/middleware.js
+node dist/scenarios/cost-optimization.js
+node dist/scenarios/debugging-deployment.js
+node dist/scenarios/sampling-recommendations.js
+node dist/scenarios/decoding-policy.js
 ```
 
 ### Sample YAML views
@@ -277,5 +291,11 @@ These mirror what the scenarios print. Use them to see the schema at a glance.
 | `@adaptivemcp/orchestration` | `Orchestrator` writes a `workflow` recommendation with a retry policy scaled to the observed failure rate. |
 | `@adaptivemcp/approval` | `ApprovalGate` is the enforcement hook: `gate()` returns `allow` / `require_confirmation` / `deny` from the annotation risk + learned failure rate, and records an `approval` recommendation. |
 | `@adaptivemcp/thin-client` | `ThinClient` runs the client-side loop: consults the approval gate, then executes with the store-derived retry policy. |
+| `@adaptivemcp/graph-analysis` | `GraphAnalyzer` computes critical path, bottlenecks, fan-out/fan-in, failure cascades, anti-patterns, and cost breakdowns over the execution DAG. |
+| `@adaptivemcp/middleware` | `MiddlewareChain` runs pluggable hooks (`beforeCall`/`afterCall`/`onError`/`contributeView`), including `HeadroomMiddleware` for context compression. |
+| `@adaptivemcp/mcp-binary` | `createRtkWrapper` wraps an existing CLI binary (e.g. `rtk`) as an MCP server over stdio. |
 
-> The four packages above are exercised by `dist/scenarios/adaptive.js`.
+> The four packages above are exercised by `dist/scenarios/adaptive.js`. The
+> graph/middleware/binary packages are exercised by `dist/scenarios/execution-graph.js`,
+> `dist/scenarios/failure-cascade.js`, `dist/scenarios/cost-optimization.js`,
+> `dist/scenarios/debugging-deployment.js`, and `dist/scenarios/middleware.js`.

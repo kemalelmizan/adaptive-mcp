@@ -14,10 +14,10 @@ async function runTrackedCall(
   jitterMs: number,
 ): Promise<{ parentId: string | undefined; sessionId: string }> {
   return middleware.runInContext(async () => {
-    await middleware.beforeCall(call, {} as never);
+    await middleware.beforeCall(call);
     await sleep(jitterMs);
     const result: CallResult = { ok: true };
-    await middleware.afterCall(result, call, {} as never);
+    await middleware.afterCall(result, call);
     return { parentId: middleware.getParentId(), sessionId: middleware.getSessionId() };
   });
 }
@@ -36,10 +36,10 @@ describe("@adaptivemcp/thin-client GraphTrackingMiddleware", () => {
     const call: PlannedCall = { toolName: "root_tool", input: {} };
 
     const rootId = await middleware.runInContext(async () => {
-      await middleware.beforeCall(call, {} as never);
+      await middleware.beforeCall(call);
       const id = middleware.getParentId();
       expect(middleware.getRootNodeId()).toBe(id);
-      await middleware.afterCall({ ok: true }, call, {} as never);
+      await middleware.afterCall({ ok: true }, call);
       expect(middleware.getDepth()).toBe(0);
       return id;
     });
@@ -79,10 +79,10 @@ describe("@adaptivemcp/thin-client GraphTrackingMiddleware", () => {
     async function runAndCapture(toolName: string, jitterMs: number) {
       return middleware.runInContext(async () => {
         const call: PlannedCall = { toolName, input: {} };
-        await middleware.beforeCall(call, {} as never);
+        await middleware.beforeCall(call);
         const nodeIdAtStart = middleware.getParentId();
         await sleep(jitterMs);
-        await middleware.afterCall({ ok: true }, call, {} as never);
+        await middleware.afterCall({ ok: true }, call);
         return nodeIdAtStart;
       });
     }
@@ -111,17 +111,17 @@ describe("@adaptivemcp/thin-client GraphTrackingMiddleware", () => {
     // ThinClient.run() again), nested inside the outer call's scope.
     const depthInside = await middleware.runInContext(async () => {
       const rootCall: PlannedCall = { toolName: "root", input: {} };
-      await middleware.beforeCall(rootCall, {} as never);
+      await middleware.beforeCall(rootCall);
 
       const inner = await middleware.runInContext(async () => {
         const childCall: PlannedCall = { toolName: "child", input: {} };
-        await middleware.beforeCall(childCall, {} as never);
+        await middleware.beforeCall(childCall);
         const depth = middleware.getDepth();
-        await middleware.afterCall({ ok: true }, childCall, {} as never);
+        await middleware.afterCall({ ok: true }, childCall);
         return depth;
       });
 
-      await middleware.afterCall({ ok: true }, rootCall, {} as never);
+      await middleware.afterCall({ ok: true }, rootCall);
       return inner;
     });
 
@@ -142,7 +142,7 @@ describe("@adaptivemcp/thin-client GraphTrackingMiddleware", () => {
       const rootCall: PlannedCall = { toolName: "root", input: {} };
 
       const traceparent = await middleware.runInContext(async () => {
-        await middleware.beforeCall(rootCall, {} as never);
+        await middleware.beforeCall(rootCall);
         return middleware.getTraceParent();
       });
 
@@ -156,11 +156,11 @@ describe("@adaptivemcp/thin-client GraphTrackingMiddleware", () => {
       const rootCall: PlannedCall = { toolName: "root", input: {} };
 
       await middleware.runInContext(async () => {
-        await middleware.beforeCall(rootCall, {} as never);
+        await middleware.beforeCall(rootCall);
         const childCall: PlannedCall = { toolName: "child", input: {} };
-        await middleware.beforeCall(childCall, {} as never);
-        await middleware.afterCall({ ok: true }, childCall, {} as never);
-        await middleware.afterCall({ ok: true }, rootCall, {} as never);
+        await middleware.beforeCall(childCall);
+        await middleware.afterCall({ ok: true }, childCall);
+        await middleware.afterCall({ ok: true }, rootCall);
       });
 
       const nodes = store.getNodesBySession("s1");

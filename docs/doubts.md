@@ -77,9 +77,9 @@ symptom; the underlying naming/boundary question is still open.
      so it stops implying "runtime = the thing that runs on the client,
      opposite of the server's extension."
   3. Leave the package as-is; fix documentation only (done for
-     `examples/README.md`; would need the same pass over `docs/architecture.md`
-     and the top-level `README.md` if they make the same server/client
-     implication).
+     `examples/README.md`; would need the same pass over the top-level
+     `README.md`'s Architecture section if it makes the same server/client
+     implication — there is no separate `docs/architecture.md`).
   Leaning toward (3) short-term (cheapest, already partly done) with (2) as a
   cheap follow-up if the confusion recurs; (1) only if the two-store model
   in §1 hardens into an actual deployment requirement (e.g. a server MUST NOT
@@ -486,8 +486,8 @@ exists). So:
 | Fit with the loop | Weak/orthogonal as a binary — but once wrapped into MCP it becomes a `command-output` middleware for shell-like MCP tools | Strong — operates on **tool outputs**, exactly what the loop carries |
 
 **Tension resolved:** the design constraint "packages must not depend on
-shell/processes as first-class concepts" (`README.md`, `architecture.md`) applies
-to the **learning core**. rtk is fundamentally a shell-layer tool, so it must not
+shell/processes as first-class concepts" (`README.md`'s Design constraints
+section) applies to the **learning core**. rtk is fundamentally a shell-layer tool, so it must not
 shell out inside core. The fix is **not** to push rtk to the host layer (that
 forfeits composability) nor to shell out in core — it is to **wrap rtk into an MCP
 server** via `@adaptivemcp/mcp-binary` (the sanctioned shell-out layer) and then
@@ -685,8 +685,18 @@ export interface Compressor {
 6. Add `@adaptivemcp/mcp-binary` package + `RtkWrapper` reference; wire rtk as a
    `command-output` middleware (D4/D10).
 
-**Status:** `open` / planned for next milestone. Decisions D1–D6 need user
-confirmation (recommendations noted above). Implementation blocked on D1–D6.
+**Status:** `done`. **Note (2026-07-30):** this section's status line was stale
+— all six gaps (D1–D6) are implemented and tested: `ToolHandler`/`ThinClient`/
+`observeCompleted`/`ToolExecutionEvent.output` carry output end to end; the
+YAML `middleware` map exists on `ToolMetadataView`; `MiddlewareChain` runs in
+both `AdaptiveRuntime` and `ThinClient`; `Compressor`/`HeadroomMiddleware` ship
+in `@adaptivemcp/middleware`; `@adaptivemcp/mcp-binary` + `createRtkWrapper`
+ship as the reference binary wrapper. See `docs/ROADMAP.md`'s package table,
+which already reflects this correctly. The **client OAuth delegation** flow
+(§12c/§12d, previously "hook point only for now") has also since moved past a
+hook point into a real `OAuthMiddleware` implementation (authorize/callback/
+refresh) in `packages/thin-client/src/oauth-middleware.ts` — see
+`docs/ROADMAP.md` Phase 6h, which needs the same correction.
 
 ## 13. Decoding Policy (Phase 8) — design conversation (2026-07-28)
 
