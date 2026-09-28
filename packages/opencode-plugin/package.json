@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/opencode-plugin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OpenCode plugin for Adaptive MCP - maps OpenCode hooks to Adaptive MCP telemetry and middleware",
   "type": "module",
   "main": "./dist/index.js",

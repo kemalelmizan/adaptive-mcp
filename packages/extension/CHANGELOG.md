@@ -1,5 +1,46 @@
 # @adaptivemcp/extension
 
+## 0.4.0
+
+### Minor Changes
+
+- 9df0b31: Phase 11 MCP ecosystem integration:
+
+  - `@adaptivemcp/spec`: new canonical `ExecutionGraphResource` wire schema and pure `buildExecutionGraph` builder (`execution-graph.ts`), replacing the dead, Map-based (non-JSON-serializable) `ExecutionGraph` type, which had zero consumers.
+  - `@adaptivemcp/extension`: `executionGraphResourceUri`/`workflowGraphResourceUri`/`graphInsightsResourceUri`/`executionGraphMermaidResourceUri` now return correctly-formed `dev.adaptivemcp://...` URIs (previously missing the `//`, a latent bug harmless until these were wired into real MCP protocol dispatch). `executionGraphResourceText` gains `cursor`/`pageSize` pagination options; edges are always returned in full regardless of the current node page.
+  - `@adaptivemcp/thin-client`: `GraphTrackingMiddleware` now generates a valid W3C `traceparent` per node (deterministically derived from existing `ExecutionNode` UUIDs — `traceId`/`spanId`/`parentSpanId`/`traceparent` on `metadata`), exposed via a new `getTraceParent()` method. This is a data-plane correlation primitive, not literal over-the-wire header propagation — no live MCP transport exists in this codebase to carry HTTP headers on.
+  - `@adaptivemcp/runtime`: `AdaptiveRuntimeOptions.enableGraph` plus `startWorkflow`/`startChild`/`completeNode`/`failNode` pass-throughs, bringing this package to parity with the example-local runtime's existing graph-tracking wiring.
+  - `examples/`: the execution-graph resource is now a real, working `ResourceTemplate` with pagination and `resources/subscribe`/`notifications/resources/updated`, verified end-to-end with a live stdio client/server run.
+
+- 3d0b586: Phase 12 visualization & UX:
+
+  - `@adaptivemcp/extension`: new `executionGraphDotResourceUri`/`executionGraphDotResourceText` — a GraphViz DOT export alongside the existing Mermaid export, at `dev.adaptivemcp://execution-graph/{sessionId}/dot`. Also removes a dead, unused `nodeMap` variable from `executionGraphMermaidResourceText`.
+  - `examples/`: new `debugging-deployment` scenario (`pnpm scenario:debugging-deployment`) demonstrating the Phase 10 graph-inspection tools no other scenario exercises — causal cascade (root causes vs. symptoms across two independent failure chains), anti-pattern detection, and workflow forecasting — plus Mermaid/DOT diagram exports of the failed graph. `AdaptiveRuntime.startWorkflow` (example-local runtime) gained an optional `sessionId` to support this.
+
+- 381a6a5: Phase 9 production hardening for the execution graph:
+
+  - `@adaptivemcp/memory`: WAL journal mode + tuned PRAGMAs for file-backed stores, a versioned migration framework for `execution_nodes`, and `pruneExecutionNodes`/`retention` for TTL-based cleanup.
+  - `@adaptivemcp/thin-client`: `GraphTrackingMiddleware` now uses `AsyncLocalStorage` instead of a shared array stack, fixing a concurrency bug where parallel tool calls (e.g. via `Promise.all`) could misattribute parent/child linkage, cost, and duration to the wrong node. `ThinClient.run()` now wraps each call's full lifecycle in `GraphTrackingMiddleware.runInContext` — a breaking change for direct callers of `GraphTrackingMiddleware.beforeCall`/`afterCall`/`onError` outside that wrapper.
+  - `@adaptivemcp/graph-analysis`: new `IncrementalGraphAnalyzer`, an opt-in `GraphAnalyzer` subclass that caches session/workflow node reads to avoid re-querying the store on every call for long-running or repeatedly-polled workflows.
+  - `@adaptivemcp/extension`: execution graph MCP resource documents now carry real content-hash ETags instead of an empty placeholder, and `executionGraphResourceText`/`workflowGraphResourceText`/`graphInsightsResourceText` accept an `ifNoneMatch` option, returning `{ notModified: true, etag }` instead of the full document when it matches — a minor breaking change to their return type (`string | NotModified` instead of `string`).
+
+### Patch Changes
+
+- 2391b13: Security: bump runtime dependency versions.
+
+  - `@adaptivemcp/extension`: `js-yaml` `^4.1.0` → `^4.3.2` (patched release).
+  - `@adaptivemcp/mcp-binary`: `@modelcontextprotocol/sdk` `^1.29.0` → `^1.30.1`.
+  - Workspace `overrides` (in `pnpm-workspace.yaml`) pin patched transitives the
+    MCP SDK pulls (hono, `@hono/node-server`, express → qs, ajv → fast-uri) plus
+    `ip-address`, and the dev-only `js-yaml@3` tree. `pnpm audit --prod` now
+    reports 0 runtime advisories.
+
+- Updated dependencies [90e5e71]
+- Updated dependencies [9df0b31]
+- Updated dependencies [381a6a5]
+  - @adaptivemcp/memory@0.3.0
+  - @adaptivemcp/spec@0.3.0
+
 ## 0.3.1
 
 ### Patch Changes

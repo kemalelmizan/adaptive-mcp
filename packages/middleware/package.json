@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/middleware",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pluggable middleware chain for Adaptive MCP (Transform I/O, gate, inject-auth, observe).",
   "license": "MIT",
   "type": "module",

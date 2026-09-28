@@ -1,5 +1,15 @@
 # @adaptivemcp/approval
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [90e5e71]
+- Updated dependencies [9df0b31]
+- Updated dependencies [381a6a5]
+  - @adaptivemcp/memory@0.3.0
+  - @adaptivemcp/spec@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes
