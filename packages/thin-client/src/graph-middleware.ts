@@ -105,7 +105,23 @@ export class GraphTrackingMiddleware implements Middleware {
    * sequence in one `runInContext` call for this to hold.
    */
   runInContext<T>(fn: () => Promise<T>): Promise<T> {
-    return this.als.run(this.getContext(), fn);
+    return this.runScoped(this.getContext(), fn);
+  }
+
+  /**
+   * Run `fn` with `context` as the graph context, then restore whatever context
+   * the caller had. `enterWith` (used by `startChild`/`completeNode`) is *not*
+   * scoped to `als.run`, so without this restore a sibling call in the same
+   * parent scope (e.g. two calls inside one `runTurn`) would inherit the
+   * finished call's node stack and nest under the wrong parent.
+   */
+  private async runScoped<T>(context: GraphContext, fn: () => Promise<T>): Promise<T> {
+    const previous = this.getContext();
+    try {
+      return await this.als.run(context, fn);
+    } finally {
+      this.als.enterWith(previous);
+    }
   }
 
   /** Get the current session ID. */
@@ -166,6 +182,43 @@ export class GraphTrackingMiddleware implements Middleware {
     this.store.recordExecutionNode(node);
     this.als.enterWith({ stack: [node.id], rootNodeId: node.id });
     return node.id;
+  }
+
+  /**
+   * Run `fn` inside one graph root, so every top-level call it makes becomes a
+   * child of that root — a single DAG per `fn` (e.g. one agent turn with several
+   * tool calls) instead of one disconnected root per call.
+   *
+   * The root is completed when `fn` resolves and failed when it rejects. Nested
+   * calls still fork their own context (see `runInContext`), so siblings stay
+   * isolated from each other while sharing this root as their parent.
+   */
+  async runTurn<T>(label: string, fn: () => Promise<T>): Promise<T> {
+    const id = crypto.randomUUID();
+    const traceId = hex32(id);
+    const spanId = hex16(id);
+    const node: ExecutionNode = {
+      id,
+      toolName: label,
+      sessionId: this.sessionId,
+      workflowId: this.workflowId,
+      parentId: undefined,
+      childrenIds: [],
+      timestamp: new Date().toISOString(),
+      status: "started",
+      metadata: { traceId, spanId, traceparent: formatTraceParent(traceId, spanId) },
+    };
+    this.store.recordExecutionNode(node);
+
+    const startedAt = Date.now();
+    try {
+      const result = await this.runScoped({ stack: [node.id], rootNodeId: node.id }, fn);
+      await this.completeNode(node.id, { durationMs: Date.now() - startedAt });
+      return result;
+    } catch (error) {
+      await this.failNode(node.id, { message: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
   }
 
   /** Start a child node (automatically links to parent). */

@@ -129,6 +129,67 @@ describe("@adaptivemcp/thin-client GraphTrackingMiddleware", () => {
     expect(middleware.getDepth()).toBe(0);
   });
 
+  describe("runTurn (per-turn DAG)", () => {
+    /**
+     * Mirrors `ThinClient.run`, which awaits middleware before `beforeCall`; the
+     * yield ensures the graph context is established before nodes start.
+     */
+    async function runTurnCall(middleware: GraphTrackingMiddleware, toolName: string): Promise<void> {
+      await middleware.runInContext(async () => {
+        await Promise.resolve();
+        await middleware.beforeCall({ toolName, input: {} });
+        await middleware.afterCall({ ok: true }, { toolName, input: {} });
+      });
+    }
+
+    it("parents every top-level call under one turn root", async () => {
+      const middleware = new GraphTrackingMiddleware(store, { sessionId: "s1" });
+
+      await middleware.runTurn("agent_turn", async () => {
+        await runTurnCall(middleware, "tool_a");
+        await runTurnCall(middleware, "tool_b");
+      });
+
+      const nodes = store.getNodesBySession("s1");
+      const turn = nodes.find((node) => node.toolName === "agent_turn");
+      expect(turn).toBeDefined();
+      expect(turn?.status).toBe("completed");
+      expect(turn?.parentId).toBeUndefined();
+      expect(turn?.childrenIds).toHaveLength(2);
+
+      const children = turn!.childrenIds.map((id) => store.getExecutionNode(id)!);
+      expect(children.map((child) => child.toolName).sort()).toEqual(["tool_a", "tool_b"]);
+      for (const child of children) {
+        expect(child.parentId).toBe(turn!.id);
+        expect(child.status).toBe("completed");
+      }
+
+      // A single DAG: only the turn is a root (no per-call roots).
+      expect(store.getRootNodes("s1")).toHaveLength(1);
+    });
+
+    it("marks the turn root failed and rethrows when the turn throws", async () => {
+      const middleware = new GraphTrackingMiddleware(store, { sessionId: "s1" });
+
+      await expect(
+        middleware.runTurn("agent_turn", async () => {
+          throw new Error("turn boom");
+        }),
+      ).rejects.toThrow("turn boom");
+
+      const turn = store.getNodesBySession("s1").find((node) => node.toolName === "agent_turn");
+      expect(turn?.status).toBe("failed");
+      expect(turn?.error?.message).toBe("turn boom");
+    });
+
+    it("keeps per-call roots when runTurn is not used (backward compatible)", async () => {
+      const middleware = new GraphTrackingMiddleware(store, { sessionId: "s1" });
+      await runTrackedCall(middleware, { toolName: "tool_a", input: {} }, 1);
+      await runTrackedCall(middleware, { toolName: "tool_b", input: {} }, 1);
+      expect(store.getRootNodes("s1")).toHaveLength(2);
+    });
+  });
+
   describe("getTraceParent (Phase 11.4)", () => {
     const TRACEPARENT_RE = /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/;
 
