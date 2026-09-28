@@ -127,12 +127,16 @@ verified in code (middleware imports `type { Store }`, `MemoryStore` only in tes
 `capabilities.extensions` advertising now demonstrated in `examples/src/server.ts`.
 
 **Open nits:**
-- [ ] **SEP schema ahead of code.** `annotation.budget`/`require_approval` are in
-      the SEP but not in `Annotation` (`packages/spec/src/types.ts`) or projected by
-      `ToolMetadataView`. Implement or trim. (See §8 gap #1.)
-- [ ] **Resource URI identifier vs wire URI.** SEP conflates the scheme-less
-      identifier `dev.adaptivemcp/tools-metadata` with the wire URI
-      `dev.adaptivemcp://tools-metadata`. Clarify both.
+- [x] **SEP schema ahead of code (budget / require_approval) — code resolved
+      2026-09-28.** `ToolMetadataView` now projects both, derived from
+      `routing`/`approval` recommendations (`packages/extension/src/view.ts`).
+      `Annotation` itself still doesn't carry them; remaining question is whether
+      the SEP should point at `annotation.*` or at the recommendation-derived
+      view. (See §8 gap #1.)
+- [ ] **Resource URI identifier vs wire URI — code side resolved 2026-09-28.**
+      Phase 11 fixed the emitted URIs to well-formed `dev.adaptivemcp://...`
+      identifiers. The SEP prose still needs its Resource table to separate the
+      scheme-less identifier from the wire URI.
 - [ ] **Advertising not demonstrated** — now resolved (see above); kept only as a
       record.
 
@@ -253,14 +257,17 @@ Verified against the live MCP repos and the installed SDK. This changes several
 
 ## 8. Implementation gaps found in code review (2026-07-19)
 
-1. **SEP schema vs code drift (budget / require_approval).** The SEP promises
-   `annotation.budget` and `annotation.require_approval`; the `Annotation` type and
-   `ToolMetadataView` don't implement them. `routing.BudgetPolicy` exists but only
-   emits a `routing` recommendation. Fix: implement the fields, or remove them
-   from the SEP.
-2. **Resource URI documentation.** Identifier (`dev.adaptivemcp/tools-metadata`)
-   vs wire URI (`dev.adaptivemcp://tools-metadata`) are conflated in the SEP
-   Resource table. Split them explicitly.
+1. **SEP schema vs code drift (budget / require_approval) — code resolved
+   2026-09-28.** `ToolMetadataView` (`packages/extension/src/view.ts`) now emits
+   `budget` (from a `routing` recommendation's `perToolLimit`) and
+   `require_approval` (from an `approval` recommendation's decision). The
+   `Annotation` type still doesn't carry them, so the open part is only SEP prose
+   alignment — point it at the recommendation-derived view, or add the fields.
+2. **Resource URI documentation — code side resolved 2026-09-28.** Phase 11 fixed
+   the emitted resource URIs to well-formed `dev.adaptivemcp://...` values
+   (`@adaptivemcp/extension`). The SEP Resource table still conflates the
+   scheme-less identifier (`dev.adaptivemcp/tools-metadata`) with the wire URI;
+   split them explicitly.
 3. **Advertising not demonstrated.** ✅ Resolved — `examples/src/server.ts` now
    sets `capabilities.extensions: { "dev.adaptivemcp/tools-metadata": {} }`.
 4. **Two-store model under-documented.** Client-owned local Store vs server-

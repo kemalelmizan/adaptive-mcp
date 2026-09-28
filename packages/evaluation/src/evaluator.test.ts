@@ -114,4 +114,44 @@ describe("@adaptivemcp/evaluation", () => {
       expect(insights.some((i) => i.key === "workflow_common_pattern")).toBe(false);
     });
   });
+
+  describe("repetition detection (ROADMAP 6d)", () => {
+    it("emits repetition_detected for a repeated tool sequence, attributed to the workflow", () => {
+      // A -> B -> A -> B -> A -> B: the 2-tool pattern "tool_a -> tool_b"
+      // occurs 3 times, meeting the count >= 3 threshold.
+      const sequence = ["tool_a", "tool_b", "tool_a", "tool_b", "tool_a", "tool_b"];
+      const ids = sequence.map((_, i) => `s1-${i}`);
+      sequence.forEach((toolName, i) => {
+        store.recordExecutionNode(
+          node({
+            id: ids[i]!,
+            sessionId: "s1",
+            workflowId: "wf-rep",
+            toolName,
+            parentId: i === 0 ? undefined : ids[i - 1],
+            childrenIds: i === sequence.length - 1 ? [] : [ids[i + 1]!],
+          }),
+        );
+      });
+
+      const insights = evaluator.evaluateWorkflow("s1");
+      const rep = insights.find((i) => i.key === "repetition_detected");
+      expect(rep).toBeDefined();
+      expect(rep?.toolName).toBe("wf-rep");
+      expect((rep?.value as { pattern: string }).pattern).toBe("tool_a -> tool_b");
+
+      const stored = store.getTool("wf-rep")?.insights ?? [];
+      expect(stored.some((i) => i.key === "repetition_detected")).toBe(true);
+    });
+
+    it("does not emit repetition_detected for a short or non-repeating sequence", () => {
+      for (const [i, toolName] of ["tool_a", "tool_b", "tool_c"].entries()) {
+        store.recordExecutionNode(
+          node({ id: `s2-${i}`, sessionId: "s2", workflowId: "wf-norep", toolName }),
+        );
+      }
+      const insights = evaluator.evaluateWorkflow("s2");
+      expect(insights.some((i) => i.key === "repetition_detected")).toBe(false);
+    });
+  });
 });

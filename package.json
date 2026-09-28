@@ -21,7 +21,9 @@
     "release:dry": "node scripts/release.ts --dry-run",
     "maintenance": "node scripts/maintenance.ts",
     "maintenance:check": "node scripts/maintenance.ts check",
-    "docs": "node scripts/docs.ts"
+    "maintenance:docs": "node scripts/maintenance.ts docs",
+    "docs": "node scripts/docs.ts",
+    "docs:check": "node scripts/check-docs.ts"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",

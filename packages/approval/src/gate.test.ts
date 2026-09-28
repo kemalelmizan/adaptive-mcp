@@ -53,6 +53,24 @@ describe("@adaptivemcp/approval", () => {
     expect(gate.gate("deploy_service")).toBe("deny");
   });
 
+  it("denies tools matching a suffix glob in denyTools", () => {
+    record(store, "flaky-server.unstable_tool", 0, 40);
+    const gate = new ApprovalGate({ memory: store, policy: { denyTools: ["flaky-server.*"] } });
+    expect(gate.gate("flaky-server.unstable_tool", "srv")).toBe("deny");
+  });
+
+  it("denies tools matching a leading-wildcard glob in denyTools", () => {
+    record(store, "dangerous.delete_all", 0, 40);
+    const gate = new ApprovalGate({ memory: store, policy: { denyTools: ["*.delete_*"] } });
+    expect(gate.gate("dangerous.delete_all", "srv")).toBe("deny");
+  });
+
+  it("does not deny a tool outside the glob", () => {
+    record(store, "github.merge_pr", 0, 40);
+    const gate = new ApprovalGate({ memory: store, policy: { denyTools: ["dangerous.*"] } });
+    expect(gate.gate("github.merge_pr", "srv")).toBe("allow");
+  });
+
   it("writes an approval recommendation with the decision payload", () => {
     store.ensureTool("deploy_service", "srv");
     store.setAnnotation({ toolName: "deploy_service", risk: "high" });

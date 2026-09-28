@@ -208,13 +208,22 @@ independent and can ship on its own unless a dependency is called out.
 self-contained wins land first. A separate "Blocked / external dependency"
 list at the end holds items that cannot be scheduled by our own effort at all.
 
+**Status review (2026-09-28).** Every item below was re-verified against the code
+instead of taken at face value. Several had drifted stale: 6a, 6c, and 6f were
+implemented but unmarked; 6d was implemented but unwired (now wired); 6b and 6e
+remain partial (see the per-item status updates). To stop this recurring, the table's status markers are
+now enforced by `scripts/check-docs.ts` (`pnpm docs:check`, also run by
+`pnpm maintenance:check`), which fails the build if a documented capability and
+its ROADMAP status disagree, if a package is missing from the publishable list
+or the docs, or if a Phase 6/8 item row disappears.
+
 | # | Item | Risk | Effort | Payoff |
 | --- | --- | --- | --- | --- |
-| 6a | Pattern matching in `ApprovalPolicy` | Low — isolated to `approval`, precedence order unchanged | Low — matcher + tests | Medium — ergonomic, immediate |
-| 6b | Context-cost tracked dimension | Low — additive field, no external dependency | Low — extend fold + threshold insight | Medium — unlocks a recommendation type, but needs a real token/byte source to be useful |
+| 6a | ✅ done — Pattern matching in `ApprovalPolicy` | Low — isolated to `approval`, precedence order unchanged | Low — matcher shipped in `gate.ts`; regression test still to add | Medium — ergonomic, immediate |
+| 6b | 🟡 partially done — Context-cost tracked dimension | Low — additive field, no external dependency | Low remaining — field + insight shipped; `context_cost_high` threshold not built | Medium — unlocks a recommendation type, but needs a real token/byte source to be useful |
 | 6c | ✅ done — More insight types: cost drift, latency regression, approval friction | Low — additive, same shape as existing insights | Low/Medium — one evaluator pass per insight | Medium — broadens what the YAML surfaces, no new package |
-| 6d | `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Medium — sequence detection is new logic, not a fold-in-place stat | Medium/High — new capability, feeds `ApprovalGate` |
-| 6e | Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Medium — need scenarios simulating hosts that ignore the extension | Medium — confidence/trust, not new capability |
+| 6d | ✅ done — `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Low — `detectRepetition()` wired into `evaluateWorkflow` | Medium/High — new capability, feeds `ApprovalGate` |
+| 6e | 🟡 partially done — Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Low remaining — component-level tests exist; host-ignores-extension scenario still missing | Medium — confidence/trust, not new capability |
 | 6f | ✅ done — Emit `budget` / `require_approval` in the reference impl | Medium — touches the wire schema tracked for SEP graduation | Medium — extend `ExtensionController` view + `spec` types | High — unblocks the SEP stabilization gate (see Blocked list) |
 | 6g | 🟡 partially done — Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Low remaining — `ExtensionController.aggregateViews()` already implements the composite-key merge; needs tests + a consumer | Medium/High — real multi-server hosts need this |
 | 6h | 🟡 partially done — Client OAuth delegation flow | Medium — credential handling is security-sensitive | Low remaining — `OAuthMiddleware` (`packages/thin-client/src/oauth-middleware.ts`) already implements authorize/callback/refresh/token-storage; needs test coverage and a real-provider validation pass | Medium — unblocks one integration, not the core loop |
@@ -222,6 +231,15 @@ list at the end holds items that cannot be scheduled by our own effort at all.
 | 6j | Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation`; co-occurrence shape still TBD | Medium — `sessionId` already exists on `ToolExecutionEvent`/`ExecutionNode` and is threaded through `TelemetryRecorder`; only the co-occurrence evaluation pass itself is unbuilt | Medium — research-oriented (AGENTS.md open question), less immediately actionable; **depends on 6i** for real session boundaries |
 
 ### 6a. Pattern matching in `ApprovalPolicy`
+
+**Status update (2026-09-28): implemented.** `ApprovalGate.gate()` now matches
+`denyTools` entries as glob patterns via `matchGlob()` (`packages/approval/src/gate.ts`:
+`*` = any chars, `?` = one char); `confirmRiskLevels` stays an exact list because
+it selects risk *levels*, not tool names. Precedence is unchanged. Remaining gap:
+the only exercise is the ad-hoc `examples/src/test-glob-deny.ts`, which isn't
+wired into any script — add real glob cases to `packages/approval/src/gate.test.ts`.
+
+Original design note below.
 
 `ApprovalPolicy.denyTools` / `confirmRiskLevels` (`packages/approval/src/gate.ts`)
 match exact tool names only. OpenCode's permission config matches tool/command
@@ -236,6 +254,13 @@ MCP tool-disabling config uses the same glob approach per server namespace
   → learned failure rate → allow); only the matching mechanism changes.
 
 ### 6b. Context-cost as a tracked dimension
+
+**Status update (2026-09-28): partially done.** `ToolStats.avgOutputTokens`
+(`packages/spec/src/types.ts`) is folded from events in
+`packages/memory/src/store.ts` and surfaced by `evaluateRecord()` as the
+`avg_output_tokens` insight (`packages/evaluation/src/evaluator.ts`). Still
+missing: the threshold insight `context_cost_high` (and any recommendation that
+acts on it). Original design note below.
 
 OpenCode explicitly warns that MCP servers "add to context" and lets users
 disable whole tool namespaces to control it. `ToolStats` tracks `totalCost`
@@ -274,6 +299,15 @@ in one document). Same shape as existing insights (`observed_failure_rate` /
 
 ### 6d. `repetition_detected` insight (doom-loop, but learned)
 
+**Status update (2026-09-28): done.** `detectRepetition()`
+(`packages/evaluation/src/evaluator.ts`) computes a `repetition_detected` insight
+from repeated 2–4 tool subsequences in the execution graph (`count >= 3`) and is
+now invoked by `evaluateWorkflow()` (so `evaluateAllWorkflows()` runs it per
+session too); the insight is attributed to the workflow id, matching the other
+workflow-level insights. Tests: `packages/evaluation/src/evaluator.test.ts`.
+Remaining nice-to-have (not required for the item): let `ApprovalGate` consume
+the insight. Original design note below.
+
 OpenCode's `doom_loop` guard is a static heuristic: N identical calls in a row
 → `ask`/`deny`. `@adaptivemcp/evaluation` currently only derives
 `observed_failure_rate` / `avg_duration_ms` from aggregate `ToolStats`, nothing
@@ -288,6 +322,14 @@ from event *sequences*.
   telemetry?"*
 
 ### 6e. Conformance scenarios (graceful degradation)
+
+**Status update (2026-09-28): partially done.** Component-level graceful
+degradation is now covered by `packages/evaluation/src/conformance.test.ts`
+(graph tracking off, closed store, malformed/null events, missing
+recommendations, empty store, approval denial). Still missing: the scenario this
+item actually asks for — a host that ignores the extension entirely (resource
+never read, `report_observation` never called) with the base MCP server/client
+asserted to still work. Original design note below.
 
 Formerly README's "What's next" list. No host is required to understand the
 `dev.adaptivemcp/tools-metadata` resource or the `report_observation` tool —

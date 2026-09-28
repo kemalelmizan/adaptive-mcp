@@ -148,6 +148,9 @@ export class Evaluator {
       });
     }
 
+    // Repeated tool sequences (doom-loop detection, ROADMAP 6d)
+    insights.push(...this.detectRepetition(nodes, workflowId));
+
     // Persist all insights
     for (const insight of insights) {
       this.memory.addInsight(insight);
@@ -216,8 +219,13 @@ export class Evaluator {
     return [insight];
   }
 
-  /** Detect repeated tool call sequences (repetition_detected insight) */
-  private detectRepetition(nodes: ExecutionNode[]): Insight[] {
+  /**
+   * Detect repeated tool call sequences (the `repetition_detected` insight).
+   * Runs as part of `evaluateWorkflow`, so it is also exercised by
+   * `evaluateAllWorkflows`. Attributed to the workflow id, matching the other
+   * workflow-level insights (`workflow_duration_ms` etc.).
+   */
+  private detectRepetition(nodes: ExecutionNode[], workflowId: string): Insight[] {
     const insights: Insight[] = [];
     const now = new Date().toISOString();
     
@@ -240,7 +248,7 @@ export class Evaluator {
       for (const [pattern, data] of patterns) {
         if (data.count >= 3) { // Repeated at least 3 times
           insights.push({
-            toolName: "workflow",
+            toolName: workflowId,
             serverName: nodes[0]?.serverName,
             key: "repetition_detected",
             value: { pattern, count: data.count, length: patternLen },

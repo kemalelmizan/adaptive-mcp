@@ -26,6 +26,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Doc consistency
+        run: pnpm docs:check
+
       - name: Build
         run: pnpm -r --filter "./packages/*" run build
 
