@@ -178,19 +178,23 @@ node scripts/version-release.ts
 
 What `release.ts` does, in order:
 
-1. Refuses if the tree is dirty.
+1. Refuses if the tree is dirty — unless `--continue`, which allows a tree that
+   holds only the version bump from an interrupted run.
 2. Requires at least one pending changeset (skipped with `--no-version` /
-   `--packages`). The publish set is **every publishable package whose current
-   version is not yet on the registry** — the changed packages, their cascaded
-   internal dependents, and first-time publishes. `--packages` narrows it to the
-   named packages only.
-3. Applies pending changesets (`pnpm changeset version`).
-4. `npm publish --access public --ignore-scripts` each package in the publish
-   set, in dependency order (`spec → memory → telemetry → evaluation →
-   extension → runtime → routing → orchestration → approval → thin-client →
-   middleware → mcp-binary`). Versions that are already on the registry are
-   skipped (resume-safe), so a re-run after a mid-publish failure only
-   publishes what's left.
+   `--continue` / `--packages`). The publish set is **every publishable package
+   whose current version is not yet on the registry** — the changed packages,
+   their cascaded internal dependents, and first-time publishes. `--packages`
+   narrows it to the named packages only.
+3. Applies pending changesets (`pnpm changeset version`), unless `--no-version`
+   / `--continue` / `--packages` is given.
+4. `npm publish --access public --ignore-scripts` each unpublished package, in
+   **dependency waves**: packages are topologically sorted by their internal
+   `@adaptivemcp/*` dependencies and each wave is published **in parallel**
+   (dependencies always first). This keeps the OTP window short while ensuring a
+   dependent's `latest` never references a dependency version not yet on npm.
+   Already-published versions are skipped (resume-safe). If any package fails,
+   the run waits for the rest, prints a per-package result + `failed: […]`, and
+   exits non-zero **without tagging**.
 
 The build is **not** part of this script — `dist/` must already exist from the
 separate `pnpm build:publishable` step above. This keeps the publish path short
@@ -256,9 +260,19 @@ NPM_OTP=123456 node scripts/release.ts --tag     # env var
 
 - The OTP is **single-use and time-limited**. Get it from your authenticator app
   or the npm auth URL printed by npm, then run the command promptly.
-- If the OTP expires **mid-publish**, the remaining packages fail. Already
-  published versions are immutable and skipped on re-run, so just re-run with a
-  fresh OTP. The earlier packages stay published.
+- Publishing runs **in parallel within dependency waves**, so one OTP covers
+  several packages at once instead of one-at-a-time. If the OTP still expires
+  **mid-run**, the script waits for every in-flight publish, prints exactly
+  which packages failed, and exits non-zero **without tagging**. Resume with a
+  fresh code:
+
+  ```bash
+  node scripts/release.ts --continue --otp <NEW_CODE>
+  ```
+
+  `--continue` skips the changeset/version step (already applied), accepts a tree
+  that holds only the version bump, and republishes just the packages still
+  missing from npm. Packages already on the registry stay published.
 - Alternative to OTP: use an npm **automation/CI token** (bypasses 2FA) in
   `.env` as `NPM_TOKEN`. Note npm is deprecating 2FA-bypass tokens (announced
   for 2027), so OTP is the durable path.
@@ -370,6 +384,9 @@ node scripts/release.ts --tag --otp <CODE>
 node scripts/release.ts --otp <CODE>
 node scripts/version-release.ts
 
+# Resume after a partial failure (fresh OTP); add --tag once all are live:
+node scripts/release.ts --continue --otp <NEW_CODE>
+
 # Verify
 npm view @adaptivemcp/extension version
 npm view @adaptivemcp/extension dist-tags
@@ -389,6 +406,7 @@ node scripts/release.ts --packages extension,runtime --otp <CODE>
 | --- | --- | --- |
 | `--dry-run` | `release.ts` | `changeset status` preview only; no build, no version bump, no publish, tree unchanged. |
 | `--no-version` | `release.ts` | Skip `changeset version`; publish ALL publishable packages as-is (republish). |
+| `--continue` | `release.ts` | Resume a partially-failed release: skip `changeset version`, allow a tree holding only the version bump, publish every still-unpublished package. Combine with `--otp <NEW>` (and optionally `--tag`). |
 | `--packages a,b` | `release.ts` | Manual override: publish ONLY the named packages (bare `extension` or `@adaptivemcp/extension`), using their current versions. Skips the changeset version step. |
 | `--tag` | `release.ts` | After publish, commit bump + tag + push (via `version-release.ts --packages …`). |
 | `--otp <CODE>` | `release.ts` | Pass npm 2FA one-time password to `npm publish`. |
@@ -406,6 +424,7 @@ node scripts/release.ts --packages extension,runtime --otp <CODE>
 | --- | --- | --- |
 | `[release] working tree is dirty` | Uncommitted changes (often a prior bump) | Commit or stash, then re-run. |
 | `npm error code EOTP` | 2FA required, no OTP supplied | Re-run with `--otp <CODE>` (fresh code). Build is separate, so the OTP only gates publish. |
+| Publish failed partway (some packages missing on npm) | OTP expired mid-run (the run waits for all and exits non-zero without tagging) | `node scripts/release.ts --continue --otp <NEW_CODE>`; add `--tag` once every package is live. |
 | `cannot publish over the previously published version` | Should no longer occur | `release.ts` now skips already-published versions automatically. If you still see it, check `NPM_TOKEN`/registry and the package name. |
 | `npm publish` ships stale/old `dist/` | Forgot the separate build step | Run `pnpm build:publishable` before `release.ts`. `dist/` is gitignored, so the release does NOT rebuild. |
 | `release.ts` published more packages than expected | Cascaded internal dependents bumped by Changesets (`updateInternalDependencies`) | Expected: every publishable package whose version changed is published, including dependents and first-time publishes. To publish only specific packages, use `--packages a,b`. |

@@ -27,7 +27,7 @@ import {
   REPO_ROOT,
   run,
   isDirty,
-  dirtyFiles,
+  onlyBumpIsDirty,
   gitSha,
 } from "./lib/workspace.ts";
 import { readFileSync } from "node:fs";
@@ -41,24 +41,8 @@ const SCOPED_PACKAGES = PACKAGES_ARG
   ? PACKAGES_ARG.split(",").map((s) => s.trim()).filter(Boolean)
   : undefined;
 
-/**
- * `release.ts` starts on a clean tree and the only thing that dirties it is
- * `changeset version`, which only ever modifies `package.json`, `CHANGELOG.md`,
- * and consumes `.changeset/*.md` files (across every package in the changeset,
- * including private ones). Any dirty file outside that set means there is
- * unrelated WIP and we must refuse to commit.
- */
-function isExpectedBumpFile(file: string): boolean {
-  if (file === "package.json" || file === "CHANGELOG.md") return true;
-  if (file.endsWith("/package.json") || file.endsWith("/CHANGELOG.md")) return true;
-  if (file.startsWith(".changeset/")) return true;
-  return false;
-}
-
-/** True when every dirty file is part of the expected version bump. */
-function onlyBumpIsDirty(): boolean {
-  return dirtyFiles().every(isExpectedBumpFile);
-}
+// `isExpectedBumpFile` / `onlyBumpIsDirty` live in scripts/lib/workspace.ts and
+// are shared with release.ts (`--continue`).
 
 /** Read the current version of a package from its package.json. */
 function packageVersion(pkg: string): string {

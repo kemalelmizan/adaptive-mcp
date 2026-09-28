@@ -6,7 +6,8 @@
  * `child_process` and never couple to a specific CI provider.
  */
 
-import { execFileSync, type ExecFileSyncOptions } from "node:child_process";
+import { execFile, execFileSync, type ExecFileSyncOptions } from "node:child_process";
+import { promisify } from "node:util";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +53,26 @@ export function run(
     encoding: "utf8",
   };
   return execFileSync(cmd, args, options) as string;
+}
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Async variant of `run`, for publishing several packages in parallel. Captures
+ * stdout/stderr instead of inheriting stdio (parallel writers would interleave);
+ * on a non-zero exit the rejected error carries `.stdout`/`.stderr`.
+ */
+export async function runAsync(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; maxBuffer?: number } = {},
+): Promise<string> {
+  const { stdout } = await execFileAsync(cmd, args, {
+    cwd: opts.cwd ?? REPO_ROOT,
+    encoding: "utf8",
+    maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024,
+  });
+  return stdout;
 }
 
 /** Run a pnpm workspace command from the repo root. */
@@ -113,6 +134,24 @@ export function isDirty(): boolean {
 }
 
 /** List of uncommitted/untracked files, relative to the repo root. */
+/**
+ * The only files a release is allowed to dirty: the version bump that
+ * `changeset version` writes (package.json / CHANGELOG.md under packages/* and
+ * the repo root, plus the consumed `.changeset/*.md` files). Used to let
+ * `--continue` resume on a tree that holds an unconsumed/committed bump.
+ */
+export function isExpectedBumpFile(file: string): boolean {
+  if (file === "package.json" || file === "CHANGELOG.md") return true;
+  if (file.endsWith("/package.json") || file.endsWith("/CHANGELOG.md")) return true;
+  if (file.startsWith(".changeset/")) return true;
+  return false;
+}
+
+/** True when every dirty file is part of the expected version bump. */
+export function onlyBumpIsDirty(): boolean {
+  return dirtyFiles().every(isExpectedBumpFile);
+}
+
 export function dirtyFiles(): string[] {
   try {
     const out = run("git", ["status", "--porcelain"], { silent: true }).trim();
