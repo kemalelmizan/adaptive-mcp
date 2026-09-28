@@ -4,6 +4,18 @@ packages:
   - "examples"
   - "examples/*"
 
+# Security overrides: force patched transitive versions pulled in by the MCP
+# SDK's HTTP transports (hono / @hono/node-server via hono, express -> qs,
+# ajv -> fast-uri) and by IP parsing. Remove once the SDK's own ranges resolve
+# to patched versions. See README's "Security" note.
+overrides:
+  hono: 4.13.9
+  qs: 6.16.0
+  fast-uri: 3.1.8
+  ip-address: 10.7.2
+  "@hono/node-server": 1.19.17
+  "js-yaml@<4": 3.15.2
+
 onlyBuiltDependencies:
   - esbuild
   - "@modelcontextprotocol/sdk"

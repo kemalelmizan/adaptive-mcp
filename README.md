@@ -429,6 +429,21 @@ See `docs/ROADMAP.md` Phase 6 for the full, risk/effort-ordered list of planned
 work (new insight types, multi-server aggregation, conformance scenarios, a
 real-host adapter, and more).
 
+## Security
+
+- **Local by default.** The core learning loop is transport-agnostic; the
+  bundled server and client examples use **stdio**. `@adaptivemcp/mcp-binary`
+  is stdio-only. If you wire the MCP SDK's HTTP transport, bind it to
+  `127.0.0.1` unless you intend remote access, and put authentication and
+  rate-limiting in front of it.
+- **Patched transitives.** The MCP SDK pulls HTTP-server dependencies (hono,
+  `@hono/node-server`, express → qs, ajv → fast-uri) and `ip-address`. The
+  workspace pins patched versions with `overrides` in `pnpm-workspace.yaml`.
+  Run `pnpm audit --prod` before releases and when bumping
+  `@modelcontextprotocol/sdk`; it currently reports **0 runtime advisories**.
+- `js-yaml` is used only for `dump()` (serialization), never `load()` on
+  untrusted input.
+
 ## License
 
 Released under the [MIT License](./LICENSE). Copyright (c) 2026 Kemal Elmizan.
