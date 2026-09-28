@@ -45,7 +45,8 @@ pnpm --filter @adaptivemcp/examples scenario
 - `packages/graph-analysis` (execution-graph intelligence) is fully
   implemented and tested but not yet published — see README's "Not yet
   published" section. `packages/opencode-plugin` is an experimental,
-  unpublished, untested OpenCode host adapter.
+  unpublished OpenCode host adapter, unit-tested against the documented V1 hook
+  shape but not yet run against a live host.
 - `docs/ROADMAP.md` tracks phased status. `docs/RELEASE.md` is the release
   runbook. `docs/sep-2133-tools-metadata.md` is the extension draft.
 

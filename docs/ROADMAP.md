@@ -227,7 +227,7 @@ or the docs, or if a Phase 6/8 item row disappears.
 | 6f | ✅ done — Emit `budget` / `require_approval` in the reference impl | Medium — touches the wire schema tracked for SEP graduation | Medium — extend `ExtensionController` view + `spec` types | High — unblocks the SEP stabilization gate (see Blocked list) |
 | 6g | 🟡 partially done — Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Low remaining — `ExtensionController.aggregateViews()` already implements the composite-key merge; needs tests + a consumer | Medium/High — real multi-server hosts need this |
 | 6h | 🟡 partially done — Client OAuth delegation flow | Medium — credential handling is security-sensitive | Low remaining — `OAuthMiddleware` (`packages/thin-client/src/oauth-middleware.ts`) already implements authorize/callback/refresh/token-storage; needs test coverage and a real-provider validation pass | Medium — unblocks one integration, not the core loop |
-| 6i | 🟡 partially done — Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures, only known from docs, not verified against real code | Low remaining — `@adaptivemcp/opencode-plugin` already exists and maps the hooks described below; still has 0 tests and has never been run against a real OpenCode host | High — proves the loop on a real, popular agent instead of only synthetic demos |
+| 6i | 🟡 partially done — Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures | Low remaining — rewired to the real V1 hooks (`tool.execute.before`/`after`/`event`/`dispose`) with unit tests; has not been run against a live OpenCode host | High — proves the loop on a real, popular agent instead of only synthetic demos |
 | 6j | Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation`; co-occurrence shape still TBD | Medium — `sessionId` already exists on `ToolExecutionEvent`/`ExecutionNode` and is threaded through `TelemetryRecorder`; only the co-occurrence evaluation pass itself is unbuilt | Medium — research-oriented (AGENTS.md open question), less immediately actionable; **depends on 6i** for real session boundaries |
 
 ### 6a. Pattern matching in `ApprovalPolicy`
@@ -411,26 +411,38 @@ shape Adaptive MCP's `@adaptivemcp/middleware` `Middleware` interface mirrors
 (`beforeCall`/`afterCall` ≈ OpenCode's `tool.execute.before`/`tool.execute.after`),
 loaded from `.opencode/plugins/` or an npm package.
 
-**Update (2026-07-30):** `@adaptivemcp/opencode-plugin` already exists and maps
-OpenCode's `tool.execute.before`/`tool.execute.after` hooks onto
-`TelemetryRecorder`/`MiddlewareChain`/`GraphTrackingMiddleware`/`OAuthMiddleware`,
-following the mcp-binary precedent (a thin, sanctioned adapter at the edge — no
-core package depends on it). It is still genuinely unproven, though:
+**Update (2026-09-28): rewired to the real V1 hooks and unit-tested.**
+`@adaptivemcp/opencode-plugin` now exports a genuine OpenCode V1 `Plugin`
+(`createAdaptivePlugin`) whose hooks are exactly the real ones — verified against
+the reference source (`opencode` `packages/plugin/src/index.ts`, interface
+`Hooks`): `tool.execute.before`, `tool.execute.after`, `event`, `dispose`. The
+earlier cut invented `tool.execute.error` and `session.*` hooks that V1 does not
+have, and never exported a host-shaped plugin. Now: telemetry + middleware run in
+`tool.execute.before`/`tool.execute.after`; session ids come from
+`session.created`/`session.updated`/`session.deleted` events; evaluation + view
+sync are debounced off the hot path. Eight unit tests exercise the hooks against a
+fake harness (`packages/opencode-plugin/src/plugin.test.ts`).
 
-- Zero test coverage (the package has a `test` script but no test files).
-- Never run against a real OpenCode host — the hook shapes are implemented
-  from OpenCode's documented API only, not verified against OpenCode's actual
-  source or a live plugin load.
-- Highest ceiling of any Phase 6 item — the difference between "library with
-  good internal design" and something that learns from a real, popular agent
-  instead of only local demos — but still graded medium/high risk here because
-  the code exists but is unvalidated, not because it's unwritten. See README's
-  "Not yet published" section for the same caveat surfaced to users.
+Still genuinely unproven:
+
+- **Never run against a live OpenCode host** — hook shapes match the reference
+  source, but no end-to-end plugin load has happened.
+- **No per-tool error attribution** — V1 has no error hook, so failures require a
+  host/event integration calling `recordToolFailure()`.
+- **No execution-graph tracking** — V1 hooks expose no parent/child linkage.
+- Highest ceiling of any Phase 6 item — the difference between "library with good
+  internal design" and something that learns from a real, popular agent. See
+  README's "Not yet published" section for the same caveat surfaced to users.
+
+Historical note (2026-07-30): the first cut mapped `tool.execute.before`/
+`tool.execute.after` onto `TelemetryRecorder`/`MiddlewareChain`/
+`GraphTrackingMiddleware`/`OAuthMiddleware`, with 0 tests and synthetic hook
+shapes.
 
 ### 6j. Session-scoped telemetry
 
-OpenCode treats sessions as first-class (`session.created` / `session.idle` /
-`session.compacted` / `session.deleted`). Adaptive MCP's telemetry needs a
+OpenCode treats sessions as first-class (`session.created` / `session.updated` /
+`session.deleted`, plus `session.error`). Adaptive MCP's telemetry needs a
 session tag to answer the AGENTS.md open question *"which tools naturally
 cluster together?"* — the co-occurrence analysis itself doesn't exist yet.
 

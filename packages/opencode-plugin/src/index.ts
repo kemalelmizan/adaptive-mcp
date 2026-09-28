@@ -1,15 +1,23 @@
 /**
- * @adaptivemcp/opencode-plugin
- * 
- * OpenCode plugin for Adaptive MCP.
- * 
- * Maps OpenCode's hook system to Adaptive MCP's telemetry and middleware:
- * - OpenCode `tool.execute.before` → `TelemetryRecorder.start()` + `MiddlewareChain.runBefore()`
- * - OpenCode `tool.execute.after` → `TelemetryRecorder.complete()` + `MiddlewareChain.runAfter()`
- * - OpenCode `tool.execute.error` → `TelemetryRecorder.fail()` + `MiddlewareChain.runError()`
- * - OpenCode `session.*` hooks → session tracking for graph analysis
- * 
- * This is a thin adapter at the edge - no core package depends on it.
+ * @adaptivemcp/opencode-plugin — a real OpenCode V1 plugin that feeds the
+ * Adaptive MCP adaptation loop.
+ *
+ * It maps the host's hooks onto the Adaptive MCP libraries:
+ * - `tool.execute.before` → `MiddlewareChain.runBefore`
+ * - `tool.execute.after`  → `TelemetryRecorder.complete` + `MiddlewareChain.runAfter`
+ * - `event` (session.*)   → session id tracking for telemetry
+ * - `dispose`             → final evaluation/sync flush + store close
+ *
+ * This is a thin adapter at the edge: no core package depends on it, and it
+ * mirrors OpenCode's hook types structurally instead of depending on
+ * `@opencode-ai/plugin` (see `types.ts`).
+ *
+ * Scope notes (things V1 hooks cannot do):
+ * - There is no per-tool error hook; failures are recorded through
+ *   `recordToolFailure()` by a host/event integration.
+ * - There is no parent/child tool linkage, so execution-graph tracking is not
+ *   wired here; `TelemetryRecorder.complete`/`fail` stats still flow normally.
+ * - OpenCode does not report MCP server names, so events carry no `serverName`.
  */
 
 import { MemoryStore } from "@adaptivemcp/memory";
@@ -19,341 +27,207 @@ import { ExtensionController } from "@adaptivemcp/extension";
 import { Router } from "@adaptivemcp/routing";
 import { Orchestrator } from "@adaptivemcp/orchestration";
 import { ApprovalGate } from "@adaptivemcp/approval";
-import { GraphAnalyzer } from "@adaptivemcp/graph-analysis";
-import { ThinClient, GraphTrackingMiddleware, OAuthMiddleware, createOAuthMiddleware, type ToolHandler } from "@adaptivemcp/thin-client";
 import { MiddlewareChain } from "@adaptivemcp/middleware";
-import type { OpencodePluginOptions } from "./types.js";
+import type {
+  AdaptivePluginOptions,
+  OpenCodeEvent,
+  OpenCodeHooks,
+  OpenCodePlugin,
+  OpenCodeToolExecuteAfterInput,
+  OpenCodeToolExecuteAfterOutput,
+  OpenCodeToolExecuteBeforeInput,
+  OpenCodeToolExecuteBeforeOutput,
+} from "./types.js";
+
+interface PendingCall {
+  startedAt: number;
+  sessionId?: string;
+}
 
 /**
- * OpenCode plugin for Adaptive MCP.
- * 
- * This plugin wires OpenCode's hook system into Adaptive MCP's telemetry,
- * evaluation, and middleware layers.
+ * Wires the Adaptive MCP components into an OpenCode plugin. Construct it
+ * directly (and call `hooks()`), or via `createAdaptivePlugin()` for the
+ * function shape the host actually loads.
  */
-export class OpencodePlugin {
-  private memory: MemoryStore;
-  private telemetry: TelemetryRecorder;
-  private evaluator: Evaluator;
-  private extension: ExtensionController;
-  private router: Router;
-  private orchestrator: Orchestrator;
-  private approval: ApprovalGate;
-  private graphAnalyzer: GraphAnalyzer;
-  private thinClient: ThinClient;
-  private middlewareChain: MiddlewareChain;
-  private graphTracking?: GraphTrackingMiddleware;
-  private oauthMiddleware?: OAuthMiddleware;
-  private currentSessionId?: string;
-  private currentWorkflowId?: string;
+export class AdaptiveMcpPlugin {
+  readonly memory: MemoryStore;
+  readonly telemetry: TelemetryRecorder;
+  readonly evaluator: Evaluator;
+  readonly extension: ExtensionController;
+  readonly router: Router;
+  readonly orchestrator: Orchestrator;
+  readonly approval: ApprovalGate;
+  readonly middleware: MiddlewareChain;
 
-  constructor(options: OpencodePluginOptions = {}) {
-    // Initialize core Adaptive MCP components
+  private readonly persistDebounceMs: number;
+  private readonly pending = new Map<string, PendingCall>();
+  private sessionId?: string;
+  private timer?: ReturnType<typeof setTimeout>;
+  private disposed = false;
+
+  constructor(options: AdaptivePluginOptions = {}) {
+    this.persistDebounceMs = options.persistDebounceMs ?? 250;
     this.memory = new MemoryStore({ path: options.dbPath ?? ":memory:" });
-    
     this.telemetry = new TelemetryRecorder({
       store: new MemoryBackedTelemetryStore(this.memory),
-      memory: options.enableGraph ? this.memory : undefined,
     });
-
     this.evaluator = new Evaluator({ memory: this.memory });
-    this.extension = new ExtensionController({
-      memory: this.memory,
-      yamlPath: options.yamlPath,
-    });
+    this.extension = new ExtensionController({ memory: this.memory, yamlPath: options.yamlPath });
     this.router = new Router({ memory: this.memory });
     this.orchestrator = new Orchestrator({ memory: this.memory });
-    this.approval = new ApprovalGate({
-      memory: this.memory,
-      policy: options.approvalPolicy,
-    });
-    this.graphAnalyzer = new GraphAnalyzer(this.memory);
-
-    // Set up middleware chain
-    this.middlewareChain = new MiddlewareChain({ store: this.memory, toolName: "" });
-    
-    // Set up graph tracking if enabled
-    if (options.enableGraph) {
-      this.graphTracking = new GraphTrackingMiddleware(this.memory, {
-        workflowId: options.workflowId,
-      });
-      this.middlewareChain.use(this.graphTracking);
+    this.approval = new ApprovalGate({ memory: this.memory, policy: options.approvalPolicy });
+    this.middleware = new MiddlewareChain({ store: this.memory, toolName: "" });
+    for (const mw of options.middleware ?? []) {
+      this.middleware.use(mw);
     }
-
-    // Set up OAuth middleware if configured
-    if (options.oauthConfigs && Object.keys(options.oauthConfigs).length > 0) {
-      this.oauthMiddleware = createOAuthMiddleware(
-        options.oauthConfigs,
-        options.oauthRequiredServers ?? []
-      );
-      this.middlewareChain.use(this.oauthMiddleware);
-    }
-
-    // Initialize thin client with all middleware
-    this.thinClient = new ThinClient({
-      memory: this.memory,
-      gate: this.approval,
-      middleware: [this.graphTracking, this.oauthMiddleware].filter(
-        (mw): mw is GraphTrackingMiddleware | OAuthMiddleware => mw != null,
-      ),
-      graphTracking: this.graphTracking,
-    });
   }
 
-  /**
-   * Get the underlying Adaptive Runtime components for advanced usage.
-   */
-  getRuntime() {
+  /** The OpenCode V1 plugin hooks. */
+  hooks(): OpenCodeHooks {
     return {
-      memory: this.memory,
-      telemetry: this.telemetry,
-      evaluator: this.evaluator,
-      extension: this.extension,
-      router: this.router,
-      orchestrator: this.orchestrator,
-      approval: this.approval,
-      graphAnalyzer: this.graphAnalyzer,
-      thinClient: this.thinClient,
-      middlewareChain: this.middlewareChain,
+      "tool.execute.before": (input, output) => this.onToolBefore(input, output),
+      "tool.execute.after": (input, output) => this.onToolAfter(input, output),
+      event: (input) => this.onEvent(input.event),
+      dispose: () => this.dispose(),
     };
   }
 
-  /**
-   * OpenCode hook: tool.execute.before
-   * Called before a tool executes. Maps to telemetry start + middleware beforeCall.
-   */
-  async onToolExecuteBefore(params: {
-    toolName: string;
-    serverName?: string;
-    input: unknown;
-    sessionId?: string;
-    workflowId?: string;
-  }): Promise<void> {
-    const { toolName, serverName, input, sessionId, workflowId } = params;
-    
-    // Update session/workflow tracking
-    if (sessionId) this.currentSessionId = sessionId;
-    if (workflowId) this.currentWorkflowId = workflowId;
-
-    // Start graph tracking if enabled
-    if (this.graphTracking) {
-      if (!this.currentSessionId) {
-        this.currentSessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      }
-      if (!this.graphTracking.getDepth()) {
-        await this.graphTracking.startWorkflow(toolName, serverName);
-      } else {
-        await this.graphTracking.startChild(toolName, serverName);
-      }
-    }
-
-    // Record telemetry start
-    this.telemetry.start(
-      { toolName, serverName, sessionId: this.currentSessionId },
-      { input, workflowId: this.currentWorkflowId },
-    );
-
-    // Run middleware beforeCall hooks
-    await this.middlewareChain.runBefore({
-      toolName,
-      serverName,
-      input,
+  private async onToolBefore(
+    input: OpenCodeToolExecuteBeforeInput,
+    output: OpenCodeToolExecuteBeforeOutput,
+  ): Promise<void> {
+    if (this.disposed) return;
+    this.pending.set(input.callID, {
+      startedAt: Date.now(),
+      sessionId: input.sessionID || this.sessionId,
     });
+    await this.middleware.runBefore({ toolName: input.tool, input: output.args });
+  }
+
+  private async onToolAfter(
+    input: OpenCodeToolExecuteAfterInput,
+    output: OpenCodeToolExecuteAfterOutput,
+  ): Promise<void> {
+    if (this.disposed) return;
+    const call = this.pending.get(input.callID);
+    this.pending.delete(input.callID);
+    const sessionId = input.sessionID || call?.sessionId || this.sessionId;
+    this.telemetry.complete(
+      { toolName: input.tool, sessionId },
+      {
+        durationMs: call ? Date.now() - call.startedAt : undefined,
+        output: { title: output.title, output: output.output, metadata: output.metadata },
+      },
+    );
+    await this.middleware.runAfter(
+      { ok: true },
+      { toolName: input.tool, input: input.args, output: output.output },
+    );
+    this.schedulePersist();
+  }
+
+  private async onEvent(event: OpenCodeEvent): Promise<void> {
+    if (this.disposed) return;
+    const sessionId = event?.properties?.sessionID;
+    if (typeof sessionId !== "string") return;
+    if (event.type === "session.created" || event.type === "session.updated") {
+      this.sessionId = sessionId;
+      return;
+    }
+    if (event.type === "session.deleted" && sessionId === this.sessionId) {
+      this.sessionId = undefined;
+    }
+  }
+
+  private schedulePersist(): void {
+    if (this.disposed) return;
+    if (this.persistDebounceMs <= 0) {
+      this.persist();
+      return;
+    }
+    if (this.timer) return;
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      this.persist();
+    }, this.persistDebounceMs);
+    this.timer.unref?.();
+  }
+
+  private cancelPersist(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
   }
 
   /**
-   * OpenCode hook: tool.execute.after
-   * Called after a tool completes successfully. Maps to telemetry complete + middleware afterCall.
+   * Evaluate the accumulated telemetry and recompute the derived view once.
+   * Mirrors `AdaptiveRuntime.observeCompleted`: routing/orchestration are
+   * heavier cross-tool passes and are deliberately kept out — call
+   * `runAdaptation()` for those.
    */
-  async onToolExecuteAfter(params: {
-    toolName: string;
-    serverName?: string;
-    output: unknown;
-    durationMs: number;
-    cost?: number;
-    sessionId?: string;
-  }): Promise<void> {
-    const { toolName, serverName, output, durationMs, cost, sessionId } = params;
-
-    // Record telemetry completion
-    this.telemetry.complete(
-      { toolName, serverName, sessionId: sessionId ?? this.currentSessionId },
-      { durationMs, output, cost: cost ? { amount: cost, currency: "USD" } : undefined },
-      { workflowId: this.currentWorkflowId },
-    );
-
-    // Complete graph tracking
-    if (this.graphTracking && this.graphTracking.getDepth() > 0) {
-      const nodeId = this.graphTracking.getParentId();
-      if (nodeId) {
-        await this.graphTracking.completeNode(nodeId, { durationMs, output, cost: cost ? { amount: cost, currency: "USD" } : undefined });
-      }
-    }
-
-    // Run middleware afterCall hooks
-    await this.middlewareChain.runAfter(
-      { ok: true },
-      { toolName, serverName, input: {}, output } // input would be tracked separately
-    );
-
-    // Evaluate and sync
+  persist(): void {
+    this.cancelPersist();
     this.evaluator.evaluateAll();
-    this.router.routeAll();
-    this.orchestrator.planAll();
+    this.extension.setMiddlewareView(this.middleware.contributeView());
     this.extension.sync();
   }
 
+  /** Run the heavier cross-tool adaptation passes (routing + orchestration), then persist. */
+  runAdaptation(): void {
+    this.router.routeAll();
+    this.orchestrator.planAll();
+    this.persist();
+  }
+
   /**
-   * OpenCode hook: tool.execute.error
-   * Called when a tool fails. Maps to telemetry fail + middleware onError.
+   * Record a tool failure. OpenCode V1 exposes no per-tool error hook, so a host
+   * (or an `event` integration that can see the failure) calls this.
    */
-  async onToolExecuteError(params: {
-    toolName: string;
-    serverName?: string;
-    error: Error;
-    durationMs: number;
-    sessionId?: string;
-  }): Promise<void> {
-    const { toolName, serverName, error, durationMs, sessionId } = params;
-
-    const code = "code" in error ? String((error as Error & { code?: unknown }).code) : undefined;
-
-    // Record telemetry failure
+  recordToolFailure(
+    toolName: string,
+    error: { message: string; code?: string },
+    opts: { sessionId?: string; durationMs?: number } = {},
+  ): void {
     this.telemetry.fail(
-      { toolName, serverName, sessionId: sessionId ?? this.currentSessionId },
-      { message: error.message, code },
-      { workflowId: this.currentWorkflowId, durationMs },
+      { toolName, sessionId: opts.sessionId ?? this.sessionId },
+      error,
+      { durationMs: opts.durationMs },
     );
-
-    // Fail graph tracking
-    if (this.graphTracking && this.graphTracking.getDepth() > 0) {
-      const nodeId = this.graphTracking.getParentId();
-      if (nodeId) {
-        await this.graphTracking.failNode(nodeId, { message: error.message, code });
-      }
-    }
-
-    // Run middleware onError hooks
-    await this.middlewareChain.runError(error, { toolName, serverName, input: {} });
+    this.schedulePersist();
   }
 
-  /**
-   * OpenCode hook: session.created
-   * Called when a new session starts.
-   */
-  async onSessionCreated(params: { sessionId: string; workflowId?: string }): Promise<void> {
-    this.currentSessionId = params.sessionId;
-    this.currentWorkflowId = params.workflowId;
-    
-    if (this.graphTracking) {
-      this.graphTracking = new GraphTrackingMiddleware(this.memory, {
-        sessionId: params.sessionId,
-        workflowId: params.workflowId,
-      });
-      this.middlewareChain.use(this.graphTracking);
-    }
+  /** The session id currently associated with tool calls (from `session.*` events). */
+  currentSessionId(): string | undefined {
+    return this.sessionId;
   }
 
-  /**
-   * OpenCode hook: session.idle
-   * Called when session becomes idle.
-   */
-  async onSessionIdle(params: { sessionId: string }): Promise<void> {
-    // Could trigger evaluation of session patterns
-    if (this.currentSessionId === params.sessionId) {
-      this.evaluator.evaluateWorkflow(params.sessionId);
-    }
+  /** The current `tools-metadata` view (YAML by default). */
+  getToolsMetadata(mimeType?: string): string {
+    return this.extension.resourceText(mimeType);
   }
 
-  /**
-   * OpenCode hook: session.compacted
-   * Called when session history is compacted.
-   */
-  async onSessionCompacted(): Promise<void> {
-    // Could trigger cleanup of old execution nodes
-  }
-
-  /**
-   * OpenCode hook: session.deleted
-   * Called when session is deleted.
-   */
-  async onSessionDeleted(params: { sessionId: string }): Promise<void> {
-    if (this.currentSessionId === params.sessionId) {
-      this.currentSessionId = undefined;
-      this.currentWorkflowId = undefined;
-      this.graphTracking = undefined;
-    }
-  }
-
-  /**
-   * Execute a tool through the full Adaptive MCP pipeline (approval gate,
-   * retry, middleware, telemetry). The caller supplies `execute`, which
-   * performs the actual tool invocation (e.g. via OpenCode's native tool
-   * runner) — this plugin owns the surrounding lifecycle, not the transport.
-   */
-  async executeTool(params: {
-    toolName: string;
-    serverName?: string;
-    input: unknown;
-    execute: ToolHandler;
-    sessionId?: string;
-    workflowId?: string;
-  }): Promise<{ ok: boolean; error?: string; output?: unknown }> {
-    const { toolName, serverName, input, execute, sessionId, workflowId } = params;
-
-    if (sessionId) this.currentSessionId = sessionId;
-    if (workflowId) this.currentWorkflowId = workflowId;
-
-    let recordedError: string | undefined;
-    const result = await this.thinClient.run(
-      toolName,
-      execute,
-      input,
-      (_ok, error) => {
-        recordedError = error;
-      },
-      serverName
-    );
-
-    if (!result.executed) {
-      return { ok: false, error: recordedError ?? `Blocked (${result.decision})` };
-    }
-    return { ok: true, output: result.output };
-  }
-
-  /**
-   * Get the current tools-metadata YAML view.
-   */
-  getToolsMetadata(): string {
-    return this.extension.resourceText();
-  }
-
-  /**
-   * Get execution graph for a session (for visualization).
-   */
-  getExecutionGraph(sessionId: string): string {
-    return this.extension.executionGraphMermaidResourceText(sessionId);
-  }
-
-  /**
-   * Get workflow statistics.
-   */
-  getWorkflowStats(workflowId: string) {
-    return this.graphAnalyzer.getWorkflowStats(workflowId);
-  }
-
-  /**
-   * Shutdown the plugin and close resources.
-   */
-  async shutdown(): Promise<void> {
+  /** Final flush, then close the store. Safe to call more than once. */
+  async dispose(): Promise<void> {
+    if (this.disposed) return;
+    this.persist();
+    this.disposed = true;
+    this.cancelPersist();
     this.memory.close();
   }
 }
 
 /**
- * Create an OpenCode plugin with default configuration.
+ * Create an OpenCode V1 plugin backed by Adaptive MCP. The returned function is
+ * what the host calls; the underlying instance is attached as `.plugin` for
+ * introspection/tests.
  */
-export function createOpencodePlugin(options: OpencodePluginOptions = {}): OpencodePlugin {
-  return new OpencodePlugin(options);
+export function createAdaptivePlugin(
+  options: AdaptivePluginOptions = {},
+): OpenCodePlugin & { plugin: AdaptiveMcpPlugin } {
+  const plugin = new AdaptiveMcpPlugin(options);
+  const factory: OpenCodePlugin = async () => plugin.hooks();
+  return Object.assign(factory, { plugin });
 }
 
-export type { OpencodePluginOptions };
+export * from "./types.js";

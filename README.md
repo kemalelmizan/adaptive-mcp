@@ -359,10 +359,11 @@ live npm badge.
   dependency of `routing`/`evaluation`/`opencode-plugin`, but not yet added to
   `PUBLISHABLE_PACKAGES`.
 - **`@adaptivemcp/opencode-plugin`** — an experimental adapter mapping
-  [OpenCode](https://opencode.ai)'s hook system onto Adaptive MCP. It is not
-  published, has no test coverage, and has not been validated against a real
-  OpenCode host — treat it as a reference implementation, not a supported
-  integration.
+  [OpenCode](https://opencode.ai)'s V1 hook system
+  (`tool.execute.before`/`tool.execute.after`/`event`/`dispose`) onto Adaptive MCP
+  telemetry and middleware. It is unit-tested against the documented hook shape
+  but has not been run against a live OpenCode host — treat it as a reference
+  integration, not a supported one.
 
 ## How to build, test, and run
 
