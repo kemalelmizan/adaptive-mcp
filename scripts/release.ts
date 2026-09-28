@@ -37,6 +37,11 @@
  * The OTP is reused across the parallel publishes within a wave; if it expires,
  * the run reports exactly which packages failed and `--continue --otp <NEW>`
  * resumes from where it stopped.
+ *
+ * Note: the npm registry is eventually consistent, so right after a publish
+ * `isPublished()` can still read a version as missing. A resulting
+ * `EPUBLISHCONFLICT` is treated as "already published" (skipped), never as a
+ * failure.
  */
 
 import {
@@ -186,7 +191,14 @@ async function publishOne(pkg: string): Promise<PublishResult> {
     return { pkg, version, status: "published" };
   } catch (error) {
     const e = error as { stderr?: string; message?: string };
-    const detail = (e.stderr || e.message || "publish failed").trim().split("\n").slice(-4).join(" | ");
+    const raw = `${e.stderr ?? ""}\n${e.message ?? ""}`;
+    // The registry is eventually consistent: a just-published version can read
+    // as missing (isPublished false), so we attempt a publish that npm rejects
+    // as a conflict. That is NOT a failure — the version is already on npm.
+    if (/EPUBLISHCONFLICT|previously published|cannot publish over/i.test(raw)) {
+      return { pkg, version, status: "skipped" };
+    }
+    const detail = raw.trim().split("\n").slice(-4).join(" | ");
     return { pkg, version, status: "failed", error: detail };
   }
 }
