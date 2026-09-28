@@ -6,7 +6,8 @@
 Adaptive MCP is a runtime ecosystem that learns how MCP tools are actually used
 and helps runtimes adapt to that behavior over time. It observes tool
 usage, attaches learned metadata to existing MCP primitives, and lets clients
-govern themselves from real signal.
+govern themselves from real signal. The first-party host that consumes these
+libraries is the [Adaptive MCP agent](https://github.com/adaptivemcp/agent).
 
 > I introduced this project in the talk session
 > *"Self-Improving MCP Agents"* at the [MCP Dev Summit in Seoul (2026)](https://events.linuxfoundation.org/mcp-dev-summit-seoul/).

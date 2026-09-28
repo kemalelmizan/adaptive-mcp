@@ -1,9 +1,11 @@
 {
   "name": "@adaptivemcp/graph-analysis",
   "version": "0.2.0",
-  "description": "Graph analysis for Adaptive MCP execution DAGs",
+  "description": "Graph analysis for Adaptive MCP execution DAGs: critical paths, bottlenecks, failure cascades, anti-patterns, and workflow forecasting.",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
@@ -11,10 +13,14 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --config ../../vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@adaptivemcp/memory": "workspace:*",
