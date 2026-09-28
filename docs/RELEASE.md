@@ -12,7 +12,7 @@ the publish path:
 | Step | Command | What it does |
 | --- | --- | --- |
 | Build (separate) | `pnpm build:publishable` | Compile `dist/` for every publishable package. No OTP needed. Run this BEFORE releasing. |
-| Release | `scripts/release.ts` | Version (Changesets) → `npm publish` **only the packages named in the changeset**. |
+| Release | `scripts/release.ts` | Version (Changesets) → `npm publish` **every publishable package whose version isn't on the registry yet** (the changed set, including cascaded dependents). |
 | Record | `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, push `--follow-tags`. |
 
 Publishable set (defined once in `scripts/lib/workspace.ts` →
@@ -20,12 +20,15 @@ Publishable set (defined once in `scripts/lib/workspace.ts` →
 runtime · routing · orchestration · approval · thin-client · middleware ·
 mcp-binary`. `examples` and `apps` stay private.
 
-> **Changed-only publishing.** `release.ts` publishes ONLY the packages named
-> in pending changesets — not every publishable package. A changeset that
-> touches just `@adaptivemcp/extension` publishes just `extension`. Internal
-> dependents are no longer auto-bumped (`.changeset/config.json` sets
-> `updateInternalDependencies: never`), so a one-package change stays a
-> one-package release. Use `--no-version` to republish all publishable packages.
+> **Changed-version publishing.** `release.ts` publishes every publishable
+> package whose `package.json` version is not yet on the registry — which is
+> exactly the set that `changeset version` changed: the packages named in
+> changesets, their internal dependents cascaded by Changesets
+> (`.changeset/config.json` sets `updateInternalDependencies: "patch"`), and any
+> package being published for the first time (e.g. `middleware`, `mcp-binary`).
+> Packages already on npm at their current version are skipped, so the publish
+> set stays minimal and re-runs resume safely. `--packages a,b` narrows the set;
+> `--no-version` skips the version step and considers all publishable packages.
 
 ---
 
@@ -176,9 +179,11 @@ node scripts/version-release.ts
 What `release.ts` does, in order:
 
 1. Refuses if the tree is dirty.
-2. Determines the publish set: **only the packages named in pending
-   changesets** (not every publishable package). With `--no-version` it instead
-   publishes ALL publishable packages (used for republishing).
+2. Requires at least one pending changeset (skipped with `--no-version` /
+   `--packages`). The publish set is **every publishable package whose current
+   version is not yet on the registry** — the changed packages, their cascaded
+   internal dependents, and first-time publishes. `--packages` narrows it to the
+   named packages only.
 3. Applies pending changesets (`pnpm changeset version`).
 4. `npm publish --access public --ignore-scripts` each package in the publish
    set, in dependency order (`spec → memory → telemetry → evaluation →
@@ -403,7 +408,7 @@ node scripts/release.ts --packages extension,runtime --otp <CODE>
 | `npm error code EOTP` | 2FA required, no OTP supplied | Re-run with `--otp <CODE>` (fresh code). Build is separate, so the OTP only gates publish. |
 | `cannot publish over the previously published version` | Should no longer occur | `release.ts` now skips already-published versions automatically. If you still see it, check `NPM_TOKEN`/registry and the package name. |
 | `npm publish` ships stale/old `dist/` | Forgot the separate build step | Run `pnpm build:publishable` before `release.ts`. `dist/` is gitignored, so the release does NOT rebuild. |
-| `release.ts` published more packages than the changeset | Old changesets or `updateInternalDependencies` changed | Only packages named in pending changesets publish. Ensure `.changeset/config.json` keeps `updateInternalDependencies: never`; delete stale changesets. |
+| `release.ts` published more packages than expected | Cascaded internal dependents bumped by Changesets (`updateInternalDependencies`) | Expected: every publishable package whose version changed is published, including dependents and first-time publishes. To publish only specific packages, use `--packages a,b`. |
 | `release.ts` published nothing | No pending changesets | Author a changeset, or pass `--no-version` to republish all publishable packages. |
 | npm page shows no README | `README.md` missing from `files` | Add `"README.md"` to the package's `files` allowlist, rebuild, republish. |
 | Tag exists but version missing on npm | Pushed before publish finished | Publish succeeded? If not, publish then re-tag (delete + recreate tag). |

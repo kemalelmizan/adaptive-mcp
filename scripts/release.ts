@@ -9,11 +9,13 @@
  *
  * Flow:
  *   1. ensure a clean working tree (no accidental publishes of half-built state);
- *   2. determine the publish set — ONLY the packages named in pending
- *      changesets (not every publishable package);
+ *   2. require at least one pending changeset (unless `--no-version`/`--packages`);
  *   3. run `changeset version` to apply pending changesets and bump versions;
- *   4. `npm publish` each package in the publish set, in dependency order,
- *      skipping any version that is already on the registry (resume-safe).
+ *   4. `npm publish` every publishable package whose version is not yet on the
+ *      registry, in dependency order — i.e. exactly the changed set: packages
+ *      named in changesets, internal dependents cascaded by Changesets
+ *      (`updateInternalDependencies`), and first-time publishes. Already-
+ *      published versions are skipped, so this is minimal and resume-safe.
  *
  * Publishable set (defined once in scripts/lib/workspace.ts →
  * PUBLISHABLE_PACKAGES): spec · memory · telemetry · evaluation · extension ·
@@ -67,9 +69,12 @@ function isPublished(pkg: string, version: string): boolean {
 }
 
 /**
- * Packages named in pending changeset files — the EXPLICIT release set. We
- * publish only these, not every publishable package. Changeset frontmatter
- * lists one `"<pkg>": <bump>` line per affected package.
+ * Publishable packages named in pending changeset files. Used as the "is there
+ * anything to release?" guard and for the log label — NOT as the publish set.
+ * The actual publish set is every publishable package whose current version is
+ * not yet on the registry (the publish loop skips already-published versions),
+ * which also covers internal dependents cascaded by Changesets and first-time
+ * publishes. Changeset frontmatter lists one `"<pkg>": <bump>` line per package.
  */
 function changedPackages(): string[] {
   if (!existsSync(CHANGESET_DIR)) return [];
@@ -144,13 +149,9 @@ function main(): void {
   //    (their current, already-bumped versions) and skip the changeset version
   //    step, so you can target one or two packages without bumping the rest.
   const packagesArg = PACKAGES_ARG ? parsePackagesArg(PACKAGES_ARG) : undefined;
-  const toPublish = packagesArg
-    ? packagesArg
-    : SKIP_VERSION
-      ? [...PUBLISHABLE_PACKAGES]
-      : changedPackages();
+  const changed = changedPackages();
 
-  if (!SKIP_VERSION && !packagesArg && toPublish.length === 0) {
+  if (!SKIP_VERSION && !packagesArg && changed.length === 0) {
     console.log(
       "[release] no pending changesets; nothing to publish. " +
         "Author a changeset, or pass --no-version to republish all publishable packages.",
@@ -158,12 +159,17 @@ function main(): void {
     return;
   }
 
+  // Consider every publishable package; the loop below skips any version already
+  // on the registry. After `changeset version` this resolves to exactly the
+  // changed set — named packages, cascaded internal dependents, first publishes.
+  const toPublish = packagesArg ?? [...PUBLISHABLE_PACKAGES];
   const setLabel = packagesArg
     ? "manual --packages"
     : SKIP_VERSION
-      ? "all publishable"
-      : "changed-only";
-  console.log(`[release] publishing (${setLabel}): ${toPublish.join(", ")}`);
+      ? "all publishable (no version step)"
+      : `all unpublished (from ${changed.length} changeset(s): ${changed.join(", ")})`;
+  console.log(`[release] publish targets: ${toPublish.join(", ")}`);
+  console.log(`[release] set: ${setLabel}`);
 
   // 2. Apply pending changesets (bumps versions, updates CHANGELOG). Skipped
   //    when `--no-version` (republish) or `--packages` (manual targeted publish
