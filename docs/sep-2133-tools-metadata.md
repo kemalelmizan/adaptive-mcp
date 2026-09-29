@@ -93,9 +93,8 @@ tools:
       tags: <string[]?>
       description: <string?>
       budget:                # optional cost guardrails the server SUGGESTS
-        limit: <number?>     # numeric limit; unit given by `unit`
-        unit: <"calls"|"usd"|"tokens">?  # what `limit` counts
-        window: <ISO-8601 duration>?     # e.g. "PT1H", "P1D" (RFC 3339 duration)
+        limit: <number>      # numeric limit
+        currency: <string?>  # e.g. "USD" (when the limit is monetary)
       require_approval: <boolean?>  # server SUGGESTS confirmation before call
     # NOTE: `budget` and `require_approval` are populated by the reference
     # implementation (`@adaptivemcp/extension`) from routing/approval
@@ -117,7 +116,29 @@ tools:
       avg_duration_ms: <number | null>
       total_cost: <number>
       last_observed_at: <ISO-8601 | null>
+    metrics:                 # CLIENT-REPORTED (optional): pre-aggregated rollups
+      "<label>":             # window/dimension, e.g. "all", "hour:2026-09-29T13",
+                             # "all model=qwen", "all decoding=deterministic@qwen/1.0.0"
+        invocations: <number>
+        failures: <number>
+        failure_rate: <number>       # 0..1
+        avg_duration_ms: <number | null>
+        avg_input_tokens: <number?>  # when token usage is known
+        avg_output_tokens: <number?>
+        retry_rate: <number>         # (attempts - invocations) / invocations
+        total_cost: <number>
+        ewma_failure_rate: <number?> # recency-weighted failure rate
     updated_at: <ISO-8601>
+```
+
+**`metrics` (bounded pre-aggregation).** `stats` is one lifetime row per tool;
+`metrics` optionally exposes *multi-dimensional* rollups so a consumer can read
+rich, comparable metadata **without the server retaining an event log**. Each key
+is a window/dimension label; each value is a folded cell (counters, token/cost
+sums, a fixed-bucket latency histogram behind `avg_duration_ms`, retry rate, and
+an EWMA for recency). Cardinality is bounded: `all` always exists, `hour:<...>`
+windows cover drift, and per-`model`/per-`decoding-profile` labels are capped
+(unknown values collapse into an `other` bucket).
 
 **Risk taxonomy.** `annotation.risk` is advisory and carries no protocol-enforced
 meaning. Suggested interpretation:
@@ -134,7 +155,6 @@ semantically identical. Servers that cannot negotiate MAY return a single format
 changes. Clients SHOULD subscribe to the resource (`resources/subscribe` on
 `dev.adaptivemcp/tools-metadata`) and re-read on `notifications/resources/updated`;
 the `etag` lets a client skip re-parsing an unchanged view.
-```
 
 ### Observation reporting (client → server)
 
@@ -322,4 +342,6 @@ The client-side learning packages
 (`@adaptivemcp/telemetry`, `@adaptivemcp/evaluation`, `@adaptivemcp/routing`,
 `@adaptivemcp/orchestration`, `@adaptivemcp/approval`, `@adaptivemcp/thin-client`)
 are the executor: they learn dynamically and report observations back to the
-publishing server.
+publishing server. The derived view also exposes an optional bounded `metrics`
+rollup (from `@adaptivemcp/memory`'s pre-aggregated `metric_cells`) so consumers
+get rich, queryable metadata without an event log.

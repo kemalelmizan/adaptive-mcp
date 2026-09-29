@@ -101,12 +101,12 @@ symptom; the underlying naming/boundary question is still open.
   policy floor, and injects learned context into its own prompt. The protocol
   limitation stands (no auto-push); the host-driven design is now exercised, not
   just assumed.
-- [ ] **It reinvents governance that overlaps core `ToolAnnotations` and the consent model.** `open`
-  `annotation` is now framed as *additional, complementary* hints (risk/budget/owner)
-  on top of core `ToolAnnotations`. Deep dive **§10**; chosen hybrid **§11** (implementing).
-  Still unresolved: precedence when the host's own consent UI already gates a tool.
-  Left open pending Server Card (#1649) — but §10 argues #1649 is discovery-only, not
-  runtime enforcement, so it won't unblock this alone.
+- [x] **It reinvents governance that overlaps core `ToolAnnotations` and the consent model.** `decided` (2026-09-29)
+  `annotation` is framed as *additional, complementary* hints (risk/budget/owner)
+  on top of core `ToolAnnotations`. Deep dive **§10**; chosen hybrid **§11**
+  (implemented). The precedence rule (host UI > suggestion > nothing) is now in
+  SEP §Security and demonstrated by the first-party agent. Static-alignment to
+  Server Card #1649 is tracked separately (still Draft).
 
 **Resolved (kept for history):** observation channel (`report_observation` tool, not
 logging/SEP-2577); `capabilities.extensions` now real in SDK 1.29.0 (advertise via it,
@@ -143,10 +143,9 @@ verified in code (middleware imports `type { Store }`, `MemoryStore` only in tes
       `Annotation` itself still doesn't carry them; remaining question is whether
       the SEP should point at `annotation.*` or at the recommendation-derived
       view. (See §8 gap #1.)
-- [ ] **Resource URI identifier vs wire URI — code side resolved 2026-09-28.**
-      Phase 11 fixed the emitted URIs to well-formed `dev.adaptivemcp://...`
-      identifiers. The SEP prose still needs its Resource table to separate the
-      scheme-less identifier from the wire URI.
+- [x] **Resource URI identifier vs wire URI — resolved 2026-09-29.**
+      Phase 11 fixed the emitted URIs; the SEP Resource table now lists the
+      scheme-less extension identifier and the wire URI on separate rows.
 - [ ] **Advertising not demonstrated** — now resolved (see above); kept only as a
       record.
 
@@ -383,9 +382,10 @@ consent-enforcement channel.
    reference impl (§8 gap #1) — so the precedence rule is currently theoretical until
    those fields ship.
 
-**Status:** still `open`. The doubt is now *scoped* (three layers + a concrete
-precedence rule), but the SEP needs the §Security precedence text before it can be
-marked `decided`.
+**Status:** `decided` (2026-09-29). The precedence rule (host UI > suggestion >
+nothing) is now stated in SEP §Security and demonstrated by the first-party agent.
+The Layer-3 static-alignment target (Server Card #1649) remains open upstream but
+does not block the call-time rule.
 
 ## 11. Compliance strategy options for the #1649 governance overlap (2026-07-19)
 
@@ -973,7 +973,7 @@ and every advisory recommendation were designed for. What it exercises today:
   `ToolExecutionEvent` + `DecodingAnalyzer`, surfaced as `/decoding-report`).
 - §6 — upstream SDK PR for SEP-2133 graduation (unchanged; process-bound).
 - §1b/§10 — precedence wording in the SEP (host UI > suggestion > nothing):
-  implemented and demonstrated, but the SEP prose still needs the explicit text.
+  **done 2026-09-29** — stated in SEP §Security and demonstrated by the agent.
 - §1c — `AdaptiveRuntime` naming/boundary: the agent reinforces the two-store
   reading (it owns the learning Store client-side; the example server serves the
   extension resource), which supports option (2) rename-long-term over (1) split.
