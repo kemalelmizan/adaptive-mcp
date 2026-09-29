@@ -5,7 +5,7 @@ import {
 } from "@adaptivemcp/telemetry";
 import { Evaluator } from "@adaptivemcp/evaluation";
 import { ExtensionController } from "@adaptivemcp/extension";
-import { Router } from "@adaptivemcp/routing";
+import { Router, type BudgetPolicy, type ModelOption } from "@adaptivemcp/routing";
 import { Orchestrator } from "@adaptivemcp/orchestration";
 import { ApprovalGate, type ApprovalDecision } from "@adaptivemcp/approval";
 import { MiddlewareChain, type Middleware } from "@adaptivemcp/middleware";
@@ -34,6 +34,17 @@ export interface AdaptiveRuntimeOptions {
    * `completeNode`/`failNode` are no-ops instead.
    */
   enableGraph?: boolean;
+  /**
+   * Candidate models for the routing pass (`Router`). Defaults to the Router's
+   * own two-model preset when omitted; hosts that own a model catalog should
+   * pass their catalog's options so `model` recommendations use real,
+   * selectable ids.
+   */
+  routerModels?: ModelOption[];
+  /** Per-tool / per-server cost budgets forwarded to the `Router`. */
+  routerBudget?: BudgetPolicy;
+  /** Minimum invocations before the `Router` trusts observed stats. */
+  routerMinInvocations?: number;
 }
 
 /**
@@ -71,7 +82,12 @@ export class AdaptiveRuntime {
       memory: this.memory,
       yamlPath: options.yamlPath,
     });
-    this.router = new Router({ memory: this.memory });
+    this.router = new Router({
+      memory: this.memory,
+      models: options.routerModels,
+      budget: options.routerBudget,
+      minInvocations: options.routerMinInvocations,
+    });
     this.orchestrator = new Orchestrator({ memory: this.memory });
     this.approval = new ApprovalGate({ memory: this.memory });
     this.middleware = new MiddlewareChain({ store: this.memory, toolName: "" });

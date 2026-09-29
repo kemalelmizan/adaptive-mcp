@@ -44,3 +44,22 @@ describe("@adaptivemcp/runtime AdaptiveRuntime graph tracking (Phase 11.2)", () 
     runtime.close();
   });
 });
+
+describe("@adaptivemcp/runtime router configuration", () => {
+  it("uses host-provided model options for model recommendations", () => {
+    const runtime = new AdaptiveRuntime({
+      routerModels: [{ id: "local-qwen", costWeight: 1, latencyWeight: 1 }],
+      routerMinInvocations: 1,
+    });
+
+    runtime.observeCompleted({ toolName: "fast", serverName: "s", durationMs: 100, status: "completed" });
+    runtime.router.routeTool("fast", "s");
+
+    const rec = runtime.memory
+      .getTool("fast", "s")
+      ?.recommendations.find((recommendation) => recommendation.type === "model");
+    expect((rec?.payload as { model?: string } | undefined)?.model).toBe("local-qwen");
+
+    runtime.close();
+  });
+});
