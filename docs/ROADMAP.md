@@ -49,10 +49,10 @@ pnpm --filter @adaptivemcp/examples client
 | `@adaptivemcp/runtime` | Batteries-included `AdaptiveRuntime` wiring all packages | ✅ done |
 | `examples` | Runnable server + client + scenarios | ✅ done |
 
-> Note (2026-07-22): `middleware` and `mcp-binary` are implemented, tested, and
-> wired into `AdaptiveRuntime`/`ThinClient` (see Phase 5), but are not yet in
-> `PUBLISHABLE_PACKAGES` (`scripts/lib/workspace.ts`) — add them there before the
-> next release.
+> Note (2026-09-29): `middleware` and `mcp-binary` are published on npm (first
+> released in v0.4.0) and are in `PUBLISHABLE_PACKAGES`
+> (`scripts/lib/workspace.ts`). (The earlier 2026-07-22 note predated their
+> release.) `graph-analysis` is packaging-ready but deliberately still excluded.
 
 ## Phase 0: Foundation (complete)
 
@@ -439,6 +439,18 @@ Historical note (2026-07-30): the first cut mapped `tool.execute.before`/
 `GraphTrackingMiddleware`/`OAuthMiddleware`, with 0 tests and synthetic hook
 shapes.
 
+**Update (2026-09-29): a first-party host now exercises the whole stack.**
+`adaptivemcp/agent` (sibling repo `mcp/adaptivemcp/agent`) is a real MCP-native
+agent host that owns both the LLM completion and the tool execution. It applies
+the loop end to end: per-step decoding (`decodingProvider`), per-tool model
+routing (`modelProvider`), the approval gate (with human-in-the-loop prompting),
+server-governed policy read from `dev.adaptivemcp/tools-metadata`, cost
+accounting, output compression (`HeadroomMiddleware`), cross-client
+`report_observation`, graph-aware guardrails, and per-turn execution DAGs. This
+is the "real harness" this item asked for — with the caveat that it is our own
+host, not OpenCode; the OpenCode plugin above remains the third-party adapter and
+is still unproven live.
+
 ### 6j. Session-scoped telemetry
 
 OpenCode treats sessions as first-class (`session.created` / `session.updated` /
@@ -662,6 +674,13 @@ on 2026-07-28 (the v0 interim) was broken. 8d/8e remain unbuilt.
   hardcoded constant alongside the resolver's static tables (mirrors
   `SPEC_VERSION`'s pattern in `packages/spec/src/version.ts`), bumped by hand
   whenever 8b's tables change.
+
+**Update (2026-09-29):** the first-party agent now applies decoding per model step
+(`DecodingAdvisor` → `DecodingResolver` → `ChatParams`, emitting a
+`decoding_applied` event), which exercises the pipeline on a real host — but it
+still does not record the resolved values + `resolverVersion` on
+`ToolExecutionEvent`, so this item remains open. It is now the natural next step:
+persist what the agent actually applied so 8e can analyze it.
 
 ### 8e. Decoding analyzer
 

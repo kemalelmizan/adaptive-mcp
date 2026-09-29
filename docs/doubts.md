@@ -1,7 +1,12 @@
 # Doubts & Feedback — Adaptive MCP
 
-Review snapshot: **2026-07-19**. This file is our living plan/action sheet for
+Review snapshot: **2026-09-29**. This file is our living plan/action sheet for
 next steps. Each item has a status: `open` / `decided` / `done`.
+
+**First-party host (2026-09-29):** `adaptivemcp/agent` now exercises the loop end
+to end — decoding, model routing, approvals, server-governed policy, cost,
+compression, cross-client reporting, and graph guardrails. See §14; it resolves
+or advances several items below.
 
 **Ecosystem recheck (2026-07-19):** SEP-2133 is now **Final** and the
 `capabilities.extensions` field is present in the released TypeScript SDK
@@ -91,6 +96,11 @@ symptom; the underlying naming/boundary question is still open.
 - [ ] **Resources are application-driven, not model-driven — the consumption model is wrong.** `open`
   The resource is a *client-side* input the host reads and may inject; not pushed to
   the model by the protocol. Known limitation, not a blocker (no core SEP available).
+  **Update (2026-09-29):** a real host now demonstrates the intended consumption
+  path — the agent reads `dev.adaptivemcp/tools-metadata` and applies it as a
+  policy floor, and injects learned context into its own prompt. The protocol
+  limitation stands (no auto-push); the host-driven design is now exercised, not
+  just assumed.
 - [ ] **It reinvents governance that overlaps core `ToolAnnotations` and the consent model.** `open`
   `annotation` is now framed as *additional, complementary* hints (risk/budget/owner)
   on top of core `ToolAnnotations`. Deep dive **§10**; chosen hybrid **§11** (implementing).
@@ -263,6 +273,9 @@ Verified against the live MCP repos and the installed SDK. This changes several
    `require_approval` (from an `approval` recommendation's decision). The
    `Annotation` type still doesn't carry them, so the open part is only SEP prose
    alignment — point it at the recommendation-derived view, or add the fields.
+   **Update (2026-09-29):** the reference *server* now emits them too
+   (`examples/src/server.ts` seeds owner/`require_approval`/budget) and a client
+   consumes them (the agent's `/policy`). Remaining open part is still SEP prose.
 2. **Resource URI documentation — code side resolved 2026-09-28.** Phase 11 fixed
    the emitted resource URIs to well-formed `dev.adaptivemcp://...` values
    (`@adaptivemcp/extension`). The SEP Resource table still conflates the
@@ -441,8 +454,13 @@ metadata at #1649 (Layer 3) — without waiting on #1649 to ship.
       resource `risk` is learned/observed only.
 - [x] Typecheck passes for `spec` + `examples` (spec rebuilt so examples sees export).
 - [ ] #1649 dual-emit — blocked on #1649 (Draft); tracked, not implemented.
-- [ ] `budget`/`require_approval` still not emitted by reference impl (§8 gap #1) — the
-      precedence rule is currently theoretical for those fields until they ship.
+- [x] `budget`/`require_approval` emitted by the reference impl (2026-09-29):
+      `view.ts` projects them from routing/approval recommendations, and
+      `examples/src/server.ts` seeds `owner`/`require_approval`/`budget` so the
+      published resource carries policy. The precedence rule
+      (host UI > suggestion > nothing) is now demonstrated by the first-party
+      agent: it applies server policy as a **floor** and never overrides a
+      human/learned value, while still prompting per host consent. See §14.
 
 ## 12. Next milestone: extensible middleware (updated 2026-07-21)
 
@@ -917,6 +935,43 @@ consistent with how the ROADMAP items themselves are scoped. Tests:
 `packages/routing/src/decoding-advisor.test.ts`,
 `decoding-resolver.test.ts`. Demo: `examples/src/scenarios/decoding-policy.ts`
 (`pnpm --filter @adaptivemcp/examples scenario:decoding-policy`).
+**Update (2026-09-29):** decoding is now wired into a real host — the agent's
+`decodingProvider` resolves a profile per model step, applies the knobs, and
+emits a `decoding_applied` event. #5 (record resolved values on
+`ToolExecutionEvent`) and #6 (analyzer) remain open; #5 is now the natural next
+step because a host is finally generating the data.
+
+## 14. First-party agent host (2026-09-29)
+
+`adaptivemcp/agent` (sibling repo) is a real MCP-native host that owns both the
+LLM completion and the tool execution. It is the consumer the two-store model
+and every advisory recommendation were designed for. What it exercises today:
+
+- **Decoding:** `DecodingAdvisor` → `DecodingResolver` → `ChatParams` per model
+  step (`decodingProvider`), emitting `decoding_applied`. Host owns the intent
+  baseline only insofar as it passes one; no classifier (consistent with §13c D3).
+- **Model routing:** `Router` per-tool `model` recommendations → catalog model
+  selection per step (`modelProvider`); `--router-min-invocations` exposes the
+  confidence gate (§13c D6's "host owns the threshold").
+- **Approvals:** the gate's `require_confirmation` prompts a human in the REPL
+  with the learned reason; static risk comes from core `Tool.annotations`.
+- **Server governance:** reads `dev.adaptivemcp/tools-metadata` and applies
+  `owner`/risk/`require_approval`/budget as a **floor** (never overriding host or
+  learned values) — the §10/§11 precedence rule in code.
+- **Cost/compression/reporting/guardrails:** token cost recorded per call;
+  `HeadroomMiddleware` compression with hash retrieval; `report_observation`
+  reporting; execution-graph cascades/anomalies injected as steering messages;
+  per-turn execution DAGs.
+
+**Still open (now with a real consumer to motivate them):**
+
+- §13d #5/#6 — record applied decoding on `ToolExecutionEvent`, then the analyzer.
+- §6 — upstream SDK PR for SEP-2133 graduation (unchanged; process-bound).
+- §1b/§10 — precedence wording in the SEP (host UI > suggestion > nothing):
+  implemented and demonstrated, but the SEP prose still needs the explicit text.
+- §1c — `AdaptiveRuntime` naming/boundary: the agent reinforces the two-store
+  reading (it owns the learning Store client-side; the example server serves the
+  extension resource), which supports option (2) rename-long-term over (1) split.
 
 ## 5. Raw notes (kept from earlier)
 
