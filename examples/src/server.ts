@@ -24,6 +24,37 @@ function withRisk(
  */
 export async function startServer(dbPath?: string, yamlPath?: string): Promise<McpServer> {
   const runtime = new AdaptiveRuntime({ dbPath, yamlPath, enableGraph: true });
+
+  // Server governance: publish static policy for a high-risk tool via the
+  // dev.adaptivemcp/tools-metadata resource. The client reads it and applies it
+  // as a floor (host consent > server policy > learned). See the SEP-2133 draft.
+  const policyNow = new Date().toISOString();
+  runtime.memory.setAnnotation({
+    toolName: "deploy_service",
+    serverName: "adaptive-example-server",
+    owner: "platform",
+    description: "Production deploy; server policy requires human approval.",
+  });
+  runtime.memory.addRecommendation({
+    toolName: "deploy_service",
+    serverName: "adaptive-example-server",
+    type: "approval",
+    payload: { decision: "require_confirmation" },
+    rationale: "Server policy: production deploys require human approval.",
+    confidence: 1,
+    generatedAt: policyNow,
+  });
+  runtime.memory.addRecommendation({
+    toolName: "deploy_service",
+    serverName: "adaptive-example-server",
+    type: "routing",
+    payload: { perToolLimit: 10, spent: 0, status: "ok" },
+    rationale: "Server policy: cost budget for deploys.",
+    confidence: 1,
+    generatedAt: policyNow,
+  });
+  runtime.extension.sync();
+
   const server = new McpServer(
     { name: "adaptive-example-server", version: "0.1.0" },
     // Advertise the Adaptive MCP extension via the SEP-2133 `extensions`
