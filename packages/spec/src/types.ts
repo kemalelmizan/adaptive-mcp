@@ -38,6 +38,14 @@ export interface ToolExecutionEvent {
   error?: ToolError;
   model?: string;
   cost?: CostInfo;
+  /**
+   * The decoding Adaptive MCP actually applied to the completion that produced
+   * this call. Recording the *resolved* values + `resolverVersion` keeps past
+   * decisions reproducible after the resolver's tables change (ROADMAP 8d).
+   */
+  decoding?: ToolDecoding;
+  /** Token usage for that completion, when the host knows it. */
+  usage?: { inputTokens?: number; outputTokens?: number };
   metadata?: Record<string, unknown>;
   /** Parent node ID in the execution graph (for DAG construction) */
   parentId?: string;
@@ -220,6 +228,18 @@ export interface DecodingRecommendation {
   resolverVersion: string;
   confidence: number;
   reasons: string[];
+}
+
+/**
+ * The decoding actually applied to a completion, as stored on a
+ * `ToolExecutionEvent` (ROADMAP 8d). A flattened `DecodingRecommendation`:
+ * the profile id, the concrete knobs, and the resolver version that produced
+ * them.
+ */
+export interface ToolDecoding {
+  profile: DecodingProfile["id"];
+  resolverVersion: string;
+  resolved: ResolvedDecodingSettings;
 }
 
 /**

@@ -921,11 +921,14 @@ until 8d telemetry has accumulated.**
    `trace` object) — `toDecodingRecommendation()` in
    `packages/routing/src/decoding-resolver.ts` composes it from
    `Recommendation.rationale.split("; ")`.
-5. [ ] Optional `decoding` field on `ToolExecutionEvent`, recording *resolved*
+5. [x] Optional `decoding` field on `ToolExecutionEvent`, recording *resolved*
    values + `resolverVersion` so past decisions stay reproducible after
-   resolver tables change (ROADMAP 8d). Not started.
-6. [ ] Decoding analyzer as a new, pure, computed-on-read pass — needs #5 to have
-   accumulated real data first (ROADMAP 8e). Not started.
+   resolver tables change (ROADMAP 8d). **Done 2026-09-29** — plus `usage`
+   (tokens); `AdaptiveRuntime.observeCompleted` forwards both, and the agent
+   records the decoding it applies.
+6. [x] Decoding analyzer as a new, pure, computed-on-read pass (ROADMAP 8e).
+   **Done 2026-09-29** — `DecodingAnalyzer` in `@adaptivemcp/routing`; the agent
+   surfaces it as `/decoding-report`.
 
 **Status:** `decided` for D1-D8; **1-4 done (2026-07-28)**, 5-6 `open` / planned
 — blocked on #4 first accumulating real usage, same shape as §6's stabilization
@@ -937,9 +940,10 @@ consistent with how the ROADMAP items themselves are scoped. Tests:
 (`pnpm --filter @adaptivemcp/examples scenario:decoding-policy`).
 **Update (2026-09-29):** decoding is now wired into a real host — the agent's
 `decodingProvider` resolves a profile per model step, applies the knobs, and
-emits a `decoding_applied` event. #5 (record resolved values on
-`ToolExecutionEvent`) and #6 (analyzer) remain open; #5 is now the natural next
-step because a host is finally generating the data.
+emits a `decoding_applied` event. **#5/#6 done 2026-09-29:** the applied decoding
+is recorded on `ToolExecutionEvent` (`ToolDecoding` + `usage`), and
+`DecodingAnalyzer` (in `@adaptivemcp/routing`) reports per-`(tool, profile,
+model, resolverVersion)` failure/latency/token stats with a suggested profile.
 
 ## 14. First-party agent host (2026-09-29)
 
@@ -965,7 +969,8 @@ and every advisory recommendation were designed for. What it exercises today:
 
 **Still open (now with a real consumer to motivate them):**
 
-- §13d #5/#6 — record applied decoding on `ToolExecutionEvent`, then the analyzer.
+- §13d #5/#6 — **done 2026-09-29** (applied decoding recorded on
+  `ToolExecutionEvent` + `DecodingAnalyzer`, surfaced as `/decoding-report`).
 - §6 — upstream SDK PR for SEP-2133 graduation (unchanged; process-bound).
 - §1b/§10 — precedence wording in the SEP (host UI > suggestion > nothing):
   implemented and demonstrated, but the SEP prose still needs the explicit text.

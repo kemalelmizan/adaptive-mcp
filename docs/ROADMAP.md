@@ -661,7 +661,7 @@ on 2026-07-28 (the v0 interim) was broken. 8d/8e remain unbuilt.
   has to combine their outputs into the full `DecodingRecommendation`, and it
   isn't either class's job.
 
-### 8d. Extend telemetry with `decoding`
+### 8d. Extend telemetry with `decoding` — ✅ done
 
 - Add optional `decoding?: { profile: DecodingProfile["id"]; resolverVersion:
   string; resolved: ResolvedDecodingSettings }` to `ToolExecutionEvent`
@@ -675,14 +675,13 @@ on 2026-07-28 (the v0 interim) was broken. 8d/8e remain unbuilt.
   `SPEC_VERSION`'s pattern in `packages/spec/src/version.ts`), bumped by hand
   whenever 8b's tables change.
 
-**Update (2026-09-29):** the first-party agent now applies decoding per model step
-(`DecodingAdvisor` → `DecodingResolver` → `ChatParams`, emitting a
-`decoding_applied` event), which exercises the pipeline on a real host — but it
-still does not record the resolved values + `resolverVersion` on
-`ToolExecutionEvent`, so this item remains open. It is now the natural next step:
-persist what the agent actually applied so 8e can analyze it.
+**Update (2026-09-29): done.** `ToolExecutionEvent` now carries optional
+`decoding` (`ToolDecoding`: profile, resolverVersion, resolved) and `usage`
+(input/output tokens); `AdaptiveRuntime.observeCompleted` forwards both, and the
+first-party agent records the resolved decoding it applies per step. See 8e for
+the analyzer that consumes it.
 
-### 8e. Decoding analyzer
+### 8e. Decoding analyzer — ✅ done
 
 - New pass, likely in `@adaptivemcp/evaluation` or a small new module — reads
   accumulated `decoding` telemetry across many events for the same
@@ -693,6 +692,10 @@ persist what the agent actually applied so 8e can analyze it.
   a state written back into a tool's record or auto-applied.
 - Needs real accumulated 8d telemetry to be meaningful — naturally the last
   item in this phase.
+- **Shipped (2026-09-29):** `DecodingAnalyzer` in `@adaptivemcp/routing` — pure,
+  computed-on-read, groups by `(tool, profile, model, resolverVersion)`, reports
+  failure/latency/token stats and a suggested profile. The first-party agent
+  exposes it as `/decoding-report`.
 
 ### 8f. Structured decision trace — ✅ done
 

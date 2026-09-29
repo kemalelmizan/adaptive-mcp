@@ -9,7 +9,7 @@ import { Router, type BudgetPolicy, type ModelOption } from "@adaptivemcp/routin
 import { Orchestrator } from "@adaptivemcp/orchestration";
 import { ApprovalGate, type ApprovalDecision } from "@adaptivemcp/approval";
 import { MiddlewareChain, type Middleware } from "@adaptivemcp/middleware";
-import type { Store } from "@adaptivemcp/spec";
+import type { Store, ToolDecoding } from "@adaptivemcp/spec";
 
 export interface AdaptiveRuntimeOptions {
   /**
@@ -121,6 +121,10 @@ export class AdaptiveRuntime {
     status: "completed" | "failed";
     model?: string;
     cost?: { amount: number; currency?: string };
+    /** The decoding applied to the completion that produced this call (ROADMAP 8d). */
+    decoding?: ToolDecoding;
+    /** Token usage for that completion, when the host knows it. */
+    usage?: { inputTokens?: number; outputTokens?: number };
     error?: { message: string };
     /** The tool's output, if available. Carried into the event (D1). */
     output?: unknown;
@@ -132,7 +136,7 @@ export class AdaptiveRuntime {
         cost: input.cost ? { amount: input.cost.amount, currency: input.cost.currency } : undefined,
         output: input.output ?? (input.status === "completed" ? { ok: true } : undefined),
       },
-      { status: input.status, error: input.error },
+      { status: input.status, error: input.error, decoding: input.decoding, usage: input.usage },
     );
     this.evaluator.evaluateAll();
     // Surface middleware contributions (D3: YAML `middleware` map).

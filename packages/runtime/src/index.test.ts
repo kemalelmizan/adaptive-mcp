@@ -62,4 +62,25 @@ describe("@adaptivemcp/runtime router configuration", () => {
 
     runtime.close();
   });
+
+  it("carries applied decoding + token usage into recorded telemetry (ROADMAP 8d)", () => {
+    const runtime = new AdaptiveRuntime();
+
+    runtime.observeCompleted({
+      toolName: "deploy",
+      serverName: "srv",
+      durationMs: 10,
+      status: "completed",
+      decoding: { profile: "deterministic", resolverVersion: "1.0.0", resolved: { temperature: 0.2 } },
+      usage: { inputTokens: 7, outputTokens: 3 },
+    });
+
+    const event = runtime.telemetry.getStore().all().at(-1);
+    expect(event?.decoding?.profile).toBe("deterministic");
+    expect(event?.decoding?.resolverVersion).toBe("1.0.0");
+    expect(event?.usage?.inputTokens).toBe(7);
+    expect(event?.usage?.outputTokens).toBe(3);
+
+    runtime.close();
+  });
 });
