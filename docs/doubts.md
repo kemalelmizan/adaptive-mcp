@@ -999,9 +999,12 @@ answered retroactively. Mitigations: open-ended `dimensions` JSON (new dims need
 no migration), an always-present `all` cell, EWMA for recency, and the bounded
 node layer for forensics.
 
-**Open follow-ups:** time-bucket windows for drift; fold retries (`attempts`)
-once `ThinClient` reports them; cardinality caps (top-K models + `other`); let
-`store` backends other than `MemoryStore` opt into `metricCells()`.
+**Follow-ups:** time-bucket windows for drift — **done 2026-09-29** (hourly cells
+for the overall tuple, pruned by retention); retry accounting — **done
+2026-09-29** (`ThinClient.run` returns `attempts`, folded and surfaced as
+`retry_rate`); metrics projected into the view — **done** (`ToolMetadataView.metrics`,
+a per-tool window/dimension map). Still open: cardinality caps (top-K models +
+`other`), and `metricCells()` support for non-`MemoryStore` backends.
 
 ## 5. Raw notes (kept from earlier)
 

@@ -32,6 +32,8 @@ export interface ToolExecutionEvent {
   requestId?: string;
   timestamp: string;
   durationMs?: number;
+  /** Total execution attempts (1 = no retry); for retry-rate metrics. */
+  attempts?: number;
   status: ToolStatus;
   input?: unknown;
   output?: unknown;
@@ -294,6 +296,8 @@ export interface MetricCell {
   dimensions: MetricDimensions;
   invocations: number;
   failures: number;
+  /** Sum of execution attempts (> invocations when retries happened). */
+  attempts: number;
   /** Error-code → count. */
   errorCodes: Record<string, number>;
   durationSum: number;

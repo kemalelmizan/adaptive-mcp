@@ -88,6 +88,11 @@ CREATE TABLE IF NOT EXISTS metric_cells (
 CREATE INDEX IF NOT EXISTS idx_metric_cells_tool ON metric_cells(tool_name, server_name);
 `),
   },
+  {
+    version: 4,
+    name: "add_metric_cells_attempts",
+    up: (db) => db.exec(`ALTER TABLE metric_cells ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`),
+  },
 ];
 
 /** Applies every migration in `migrations` that hasn't already been recorded, in version order. */

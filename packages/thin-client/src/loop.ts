@@ -112,7 +112,7 @@ export class ThinClient {
     input: unknown,
     record: (ok: boolean, error?: string, output?: unknown) => void,
     serverName?: string,
-  ): Promise<{ decision: ApprovalDecision; executed: boolean; output?: unknown }> {
+  ): Promise<{ decision: ApprovalDecision; executed: boolean; output?: unknown; attempts?: number }> {
     const decision = this.gate.gate(toolName, serverName);
     if (decision === "deny") {
       return { decision, executed: false };
@@ -131,7 +131,7 @@ export class ThinClient {
     // one graph-tracking context fork, so concurrent calls (e.g. via
     // `Promise.all`) each get an isolated parent/child stack instead of
     // corrupting a shared one. See GraphTrackingMiddleware.runInContext.
-    const runOnce = async (): Promise<{ decision: ApprovalDecision; executed: boolean; output?: unknown }> => {
+    const runOnce = async (): Promise<{ decision: ApprovalDecision; executed: boolean; output?: unknown; attempts?: number }> => {
       await this.chain.runBefore(call);
 
       if (this.graphTracking) {
@@ -161,7 +161,7 @@ export class ThinClient {
         }
       }
 
-      return { decision, executed: true, output: call.output };
+      return { decision, executed: true, output: call.output, attempts: result.attempts };
     };
 
     return this.graphTracking ? this.graphTracking.runInContext(runOnce) : runOnce();
@@ -184,17 +184,19 @@ export class ThinClient {
     handler: ToolHandler,
     call: PlannedCall,
     policy: RetryPolicy,
-  ): Promise<{ ok: boolean; error?: string; output?: unknown }> {
+  ): Promise<{ ok: boolean; error?: string; output?: unknown; attempts: number }> {
     const attempts = policy.enabled ? Math.max(1, policy.maxAttempts) : 1;
     let last: { ok: boolean; error?: string; output?: unknown } = { ok: false, error: "no attempt" };
+    let tried = 0;
     for (let attempt = 0; attempt < attempts; attempt++) {
+      tried = attempt + 1;
       last = await handler(call.input);
-      if (last.ok) return last;
+      if (last.ok) return { ...last, attempts: tried };
       if (attempt < attempts - 1 && policy.baseDelayMs > 0) {
         await delay(policy.baseDelayMs * 2 ** attempt);
       }
     }
-    return last;
+    return { ...last, attempts: tried };
   }
 }
 

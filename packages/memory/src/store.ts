@@ -302,17 +302,32 @@ export class MemoryStore implements Store {
     const now = event.timestamp ?? new Date().toISOString();
     for (const dimensions of cellDimensionsFor(event)) {
       const key = dimsKey(dimensions);
-      const existing = this.readMetricCell(event.toolName, event.serverName ?? UNKNOWN_SERVER, key);
-      this.writeMetricCell(foldMetricCell(existing, event, dimensions, now), key);
+      // The overall `{}` cell also gets an hourly window (for drift); dimensioned
+      // cells keep only the lifetime aggregate to bound write amplification.
+      const windows = Object.keys(dimensions).length === 0 ? ["all", windowKey(now)] : ["all"];
+      for (const window of windows) {
+        const existing = this.readMetricCell(
+          event.toolName,
+          event.serverName ?? UNKNOWN_SERVER,
+          window,
+          key,
+        );
+        this.writeMetricCell(foldMetricCell(existing, event, dimensions, window, now), key);
+      }
     }
   }
 
-  private readMetricCell(toolName: string, serverName: string, dimsKeyValue: string): MetricCell | undefined {
+  private readMetricCell(
+    toolName: string,
+    serverName: string,
+    window: string,
+    dimsKeyValue: string,
+  ): MetricCell | undefined {
     const row = this.db
       .prepare(
-        `SELECT * FROM metric_cells WHERE tool_name = ? AND server_name = ? AND window = 'all' AND dims_key = ?`,
+        `SELECT * FROM metric_cells WHERE tool_name = ? AND server_name = ? AND window = ? AND dims_key = ?`,
       )
-      .get(toolName, serverName, dimsKeyValue) as unknown as MetricCellRow | undefined;
+      .get(toolName, serverName, window, dimsKeyValue) as unknown as MetricCellRow | undefined;
     return row ? deserializeMetricCell(row) : undefined;
   }
 
@@ -321,11 +336,11 @@ export class MemoryStore implements Store {
       .prepare(
         `INSERT OR REPLACE INTO metric_cells (
            tool_name, server_name, window, dims_key, dims,
-           invocations, failures, error_codes,
+           invocations, failures, attempts, error_codes,
            duration_sum, duration_count, duration_hist,
            token_in_sum, token_out_sum, token_count, cost_sum,
            ewma_failure_rate, ewma_duration_ms, first_seen, last_seen, exemplars
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         cell.toolName,
@@ -335,6 +350,7 @@ export class MemoryStore implements Store {
         JSON.stringify(cell.dimensions),
         cell.invocations,
         cell.failures,
+        cell.attempts,
         JSON.stringify(cell.errorCodes),
         cell.durationSum,
         cell.durationCount,
@@ -417,6 +433,16 @@ export class MemoryStore implements Store {
     const now = Date.now();
     if (now - this.lastPrunedAt < RETENTION_CHECK_INTERVAL_MS) return;
     this.pruneExecutionNodes(this.retention.maxAgeMs, now);
+    this.pruneMetricCells(this.retention.maxAgeMs, now);
+  }
+
+  /** Delete hourly (non-`all`) metric cells older than `olderThanMs`; `all` is kept. */
+  pruneMetricCells(olderThanMs: number, now: number = Date.now()): { deleted: number } {
+    const cutoff = new Date(now - olderThanMs).toISOString();
+    const result = this.db
+      .prepare(`DELETE FROM metric_cells WHERE window != 'all' AND last_seen < ?`)
+      .run(cutoff);
+    return { deleted: Number(result.changes) };
   }
 
   /** Get an execution node by ID. */
@@ -575,6 +601,7 @@ interface MetricCellRow {
   dims: string;
   invocations: number;
   failures: number;
+  attempts: number;
   error_codes: string;
   duration_sum: number;
   duration_count: number;
@@ -598,6 +625,7 @@ function deserializeMetricCell(row: MetricCellRow): MetricCell {
     dimensions: JSON.parse(row.dims) as MetricDimensions,
     invocations: row.invocations,
     failures: row.failures,
+    attempts: row.attempts,
     errorCodes: JSON.parse(row.error_codes) as Record<string, number>,
     durationSum: row.duration_sum,
     durationCount: row.duration_count,
@@ -653,6 +681,11 @@ function dimsKey(dims: MetricDimensions): string {
   );
 }
 
+/** Hourly retention-window key for an ISO timestamp (UTC). */
+function windowKey(iso: string): string {
+  return `hour:${iso.slice(0, 13)}`;
+}
+
 function durationBucketIndex(ms: number): number {
   for (let i = 0; i < DURATION_BUCKETS_MS.length; i += 1) {
     if (ms <= DURATION_BUCKETS_MS[i]!) return i;
@@ -665,6 +698,7 @@ function foldMetricCell(
   existing: MetricCell | undefined,
   event: ToolExecutionEvent,
   dimensions: MetricDimensions,
+  window: string,
   now: string,
 ): MetricCell {
   const failed = event.status === "failed";
@@ -677,10 +711,11 @@ function foldMetricCell(
   const base: MetricCell = existing ?? {
     toolName: event.toolName,
     serverName: event.serverName,
-    window: "all",
+    window,
     dimensions,
     invocations: 0,
     failures: 0,
+    attempts: 0,
     errorCodes: {},
     durationSum: 0,
     durationCount: 0,
@@ -709,6 +744,7 @@ function foldMetricCell(
     dimensions,
     invocations: base.invocations + 1,
     failures: base.failures + failure,
+    attempts: base.attempts + (event.attempts ?? 1),
     errorCodes,
     durationSum: base.durationSum + (duration ?? 0),
     durationCount: base.durationCount + (duration !== undefined ? 1 : 0),

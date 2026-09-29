@@ -121,6 +121,8 @@ export class AdaptiveRuntime {
     status: "completed" | "failed";
     model?: string;
     cost?: { amount: number; currency?: string };
+    /** Total execution attempts (1 = no retry), from the thin client. */
+    attempts?: number;
     /** The decoding applied to the completion that produced this call (ROADMAP 8d). */
     decoding?: ToolDecoding;
     /** Token usage for that completion, when the host knows it. */
@@ -136,7 +138,7 @@ export class AdaptiveRuntime {
         cost: input.cost ? { amount: input.cost.amount, currency: input.cost.currency } : undefined,
         output: input.output ?? (input.status === "completed" ? { ok: true } : undefined),
       },
-      { status: input.status, error: input.error, decoding: input.decoding, usage: input.usage },
+      { status: input.status, error: input.error, decoding: input.decoding, usage: input.usage, attempts: input.attempts },
     );
     this.evaluator.evaluateAll();
     // Surface middleware contributions (D3: YAML `middleware` map).

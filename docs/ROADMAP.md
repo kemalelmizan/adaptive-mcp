@@ -697,7 +697,8 @@ the analyzer that consumes it.
   failure/latency/token stats and a suggested profile. It reads either the
   in-process event log (`analyze`) or the durable `metric_cells` rollup
   (`analyzeCells`, memory migration 3). The first-party agent exposes it as
-  `/decoding-report`.
+  `/decoding-report`. The view also surfaces a per-tool `metrics` map (counts,
+  failure rate, latency, tokens, `retry_rate`, EWMA) from the cells.
 
 ### 8f. Structured decision trace — ✅ done
 

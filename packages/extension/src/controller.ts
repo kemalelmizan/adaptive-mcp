@@ -4,10 +4,12 @@ import { SPEC_VERSION, TOOLS_METADATA_RESOURCE_URI, buildExecutionGraph } from "
 import type { Annotation, Store, ExecutionNode, ToolRecord } from "@adaptivemcp/spec";
 import {
   renderToolsMetadata,
+  groupMetricCells,
   toDocument,
   toYaml,
   computeEtag,
   type ToolsMetadataDocument,
+  type ToolMetricView,
   type ExecutionGraphDocument,
   type WorkflowGraphDocument,
   type GraphInsightsDocument,
@@ -73,7 +75,12 @@ export class ExtensionController {
 
   /** Recompute the view from the store and (optionally) persist it as YAML. */
   sync(): ToolsMetadataDocument {
-    const doc = renderToolsMetadata(this.memory.allTools(), SPEC_VERSION, this.middlewareView);
+    const doc = renderToolsMetadata(
+      this.memory.allTools(),
+      SPEC_VERSION,
+      this.middlewareView,
+      this.metricsView(),
+    );
     if (this.yamlPath) {
       mkdirSync(dirname(this.yamlPath), { recursive: true });
       writeFileSync(this.yamlPath, toYaml(doc), "utf8");
@@ -83,7 +90,18 @@ export class ExtensionController {
 
   /** Read the current view without writing to disk. */
   view(): ToolsMetadataDocument {
-    return renderToolsMetadata(this.memory.allTools(), SPEC_VERSION, this.middlewareView);
+    return renderToolsMetadata(
+      this.memory.allTools(),
+      SPEC_VERSION,
+      this.middlewareView,
+      this.metricsView(),
+    );
+  }
+
+  /** Metric cells grouped for the view, when the backing store provides them. */
+  private metricsView(): Record<string, Record<string, ToolMetricView>> | undefined {
+    const cells = this.memory.metricCells?.();
+    return cells && cells.length > 0 ? groupMetricCells(cells) : undefined;
   }
 
   /** MCP resource URI for the derived tools-metadata view (`dev.adaptivemcp://tools-metadata`). */

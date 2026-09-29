@@ -72,6 +72,7 @@ describe("DecodingAnalyzer", () => {
       dimensions: { model: "m1", decodingProfile: "deterministic", resolverVersion: "1.0.0" },
       invocations: 10,
       failures: 1,
+      attempts: 11,
       errorCodes: {},
       durationSum: 500,
       durationCount: 10,

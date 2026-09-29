@@ -107,6 +107,7 @@ describe("@adaptivemcp/thin-client", () => {
     );
     expect(res.executed).toBe(true);
     expect(attempts).toBe(3);
+    expect(res.attempts).toBe(3);
   });
 
   it("runs registered middleware around the call (D2/D5)", async () => {

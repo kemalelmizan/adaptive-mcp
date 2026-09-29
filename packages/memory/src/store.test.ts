@@ -64,6 +64,7 @@ describe("@adaptivemcp/memory", () => {
     const all = cells.find((cell) => Object.keys(cell.dimensions).length === 0)!;
     expect(all.invocations).toBe(4);
     expect(all.failures).toBe(1);
+    expect(all.attempts).toBe(4);
     expect(all.errorCodes).toEqual({ ETIMEDOUT: 1 });
     expect(all.durationSum).toBe(480);
     expect(all.tokenInSum).toBe(40);
@@ -80,6 +81,9 @@ describe("@adaptivemcp/memory", () => {
     const decoding = cells.find((cell) => cell.dimensions.decodingProfile === "deterministic")!;
     expect(decoding.dimensions.model).toBe("m1");
     expect(decoding.dimensions.resolverVersion).toBe("1.0.0");
+
+    // The overall cell also gets an hourly window for drift.
+    expect(cells.some((cell) => cell.window.startsWith("hour:"))).toBe(true);
   });
 
   it("setAnnotation merges into the existing annotation", () => {
@@ -236,7 +240,7 @@ describe("@adaptivemcp/memory", () => {
         version: number;
       }[];
       raw.close();
-      expect(rows.map((r) => r.version)).toEqual([1, 2, 3]);
+      expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4]);
     });
 
     it("creates the timestamp index used for pruning", () => {

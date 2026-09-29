@@ -68,6 +68,34 @@ describe("@adaptivemcp/extension", () => {
     expect(view.annotation.sampling).toBeUndefined();
   });
 
+  it("projects metric cells into the view's metrics map", () => {
+    store.recordExecution({
+      id: "e1",
+      toolName: "deploy_service",
+      serverName: "srv",
+      timestamp: new Date().toISOString(),
+      status: "completed",
+      durationMs: 120,
+      model: "qwen",
+      decoding: { profile: "deterministic", resolverVersion: "1.0.0", resolved: {} },
+      usage: { inputTokens: 10, outputTokens: 5 },
+      attempts: 2,
+    });
+
+    const controller = new ExtensionController({ memory: store });
+    const tool = controller.view().tools.find((t) => t.name === "deploy_service")!;
+    expect(tool.metrics?.["all"]).toMatchObject({
+      invocations: 1,
+      failures: 0,
+      retry_rate: 1,
+      avg_duration_ms: 120,
+      avg_input_tokens: 10,
+      avg_output_tokens: 5,
+    });
+    expect(tool.metrics?.["all decoding=deterministic@qwen/1.0.0"]?.invocations).toBe(1);
+    expect(Object.keys(tool.metrics ?? {}).some((key) => key.startsWith("hour:"))).toBe(true);
+  });
+
   it("renderToolsMetadata wraps tools with version + timestamp", () => {
     store.ensureTool("search_customer", "crm");
     const doc = renderToolsMetadata(store.allTools(), SPEC_VERSION);
