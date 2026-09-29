@@ -694,8 +694,10 @@ the analyzer that consumes it.
   item in this phase.
 - **Shipped (2026-09-29):** `DecodingAnalyzer` in `@adaptivemcp/routing` — pure,
   computed-on-read, groups by `(tool, profile, model, resolverVersion)`, reports
-  failure/latency/token stats and a suggested profile. The first-party agent
-  exposes it as `/decoding-report`.
+  failure/latency/token stats and a suggested profile. It reads either the
+  in-process event log (`analyze`) or the durable `metric_cells` rollup
+  (`analyzeCells`, memory migration 3). The first-party agent exposes it as
+  `/decoding-report`.
 
 ### 8f. Structured decision trace — ✅ done
 

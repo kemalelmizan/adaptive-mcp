@@ -1,4 +1,4 @@
-import type { ToolExecutionEvent } from "@adaptivemcp/spec";
+import type { MetricCell, ToolExecutionEvent } from "@adaptivemcp/spec";
 import type { DecodingProfileId } from "./decoding-advisor.js";
 
 /** One `(tool, profile, model, resolverVersion)` grouping of observed decoding. */
@@ -125,6 +125,38 @@ export class DecodingAnalyzer {
           avgInputTokens: group.tokenCount ? Math.round(group.inputSum / group.tokenCount) : 0,
           avgOutputTokens: group.tokenCount ? Math.round(group.outputSum / group.tokenCount) : 0,
           suggestedProfile: failureRate >= this.highFailureRate ? "deterministic" : group.profile,
+        };
+      })
+      .sort((a, b) => b.failureRate - a.failureRate || b.invocations - a.invocations);
+  }
+
+  /**
+   * Same report over pre-aggregated metric cells (the durable layer), so
+   * analysis spans runs without a raw events table. Reads only cells that carry
+   * a `decodingProfile` dimension.
+   */
+  analyzeCells(cells: MetricCell[], options: DecodingAnalyzerOptions = {}): DecodingGroup[] {
+    const minSamples = options.minSamples ?? this.minSamples;
+    const highFailureRate = options.highFailureRate ?? this.highFailureRate;
+
+    return cells
+      .filter((cell) => cell.dimensions.decodingProfile !== undefined && cell.invocations >= minSamples)
+      .map((cell) => {
+        const profile = cell.dimensions.decodingProfile as DecodingProfileId;
+        const failureRate = cell.invocations > 0 ? cell.failures / cell.invocations : 0;
+        return {
+          toolName: cell.toolName,
+          serverName: cell.serverName,
+          profile,
+          model: cell.dimensions.model,
+          resolverVersion: cell.dimensions.resolverVersion ?? "",
+          invocations: cell.invocations,
+          failures: cell.failures,
+          failureRate: Number(failureRate.toFixed(4)),
+          avgDurationMs: cell.durationCount ? Math.round(cell.durationSum / cell.durationCount) : 0,
+          avgInputTokens: cell.tokenCount ? Math.round(cell.tokenInSum / cell.tokenCount) : 0,
+          avgOutputTokens: cell.tokenCount ? Math.round(cell.tokenOutSum / cell.tokenCount) : 0,
+          suggestedProfile: failureRate >= highFailureRate ? "deterministic" : profile,
         };
       })
       .sort((a, b) => b.failureRate - a.failureRate || b.invocations - a.invocations);

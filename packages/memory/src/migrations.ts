@@ -57,6 +57,37 @@ export const MIGRATIONS: Migration[] = [
     name: "add_nodes_timestamp_index",
     up: (db) => db.exec(`CREATE INDEX IF NOT EXISTS idx_nodes_timestamp ON execution_nodes(timestamp)`),
   },
+  {
+    version: 3,
+    name: "add_metric_cells",
+    up: (db) =>
+      db.exec(`
+CREATE TABLE IF NOT EXISTS metric_cells (
+  tool_name TEXT NOT NULL,
+  server_name TEXT NOT NULL DEFAULT '',
+  window TEXT NOT NULL DEFAULT 'all',
+  dims_key TEXT NOT NULL,
+  dims TEXT NOT NULL,
+  invocations INTEGER NOT NULL DEFAULT 0,
+  failures INTEGER NOT NULL DEFAULT 0,
+  error_codes TEXT NOT NULL DEFAULT '{}',
+  duration_sum REAL NOT NULL DEFAULT 0,
+  duration_count INTEGER NOT NULL DEFAULT 0,
+  duration_hist TEXT NOT NULL DEFAULT '[]',
+  token_in_sum REAL NOT NULL DEFAULT 0,
+  token_out_sum REAL NOT NULL DEFAULT 0,
+  token_count INTEGER NOT NULL DEFAULT 0,
+  cost_sum REAL NOT NULL DEFAULT 0,
+  ewma_failure_rate REAL,
+  ewma_duration_ms REAL,
+  first_seen TEXT,
+  last_seen TEXT,
+  exemplars TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (tool_name, server_name, window, dims_key)
+);
+CREATE INDEX IF NOT EXISTS idx_metric_cells_tool ON metric_cells(tool_name, server_name);
+`),
+  },
 ];
 
 /** Applies every migration in `migrations` that hasn't already been recorded, in version order. */

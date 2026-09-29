@@ -43,6 +43,45 @@ describe("@adaptivemcp/memory", () => {
     expect(store.getTool("nope")).toBeUndefined();
   });
 
+  it("folds execution events into dimensional metric cells", () => {
+    const now = new Date().toISOString();
+    for (let i = 0; i < 4; i += 1) {
+      store.recordExecution({
+        id: `e${i}`,
+        toolName: "deploy",
+        serverName: "srv",
+        timestamp: now,
+        status: i === 0 ? "failed" : "completed",
+        durationMs: 120,
+        model: "m1",
+        decoding: { profile: "deterministic", resolverVersion: "1.0.0", resolved: {} },
+        usage: { inputTokens: 10, outputTokens: 5 },
+        error: i === 0 ? { message: "boom", code: "ETIMEDOUT" } : undefined,
+      });
+    }
+
+    const cells = store.metricCells({ toolName: "deploy" });
+    const all = cells.find((cell) => Object.keys(cell.dimensions).length === 0)!;
+    expect(all.invocations).toBe(4);
+    expect(all.failures).toBe(1);
+    expect(all.errorCodes).toEqual({ ETIMEDOUT: 1 });
+    expect(all.durationSum).toBe(480);
+    expect(all.tokenInSum).toBe(40);
+    expect(all.tokenOutSum).toBe(20);
+    expect(all.durationHistogram.reduce((sum, n) => sum + n, 0)).toBe(4);
+    expect(all.ewmaFailureRate).toBeCloseTo(0.512, 3);
+    expect(all.exemplars).toEqual(["e0", "e1", "e2", "e3"]);
+
+    const model = cells.find(
+      (cell) => cell.dimensions.model === "m1" && cell.dimensions.decodingProfile === undefined,
+    )!;
+    expect(model.invocations).toBe(4);
+
+    const decoding = cells.find((cell) => cell.dimensions.decodingProfile === "deterministic")!;
+    expect(decoding.dimensions.model).toBe("m1");
+    expect(decoding.dimensions.resolverVersion).toBe("1.0.0");
+  });
+
   it("setAnnotation merges into the existing annotation", () => {
     store.ensureTool("deploy_service");
     const rec = store.setAnnotation({
@@ -197,7 +236,7 @@ describe("@adaptivemcp/memory", () => {
         version: number;
       }[];
       raw.close();
-      expect(rows.map((r) => r.version)).toEqual([1, 2]);
+      expect(rows.map((r) => r.version)).toEqual([1, 2, 3]);
     });
 
     it("creates the timestamp index used for pruning", () => {

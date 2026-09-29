@@ -2,6 +2,8 @@ import { DatabaseSync, type DatabaseSyncOptions } from "node:sqlite";
 import type {
   Annotation,
   Insight,
+  MetricCell,
+  MetricDimensions,
   Recommendation,
   RecommendationType,
   Store,
@@ -269,7 +271,84 @@ export class MemoryStore implements Store {
       updatedAt: new Date().toISOString(),
     };
     this.write(updated);
+    this.foldMetricCells(event);
     return updated;
+  }
+
+  /**
+   * Read pre-aggregated metric cells (bounded dimensional rollups). This is the
+   * durable, queryable metadata layer that replaces a raw events table.
+   */
+  metricCells(options: { toolName?: string; serverName?: string } = {}): MetricCell[] {
+    const clauses: string[] = [];
+    const params: string[] = [];
+    if (options.toolName !== undefined) {
+      clauses.push("tool_name = ?");
+      params.push(options.toolName);
+    }
+    if (options.serverName !== undefined) {
+      clauses.push("server_name = ?");
+      params.push(options.serverName);
+    }
+    const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "";
+    const rows = this.db
+      .prepare(`SELECT * FROM metric_cells${where} ORDER BY tool_name, server_name, dims_key`)
+      .all(...params) as unknown as MetricCellRow[];
+    return rows.map(deserializeMetricCell);
+  }
+
+  /** Pre-aggregate an event into the bounded set of metric cells it belongs to. */
+  private foldMetricCells(event: ToolExecutionEvent): void {
+    const now = event.timestamp ?? new Date().toISOString();
+    for (const dimensions of cellDimensionsFor(event)) {
+      const key = dimsKey(dimensions);
+      const existing = this.readMetricCell(event.toolName, event.serverName ?? UNKNOWN_SERVER, key);
+      this.writeMetricCell(foldMetricCell(existing, event, dimensions, now), key);
+    }
+  }
+
+  private readMetricCell(toolName: string, serverName: string, dimsKeyValue: string): MetricCell | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM metric_cells WHERE tool_name = ? AND server_name = ? AND window = 'all' AND dims_key = ?`,
+      )
+      .get(toolName, serverName, dimsKeyValue) as unknown as MetricCellRow | undefined;
+    return row ? deserializeMetricCell(row) : undefined;
+  }
+
+  private writeMetricCell(cell: MetricCell, dimsKeyValue: string): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO metric_cells (
+           tool_name, server_name, window, dims_key, dims,
+           invocations, failures, error_codes,
+           duration_sum, duration_count, duration_hist,
+           token_in_sum, token_out_sum, token_count, cost_sum,
+           ewma_failure_rate, ewma_duration_ms, first_seen, last_seen, exemplars
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        cell.toolName,
+        cell.serverName ?? UNKNOWN_SERVER,
+        cell.window,
+        dimsKeyValue,
+        JSON.stringify(cell.dimensions),
+        cell.invocations,
+        cell.failures,
+        JSON.stringify(cell.errorCodes),
+        cell.durationSum,
+        cell.durationCount,
+        JSON.stringify(cell.durationHistogram),
+        cell.tokenInSum,
+        cell.tokenOutSum,
+        cell.tokenCount,
+        cell.costSum,
+        cell.ewmaFailureRate ?? null,
+        cell.ewmaDurationMs ?? null,
+        cell.firstSeen,
+        cell.lastSeen,
+        JSON.stringify(cell.exemplars),
+      );
   }
 
   /** `server_name` is part of the primary key, so it's matched in WHERE, not reassigned in SET. */
@@ -461,7 +540,7 @@ function foldEvent(stats: ToolStats, event: ToolExecutionEvent): ToolStats {
   const totalCost = stats.totalCost + (event.cost?.amount ?? 0);
   
   // Track average output tokens for context cost
-  const outputTokens = event.cost?.outputTokens ?? 0;
+  const outputTokens = eventTokens(event).outputTokens ?? 0;
   const prevAvgTokens = stats.avgOutputTokens ?? 0;
   const avgOutputTokens = (prevAvgTokens * (invocations - 1) + outputTokens) / invocations;
   
@@ -485,5 +564,170 @@ function deserialize(row: ToolRow): ToolRecord {
     recommendations: JSON.parse(row.recommendations) as Recommendation[],
     stats: JSON.parse(row.stats) as ToolStats,
     updatedAt: row.updated_at,
+  };
+}
+
+interface MetricCellRow {
+  tool_name: string;
+  server_name: string;
+  window: string;
+  dims_key: string;
+  dims: string;
+  invocations: number;
+  failures: number;
+  error_codes: string;
+  duration_sum: number;
+  duration_count: number;
+  duration_hist: string;
+  token_in_sum: number;
+  token_out_sum: number;
+  token_count: number;
+  cost_sum: number;
+  ewma_failure_rate: number | null;
+  ewma_duration_ms: number | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  exemplars: string;
+}
+
+function deserializeMetricCell(row: MetricCellRow): MetricCell {
+  return {
+    toolName: row.tool_name,
+    serverName: row.server_name === UNKNOWN_SERVER ? undefined : row.server_name,
+    window: row.window,
+    dimensions: JSON.parse(row.dims) as MetricDimensions,
+    invocations: row.invocations,
+    failures: row.failures,
+    errorCodes: JSON.parse(row.error_codes) as Record<string, number>,
+    durationSum: row.duration_sum,
+    durationCount: row.duration_count,
+    durationHistogram: JSON.parse(row.duration_hist) as number[],
+    tokenInSum: row.token_in_sum,
+    tokenOutSum: row.token_out_sum,
+    tokenCount: row.token_count,
+    costSum: row.cost_sum,
+    ewmaFailureRate: row.ewma_failure_rate ?? undefined,
+    ewmaDurationMs: row.ewma_duration_ms ?? undefined,
+    firstSeen: row.first_seen ?? "",
+    lastSeen: row.last_seen ?? "",
+    exemplars: JSON.parse(row.exemplars) as string[],
+  };
+}
+
+/** Fixed duration histogram buckets (upper bound in ms); the last bucket is overflow. */
+const DURATION_BUCKETS_MS = [50, 100, 250, 500, 1000, 2500, 5000, 10000];
+const DURATION_BUCKET_COUNT = DURATION_BUCKETS_MS.length + 1;
+/** EWMA smoothing factor for recency-weighted failure rate / duration. */
+const EWMA_ALPHA = 0.2;
+/** How many recent event ids a cell keeps for drill-down. */
+const EXEMPLAR_LIMIT = 5;
+
+/** Token usage, preferring the explicit `usage` field and falling back to `cost`. */
+function eventTokens(event: ToolExecutionEvent): { inputTokens?: number; outputTokens?: number } {
+  if (event.usage && (event.usage.inputTokens !== undefined || event.usage.outputTokens !== undefined)) {
+    return event.usage;
+  }
+  return { inputTokens: event.cost?.inputTokens, outputTokens: event.cost?.outputTokens };
+}
+
+/** The bounded set of dimension tuples an event contributes to. */
+function cellDimensionsFor(event: ToolExecutionEvent): MetricDimensions[] {
+  const dims: MetricDimensions[] = [{}];
+  if (event.model) dims.push({ model: event.model });
+  if (event.decoding) {
+    dims.push({
+      ...(event.model ? { model: event.model } : {}),
+      decodingProfile: event.decoding.profile,
+      resolverVersion: event.decoding.resolverVersion,
+    });
+  }
+  return dims;
+}
+
+/** Stable key for a dimension tuple (sorted keys). */
+function dimsKey(dims: MetricDimensions): string {
+  return JSON.stringify(
+    Object.keys(dims)
+      .sort()
+      .map((key) => [key, dims[key]]),
+  );
+}
+
+function durationBucketIndex(ms: number): number {
+  for (let i = 0; i < DURATION_BUCKETS_MS.length; i += 1) {
+    if (ms <= DURATION_BUCKETS_MS[i]!) return i;
+  }
+  return DURATION_BUCKETS_MS.length;
+}
+
+/** Fold one event into a metric cell (creating it when absent). */
+function foldMetricCell(
+  existing: MetricCell | undefined,
+  event: ToolExecutionEvent,
+  dimensions: MetricDimensions,
+  now: string,
+): MetricCell {
+  const failed = event.status === "failed";
+  const failure = failed ? 1 : 0;
+  const duration = typeof event.durationMs === "number" ? event.durationMs : undefined;
+  const tokens = eventTokens(event);
+  const hasTokens = tokens.inputTokens !== undefined || tokens.outputTokens !== undefined;
+  const cost = event.cost?.amount;
+
+  const base: MetricCell = existing ?? {
+    toolName: event.toolName,
+    serverName: event.serverName,
+    window: "all",
+    dimensions,
+    invocations: 0,
+    failures: 0,
+    errorCodes: {},
+    durationSum: 0,
+    durationCount: 0,
+    durationHistogram: new Array(DURATION_BUCKET_COUNT).fill(0) as number[],
+    tokenInSum: 0,
+    tokenOutSum: 0,
+    tokenCount: 0,
+    costSum: 0,
+    firstSeen: now,
+    lastSeen: now,
+    exemplars: [],
+  };
+
+  const errorCodes = { ...base.errorCodes };
+  if (failed) {
+    const code = event.error?.code ?? "unknown";
+    errorCodes[code] = (errorCodes[code] ?? 0) + 1;
+  }
+
+  const histogram = [...base.durationHistogram];
+  while (histogram.length < DURATION_BUCKET_COUNT) histogram.push(0);
+  if (duration !== undefined) histogram[durationBucketIndex(duration)] = (histogram[durationBucketIndex(duration)] ?? 0) + 1;
+
+  return {
+    ...base,
+    dimensions,
+    invocations: base.invocations + 1,
+    failures: base.failures + failure,
+    errorCodes,
+    durationSum: base.durationSum + (duration ?? 0),
+    durationCount: base.durationCount + (duration !== undefined ? 1 : 0),
+    durationHistogram: histogram,
+    tokenInSum: base.tokenInSum + (tokens.inputTokens ?? 0),
+    tokenOutSum: base.tokenOutSum + (tokens.outputTokens ?? 0),
+    tokenCount: base.tokenCount + (hasTokens ? 1 : 0),
+    costSum: base.costSum + (cost !== undefined && Number.isFinite(cost) ? cost : 0),
+    ewmaFailureRate:
+      base.ewmaFailureRate === undefined
+        ? failure
+        : base.ewmaFailureRate + EWMA_ALPHA * (failure - base.ewmaFailureRate),
+    ewmaDurationMs:
+      duration === undefined
+        ? base.ewmaDurationMs
+        : base.ewmaDurationMs === undefined
+          ? duration
+          : base.ewmaDurationMs + EWMA_ALPHA * (duration - base.ewmaDurationMs),
+    lastSeen: now,
+    exemplars: [...base.exemplars, event.id].slice(-EXEMPLAR_LIMIT),
   };
 }

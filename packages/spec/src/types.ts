@@ -268,6 +268,52 @@ export interface ToolStats {
 }
 
 /**
+ * A bounded dimension tuple for a metric cell. Keys with undefined values are
+ * omitted. Kept open-ended (`[key]`) so new dimensions don't need a migration;
+ * cardinality is bounded by the host (models from its catalog, 3 decoding
+ * profiles, few resolver versions).
+ */
+export interface MetricDimensions {
+  model?: string;
+  decodingProfile?: string;
+  resolverVersion?: string;
+  [key: string]: string | undefined;
+}
+
+/**
+ * A pre-aggregated metric cell: events folded into a bounded dimension tuple and
+ * window. This is how Adaptive MCP keeps *rich, queryable* metadata without a
+ * raw events table — counters, sums, a fixed-bucket duration histogram, EWMA
+ * recency, and a bounded exemplar ring, instead of every event.
+ */
+export interface MetricCell {
+  toolName: string;
+  serverName?: string;
+  /** Retention window key; `"all"` is the lifetime aggregate. */
+  window: string;
+  dimensions: MetricDimensions;
+  invocations: number;
+  failures: number;
+  /** Error-code → count. */
+  errorCodes: Record<string, number>;
+  durationSum: number;
+  durationCount: number;
+  /** Counts per fixed duration bucket (ms); see the store's bucket bounds. */
+  durationHistogram: number[];
+  tokenInSum: number;
+  tokenOutSum: number;
+  tokenCount: number;
+  costSum: number;
+  /** Exponentially-weighted failure rate / duration, for recency-aware drift. */
+  ewmaFailureRate?: number;
+  ewmaDurationMs?: number;
+  firstSeen: string;
+  lastSeen: string;
+  /** Bounded ids of the most recent contributing events (drill-down). */
+  exemplars: string[];
+}
+
+/**
  * A single node in the execution graph (DAG).
  * Each tool invocation becomes a node with parent/children relationships.
  */
@@ -432,6 +478,13 @@ export interface Store {
 
   /** Fold a tool execution event into the persisted stats. */
   recordExecution(event: ToolExecutionEvent): ToolRecord;
+
+  /**
+   * Read pre-aggregated metric cells (bounded dimensional rollups folded from
+   * events). Optional: a backend without the rollup may omit it, in which case
+   * callers should fall back to sample-level data.
+   */
+  metricCells?(options?: { toolName?: string; serverName?: string }): MetricCell[];
 
   // Graph methods (optional - only implemented when graph tracking is enabled)
   /** Record an execution node in the graph. */

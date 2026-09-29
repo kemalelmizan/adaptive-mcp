@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ToolExecutionEvent } from "@adaptivemcp/spec";
+import type { MetricCell, ToolExecutionEvent } from "@adaptivemcp/spec";
 import { DecodingAnalyzer } from "./decoding-analyzer.js";
 
 function event(overrides: Partial<ToolExecutionEvent>): ToolExecutionEvent {
@@ -62,5 +62,45 @@ describe("DecodingAnalyzer", () => {
     );
     const groups = new DecodingAnalyzer().analyze(events);
     expect(groups[0]?.suggestedProfile).toBe("balanced");
+  });
+
+  describe("analyzeCells", () => {
+    const cell: MetricCell = {
+      toolName: "a",
+      serverName: "srv",
+      window: "all",
+      dimensions: { model: "m1", decodingProfile: "deterministic", resolverVersion: "1.0.0" },
+      invocations: 10,
+      failures: 1,
+      errorCodes: {},
+      durationSum: 500,
+      durationCount: 10,
+      durationHistogram: [10],
+      tokenInSum: 100,
+      tokenOutSum: 50,
+      tokenCount: 10,
+      costSum: 0,
+      firstSeen: "",
+      lastSeen: "",
+      exemplars: [],
+    };
+
+    it("reads a pre-aggregated cell", () => {
+      const groups = new DecodingAnalyzer().analyzeCells([cell]);
+      expect(groups).toHaveLength(1);
+      expect(groups[0]?.profile).toBe("deterministic");
+      expect(groups[0]?.model).toBe("m1");
+      expect(groups[0]?.resolverVersion).toBe("1.0.0");
+      expect(groups[0]?.avgDurationMs).toBe(50);
+      expect(groups[0]?.avgInputTokens).toBe(10);
+      expect(groups[0]?.avgOutputTokens).toBe(5);
+      expect(groups[0]?.suggestedProfile).toBe("deterministic");
+    });
+
+    it("ignores non-decoding cells and cells below minSamples", () => {
+      const noProfile: MetricCell = { ...cell, dimensions: { model: "m1" } };
+      expect(new DecodingAnalyzer().analyzeCells([noProfile])).toEqual([]);
+      expect(new DecodingAnalyzer({ minSamples: 20 }).analyzeCells([cell])).toEqual([]);
+    });
   });
 });

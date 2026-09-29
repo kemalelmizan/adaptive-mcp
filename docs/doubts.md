@@ -978,6 +978,31 @@ and every advisory recommendation were designed for. What it exercises today:
   reading (it owns the learning Store client-side; the example server serves the
   extension resource), which supports option (2) rename-long-term over (1) split.
 
+## 15. Metadata without an events table (2026-09-29)
+
+**Decision (B): pre-aggregate into bounded dimensional metric cells; do not
+store raw events.** The product *is* the folded metadata, so the store now keeps
+a `metric_cells` rollup (migration 3): each `recordExecution` folds the event
+into cells keyed by `(tool, server, {model?, decodingProfile?, resolverVersion?},
+window)` holding counters, error-code counts, a fixed-bucket duration histogram,
+token/cost sums, EWMA recency, first/last seen, and a bounded exemplar ring.
+`DecodingAnalyzer.analyzeCells()` (and future analyzers) read cells; the
+per-call `execution_nodes` table remains the bounded, TTL-pruned drill-down layer.
+
+**Rationale:** an events table is a lossy convenience — we only ever run a few
+queries against it (per-tool failure rate, per-`(tool,model)` latency,
+per-profile effectiveness, cost/trends). Materializing those into bounded cells
+keeps the store rich *and* bounded, with no unbounded event log.
+
+**Trade-off:** schema-on-write — a question with no dimension/measure cannot be
+answered retroactively. Mitigations: open-ended `dimensions` JSON (new dims need
+no migration), an always-present `all` cell, EWMA for recency, and the bounded
+node layer for forensics.
+
+**Open follow-ups:** time-bucket windows for drift; fold retries (`attempts`)
+once `ThinClient` reports them; cardinality caps (top-K models + `other`); let
+`store` backends other than `MemoryStore` opt into `metricCells()`.
+
 ## 5. Raw notes (kept from earlier)
 
 - Q: is yaml even good for model
