@@ -96,6 +96,40 @@ describe("@adaptivemcp/extension", () => {
     expect(Object.keys(tool.metrics ?? {}).some((key) => key.startsWith("hour:"))).toBe(true);
   });
 
+  it("aggregateViews merges stores and de-duplicates on (tool, server)", () => {
+    const a = new MemoryStore({ path: ":memory:" });
+    const b = new MemoryStore({ path: ":memory:" });
+    try {
+      a.setAnnotation({ toolName: "deploy", serverName: "srv-a", owner: "team-a" });
+      b.setAnnotation({ toolName: "deploy", serverName: "srv-b", owner: "team-b" });
+      b.setAnnotation({ toolName: "deploy", serverName: "srv-a", owner: "ignored" });
+      b.recordExecution({
+        id: "e1",
+        toolName: "search",
+        serverName: "srv-b",
+        timestamp: new Date().toISOString(),
+        status: "completed",
+        durationMs: 5,
+      });
+
+      const doc = ExtensionController.aggregateViews([a, b]);
+      expect(doc.tools.map((t) => `${t.name}@${t.server}`).sort()).toEqual([
+        "deploy@srv-a",
+        "deploy@srv-b",
+        "search@srv-b",
+      ]);
+      // First store wins for a duplicated (tool, server).
+      expect(doc.tools.find((t) => t.name === "deploy" && t.server === "srv-a")?.annotation.owner).toBe(
+        "team-a",
+      );
+      // Metrics are merged too.
+      expect(doc.tools.find((t) => t.name === "search")?.metrics?.["all"]?.invocations).toBe(1);
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
   it("renderToolsMetadata wraps tools with version + timestamp", () => {
     store.ensureTool("search_customer", "crm");
     const doc = renderToolsMetadata(store.allTools(), SPEC_VERSION);

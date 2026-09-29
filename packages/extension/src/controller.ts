@@ -567,7 +567,8 @@ export class ExtensionController {
   static aggregateViews(stores: Store[], version: string = SPEC_VERSION): ToolsMetadataDocument {
     const allTools: ToolRecord[] = [];
     const seen = new Set<string>();
-    
+    const metricsByTool: Record<string, Record<string, ToolMetricView>> = {};
+
     for (const store of stores) {
       for (const tool of store.allTools()) {
         const key = `${tool.toolName}::${tool.serverName ?? ''}`;
@@ -576,8 +577,21 @@ export class ExtensionController {
           allTools.push(tool);
         }
       }
+      // Merge metric cells too (first store wins per label, matching records).
+      const cells = store.metricCells?.() ?? [];
+      for (const [toolKey, metrics] of Object.entries(groupMetricCells(cells))) {
+        const bucket = (metricsByTool[toolKey] ??= {});
+        for (const [label, view] of Object.entries(metrics)) {
+          if (!(label in bucket)) bucket[label] = view;
+        }
+      }
     }
-    
-    return renderToolsMetadata(allTools, version);
+
+    return renderToolsMetadata(
+      allTools,
+      version,
+      undefined,
+      Object.keys(metricsByTool).length > 0 ? metricsByTool : undefined,
+    );
   }
 }

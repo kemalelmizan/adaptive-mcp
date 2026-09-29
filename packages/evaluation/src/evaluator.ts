@@ -173,22 +173,84 @@ export class Evaluator {
       getNodesByWorkflow?: (workflowId: string) => ExecutionNode[];
     };
 
-    if (!graphStore.getWorkflowIds || !graphStore.getNodesByWorkflow) {
-      return []; // Graph tracking not enabled
+    const insights: Insight[] = [];
+
+    if (graphStore.getWorkflowIds && graphStore.getNodesByWorkflow) {
+      for (const workflowId of graphStore.getWorkflowIds()) {
+        const nodes = graphStore.getNodesByWorkflow(workflowId);
+        const sessionIds = [...new Set(nodes.map((n) => n.sessionId))];
+        for (const sessionId of sessionIds) {
+          insights.push(...this.evaluateWorkflow(sessionId));
+        }
+        insights.push(...this.evaluateWorkflowPatterns(workflowId));
+      }
+    }
+
+    // Session-scoped co-occurrence is independent of workflow ids.
+    insights.push(...this.evaluateCooccurrence());
+    return insights;
+  }
+
+  /**
+   * Which tools appear together within the same session (AGENTS.md: "which tools
+   * naturally cluster together?"). Emits a `tool_cooccurrence` insight per tool
+   * with its most frequent partners; session-scoped, so it needs graph tracking.
+   */
+  evaluateCooccurrence(
+    options: { minSessions?: number; minTogether?: number; topN?: number } = {},
+  ): Insight[] {
+    const graphStore = this.memory as Store & {
+      getSessionIds?: () => string[];
+      getNodesBySession?: (sessionId: string) => ExecutionNode[];
+    };
+    if (!graphStore.getSessionIds || !graphStore.getNodesBySession) return [];
+
+    const minSessions = options.minSessions ?? 2;
+    const minTogether = options.minTogether ?? 2;
+    const topN = options.topN ?? 3;
+
+    const sessionsByTool = new Map<string, number>();
+    const partnersByTool = new Map<string, Map<string, number>>();
+
+    for (const sessionId of graphStore.getSessionIds()) {
+      const tools = [...new Set(graphStore.getNodesBySession(sessionId).map((n) => n.toolName))];
+      for (const tool of tools) sessionsByTool.set(tool, (sessionsByTool.get(tool) ?? 0) + 1);
+      for (const a of tools) {
+        const partners = partnersByTool.get(a) ?? new Map<string, number>();
+        for (const b of tools) {
+          if (a !== b) partners.set(b, (partners.get(b) ?? 0) + 1);
+        }
+        partnersByTool.set(a, partners);
+      }
     }
 
     const insights: Insight[] = [];
-    const workflowIds = graphStore.getWorkflowIds();
+    const observedAt = new Date().toISOString();
+    for (const [tool, sessions] of sessionsByTool) {
+      if (sessions < minSessions) continue;
+      const partners = [...(partnersByTool.get(tool) ?? new Map<string, number>()).entries()]
+        .filter(([, count]) => count >= minTogether)
+        .map(([partner, count]) => ({
+          tool: partner,
+          sessions: count,
+          support: Number((count / sessions).toFixed(4)),
+        }))
+        .sort((a, b) => b.sessions - a.sessions)
+        .slice(0, topN);
+      if (partners.length === 0) continue;
 
-    for (const workflowId of workflowIds) {
-      const nodes = graphStore.getNodesByWorkflow(workflowId);
-      const sessionIds = [...new Set(nodes.map((n) => n.sessionId))];
-      for (const sessionId of sessionIds) {
-        insights.push(...this.evaluateWorkflow(sessionId));
-      }
-      insights.push(...this.evaluateWorkflowPatterns(workflowId));
+      const insight: Insight = {
+        toolName: tool,
+        key: "tool_cooccurrence",
+        value: partners,
+        confidence: Number(Math.min(0.95, 0.5 + sessions / 20).toFixed(2)),
+        source: "evaluation",
+        observedAt,
+        sampleSize: sessions,
+      };
+      this.memory.addInsight(insight);
+      insights.push(insight);
     }
-
     return insights;
   }
 

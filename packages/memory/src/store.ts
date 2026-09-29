@@ -32,6 +32,12 @@ export interface MemoryStoreOptions {
   pragmas?: MemoryStorePragmaOptions;
   /** When set, `recordExecutionNode` opportunistically prunes nodes older than `maxAgeMs`. */
   retention?: { maxAgeMs: number };
+  /**
+   * Cardinality guardrail for metric cells: cap the number of distinct `model`
+   * dimensions per tool; new models past the cap fold into a single `other`
+   * bucket. Defaults to 8.
+   */
+  metricCardinality?: { maxModelsPerTool?: number };
 }
 
 const DEFAULT_PRAGMAS: Required<MemoryStorePragmaOptions> = {
@@ -93,12 +99,14 @@ export class MemoryStore implements Store {
   private db: DatabaseSync;
   private readonly isMemory: boolean;
   private readonly retention?: { maxAgeMs: number };
+  private readonly maxModelsPerTool: number;
   private lastPrunedAt = 0;
 
   constructor(options: MemoryStoreOptions = {}) {
     const path = options.path ?? ":memory:";
     this.isMemory = path === ":memory:";
     this.retention = options.retention;
+    this.maxModelsPerTool = options.metricCardinality?.maxModelsPerTool ?? 8;
     this.db = new DatabaseSync(path, options.dbOptions ?? {});
 
     const pragmas = { ...DEFAULT_PRAGMAS, ...options.pragmas };
@@ -300,7 +308,11 @@ export class MemoryStore implements Store {
   /** Pre-aggregate an event into the bounded set of metric cells it belongs to. */
   private foldMetricCells(event: ToolExecutionEvent): void {
     const now = event.timestamp ?? new Date().toISOString();
-    for (const dimensions of cellDimensionsFor(event)) {
+    const model =
+      event.model !== undefined
+        ? this.capModel(event.toolName, event.serverName ?? UNKNOWN_SERVER, event.model)
+        : undefined;
+    for (const dimensions of cellDimensionsFor(event, model)) {
       const key = dimsKey(dimensions);
       // The overall `{}` cell also gets an hourly window (for drift); dimensioned
       // cells keep only the lifetime aggregate to bound write amplification.
@@ -315,6 +327,24 @@ export class MemoryStore implements Store {
         this.writeMetricCell(foldMetricCell(existing, event, dimensions, window, now), key);
       }
     }
+  }
+
+  /**
+   * Cardinality guardrail: fold new models past the per-tool cap into a single
+   * `other` bucket. Existing models and the bucket itself always pass through.
+   */
+  private capModel(toolName: string, serverName: string, model: string): string {
+    if (model === "other") return model;
+    const rows = this.db
+      .prepare(`SELECT dims FROM metric_cells WHERE tool_name = ? AND server_name = ? AND window = 'all'`)
+      .all(toolName, serverName) as unknown as { dims: string }[];
+    const models = new Set<string>();
+    for (const row of rows) {
+      const dims = JSON.parse(row.dims) as MetricDimensions;
+      if (dims.model) models.add(dims.model);
+    }
+    if (models.has(model) || models.size < this.maxModelsPerTool) return model;
+    return "other";
   }
 
   private readMetricCell(
@@ -475,6 +505,14 @@ export class MemoryStore implements Store {
       .prepare(`SELECT DISTINCT workflow_id FROM execution_nodes WHERE workflow_id IS NOT NULL`)
       .all() as unknown as { workflow_id: string }[];
     return rows.map((r) => r.workflow_id);
+  }
+
+  /** Get every distinct session ID that has at least one recorded execution node. */
+  getSessionIds(): string[] {
+    const rows = this.db
+      .prepare(`SELECT DISTINCT session_id FROM execution_nodes`)
+      .all() as unknown as { session_id: string }[];
+    return rows.map((r) => r.session_id);
   }
 
   /** Get children of a node. */
@@ -659,12 +697,12 @@ function eventTokens(event: ToolExecutionEvent): { inputTokens?: number; outputT
 }
 
 /** The bounded set of dimension tuples an event contributes to. */
-function cellDimensionsFor(event: ToolExecutionEvent): MetricDimensions[] {
+function cellDimensionsFor(event: ToolExecutionEvent, model = event.model): MetricDimensions[] {
   const dims: MetricDimensions[] = [{}];
-  if (event.model) dims.push({ model: event.model });
+  if (model) dims.push({ model });
   if (event.decoding) {
     dims.push({
-      ...(event.model ? { model: event.model } : {}),
+      ...(model ? { model } : {}),
       decodingProfile: event.decoding.profile,
       resolverVersion: event.decoding.resolverVersion,
     });

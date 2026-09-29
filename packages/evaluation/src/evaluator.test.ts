@@ -154,4 +154,38 @@ describe("@adaptivemcp/evaluation", () => {
       expect(insights.some((i) => i.key === "repetition_detected")).toBe(false);
     });
   });
+
+  describe("session co-occurrence", () => {
+    it("emits tool_cooccurrence for tools that cluster in the same session", () => {
+      for (const sessionId of ["a", "b", "c"]) {
+        store.recordExecutionNode(
+          node({ id: `${sessionId}-1`, sessionId, workflowId: "wf", toolName: "search" }),
+        );
+        store.recordExecutionNode(
+          node({ id: `${sessionId}-2`, sessionId, workflowId: "wf", toolName: "summarize" }),
+        );
+      }
+      store.recordExecutionNode(node({ id: "solo-1", sessionId: "solo", workflowId: "wf", toolName: "lonely" }));
+
+      const insights = evaluator.evaluateCooccurrence();
+      const search = insights.find((i) => i.toolName === "search");
+      expect(search?.key).toBe("tool_cooccurrence");
+      expect(search?.value).toEqual([{ tool: "summarize", sessions: 3, support: 1 }]);
+      // A tool seen in only one session is below minSessions.
+      expect(insights.some((i) => i.toolName === "lonely")).toBe(false);
+    });
+
+    it("is included in evaluateAllWorkflows", () => {
+      for (const sessionId of ["a", "b"]) {
+        store.recordExecutionNode(
+          node({ id: `${sessionId}-1`, sessionId, workflowId: "wf", toolName: "x" }),
+        );
+        store.recordExecutionNode(
+          node({ id: `${sessionId}-2`, sessionId, workflowId: "wf", toolName: "y" }),
+        );
+      }
+      const insights = evaluator.evaluateAllWorkflows();
+      expect(insights.some((i) => i.key === "tool_cooccurrence")).toBe(true);
+    });
+  });
 });

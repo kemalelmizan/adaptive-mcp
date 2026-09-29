@@ -225,10 +225,10 @@ or the docs, or if a Phase 6/8 item row disappears.
 | 6d | ✅ done — `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Low — `detectRepetition()` wired into `evaluateWorkflow` | Medium/High — new capability, feeds `ApprovalGate` |
 | 6e | 🟡 partially done — Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Low remaining — component-level tests exist; host-ignores-extension scenario still missing | Medium — confidence/trust, not new capability |
 | 6f | ✅ done — Emit `budget` / `require_approval` in the reference impl | Medium — touches the wire schema tracked for SEP graduation | Medium — extend `ExtensionController` view + `spec` types | High — unblocks the SEP stabilization gate (see Blocked list) |
-| 6g | 🟡 partially done — Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Low remaining — `ExtensionController.aggregateViews()` already implements the composite-key merge; needs tests + a consumer | Medium/High — real multi-server hosts need this |
-| 6h | 🟡 partially done — Client OAuth delegation flow | Medium — credential handling is security-sensitive | Low remaining — `OAuthMiddleware` (`packages/thin-client/src/oauth-middleware.ts`) already implements authorize/callback/refresh/token-storage; needs test coverage and a real-provider validation pass | Medium — unblocks one integration, not the core loop |
+| 6g | ✅ done — Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Low remaining — `aggregateViews()` merges composite keys + metric cells, with tests; the agent's single store is the cross-server aggregate | Medium/High — real multi-server hosts need this |
+| 6h | ✅ done — Client OAuth delegation flow | Medium — credential handling is security-sensitive | Low remaining — authorize/callback/refresh/token-storage implemented, now with a test suite and CSRF `state` validation; live-provider validation still pending (no HTTP transport yet) | Medium — unblocks one integration, not the core loop |
 | 6i | 🟡 partially done — Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures | Low remaining — rewired to the real V1 hooks (`tool.execute.before`/`after`/`event`/`dispose`) with unit tests; has not been run against a live OpenCode host | High — proves the loop on a real, popular agent instead of only synthetic demos |
-| 6j | Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation`; co-occurrence shape still TBD | Medium — `sessionId` already exists on `ToolExecutionEvent`/`ExecutionNode` and is threaded through `TelemetryRecorder`; only the co-occurrence evaluation pass itself is unbuilt | Medium — research-oriented (AGENTS.md open question), less immediately actionable; **depends on 6i** for real session boundaries |
+| 6j | ✅ done — Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation` | Low remaining — `sessionId` was already threaded; the co-occurrence pass now ships (`Evaluator.evaluateCooccurrence`) with tests | Medium — research-oriented (AGENTS.md open question); benefits from 6i's real session boundaries |
 
 ### 6a. Pattern matching in `ApprovalPolicy`
 
@@ -380,6 +380,12 @@ collision rule described below. What's still missing:
   hasn't been exercised end to end.
 
 Original design note (still accurate): recall the `(tool_name, server_name)`
+
+**Update (2026-09-29): exercised.** `aggregateViews` now also merges metric cells,
+and has tests (merge + de-dup + metrics). The first-party agent is the real
+consumer from the other direction: one client-side Store holds every connected
+server's tools keyed by `serverName`, so its derived view is already the
+cross-server aggregate (covered by an agent test over two namespaced toolsets).
 composite key exists specifically because two servers can expose a same-named
 tool — the aggregation view needs to preserve that distinction, not flatten it.
 
@@ -402,6 +408,15 @@ default). What's still missing:
 - Security-sensitive — this is the one item in Phase 6 that touches credential
   handling directly, hence the elevated risk grade despite the flow now being
   implemented.
+
+**Update (2026-09-29): exercised + hardened.** `OAuthMiddleware` now has a test
+suite (`oauth-middleware.test.ts`): authorize URL, code exchange, CSRF `state`
+validation (single-use, server-bound, TTL), token injection, expiry refresh, and
+401 refresh. Fixed two real gaps the tests surfaced: `handleCallback` now actually
+validates the issued `state` (it previously only checked presence), and `afterCall`
+no longer throws a bogus `OAUTH_TOKEN_REFRESHED` (which did not trigger a retry) —
+it refreshes best-effort for the next call. Still unvalidated against a live
+provider (no HTTP transport in the agent yet).
 
 ### 6i. Host adapter: prove the loop on a real harness
 
@@ -470,6 +485,13 @@ still missing:
 - Depends on 6i for a real source of session boundaries (OpenCode's
   `session.*` hooks); the synthetic examples have no session concept to hang
   this off of otherwise.
+
+**Update (2026-09-29): implemented.** `Evaluator.evaluateCooccurrence()` reads
+sessions (`Store.getSessionIds?()`) and emits a `tool_cooccurrence` insight per
+tool (its most frequent partners + support); it runs as part of
+`evaluateAllWorkflows()`. The agent surfaces it in the learned context
+("often with …"). Tests cover clustering, the `minSessions` floor, and inclusion
+in the workflows pass.
 
 ### Blocked / external dependency (not schedulable by our own effort)
 

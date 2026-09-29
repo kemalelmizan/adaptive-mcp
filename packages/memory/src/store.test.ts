@@ -86,6 +86,27 @@ describe("@adaptivemcp/memory", () => {
     expect(cells.some((cell) => cell.window.startsWith("hour:"))).toBe(true);
   });
 
+  it("caps distinct model cells per tool (folds extra models into 'other')", () => {
+    const capped = new MemoryStore({ path: ":memory:", metricCardinality: { maxModelsPerTool: 2 } });
+    const at = new Date().toISOString();
+    for (const model of ["m1", "m2", "m3", "m4"]) {
+      capped.recordExecution({
+        id: `e-${model}`,
+        toolName: "t",
+        serverName: "s",
+        timestamp: at,
+        status: "completed",
+        model,
+      });
+    }
+    const models = capped
+      .metricCells({ toolName: "t" })
+      .map((cell) => cell.dimensions.model)
+      .filter((model): model is string => model !== undefined);
+    expect(new Set(models)).toEqual(new Set(["m1", "m2", "other"]));
+    capped.close();
+  });
+
   it("setAnnotation merges into the existing annotation", () => {
     store.ensureTool("deploy_service");
     const rec = store.setAnnotation({

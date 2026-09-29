@@ -61,6 +61,9 @@ export class OAuthMiddleware implements Middleware {
   private tokenStore: OAuthTokenStore;
   private clientConfigs: Map<string, OAuthClientConfig>;
   private serverRequiresOAuth: Set<string>;
+  /** Issued CSRF `state` values, consumed single-use by `handleCallback`. */
+  private pendingStates = new Map<string, { serverName: string; issuedAt: number }>();
+  private static readonly STATE_TTL_MS = 10 * 60 * 1000;
 
   constructor(
     tokenStore: OAuthTokenStore,
@@ -121,18 +124,15 @@ export class OAuthMiddleware implements Middleware {
   }
 
   async afterCall(result: CallResult, call: PlannedCall): Promise<void> {
-    // Check for 401 responses and attempt token refresh
+    // On a 401, refresh best-effort so the *next* call uses a fresh token. The
+    // current call already failed; whether it is re-run is ThinClient's retry
+    // policy's decision, not this middleware's.
     if (!result.ok && result.error?.includes("401")) {
       const serverName = call.serverName;
       if (serverName && this.requiresOAuth(serverName)) {
         const config = this.clientConfigs.get(serverName);
         if (config) {
-          // Try to refresh token
-          const refreshed = await this.refreshToken(serverName, config);
-          if (refreshed) {
-            // The retry logic in ThinClient will re-run the call with new credentials
-            throw new Error("OAUTH_TOKEN_REFRESHED"); // Special error to trigger retry
-          }
+          await this.refreshToken(serverName, config);
         }
       }
     }
@@ -224,6 +224,7 @@ export class OAuthMiddleware implements Middleware {
     }
 
     const state = crypto.randomUUID();
+    this.pendingStates.set(state, { serverName, issuedAt: Date.now() });
     const params = new URLSearchParams({
       response_type: "code",
       client_id: config.clientId,
@@ -241,6 +242,18 @@ export class OAuthMiddleware implements Middleware {
   async handleCallback(serverName: string, code: string, state: string): Promise<OAuthToken> {
     if (!state) {
       throw new Error("Missing OAuth state parameter");
+    }
+    // CSRF: the state must be one this middleware issued for this server, single-use.
+    const pending = this.pendingStates.get(state);
+    if (!pending) {
+      throw new Error("Invalid or already-used OAuth state parameter");
+    }
+    this.pendingStates.delete(state);
+    if (pending.serverName !== serverName) {
+      throw new Error("OAuth state does not match the requesting server");
+    }
+    if (Date.now() - pending.issuedAt > OAuthMiddleware.STATE_TTL_MS) {
+      throw new Error("Expired OAuth state parameter");
     }
 
     const config = this.clientConfigs.get(serverName);

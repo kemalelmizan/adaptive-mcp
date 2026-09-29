@@ -501,6 +501,8 @@ export interface Store {
   getNodesByWorkflow?(workflowId: string): ExecutionNode[];
   /** Get every distinct workflow ID that has at least one recorded execution node. */
   getWorkflowIds?(): string[];
+  /** Get every distinct session ID that has at least one recorded execution node. */
+  getSessionIds?(): string[];
   /** Get children of a node. */
   getChildren?(parentId: string): ExecutionNode[];
   /** Get parent of a node. */

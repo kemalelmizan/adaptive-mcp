@@ -1002,9 +1002,11 @@ node layer for forensics.
 **Follow-ups:** time-bucket windows for drift — **done 2026-09-29** (hourly cells
 for the overall tuple, pruned by retention); retry accounting — **done
 2026-09-29** (`ThinClient.run` returns `attempts`, folded and surfaced as
-`retry_rate`); metrics projected into the view — **done** (`ToolMetadataView.metrics`,
-a per-tool window/dimension map). Still open: cardinality caps (top-K models +
-`other`), and `metricCells()` support for non-`MemoryStore` backends.
+`retry_rate`); metrics projected into the view — **done** (`ToolMetadataView.metrics`);
+cardinality caps — **done 2026-09-29** (`metricCardinality.maxModelsPerTool`,
+new models fold into `other`); a recent-vs-lifetime **drift helper** — **done**
+(`computeMetricDrift` in `@adaptivemcp/evaluation`, surfaced as `/drift`). Still
+open: `metricCells()` support for non-`MemoryStore` backends.
 
 ## 5. Raw notes (kept from earlier)
 
