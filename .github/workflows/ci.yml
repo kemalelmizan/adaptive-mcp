@@ -35,6 +35,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Coverage gate
+        run: pnpm test:coverage
+
       # Release dry-run gate: ensures the publish path (build + changeset
       # status) is healthy so a broken publish can't ship. Does NOT publish.
       - name: Release dry-run
