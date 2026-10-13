@@ -136,6 +136,10 @@ whenever metadata changes.
   thin.
 - **Stateless servers, accumulating clients.** MCP servers are lightweight and
   replaceable. Clients accumulate knowledge in a local source of truth.
+- **Security is deny-by-default and data is never instructions.** Untrusted
+  servers, tool results, resources, and metadata are advisory: server suggestions
+  are a floor, never an override, and only `@adaptivemcp/mcp-binary` shells out.
+  See [`SECURITY.md`](./SECURITY.md) for the threat model.
 
 ## Relationship to MCP
 
@@ -407,6 +411,7 @@ adaptive-mcp/
 ├── vitest.config.ts
 ├── vitest.sqlite-shim.mjs
 ├── AGENTS.md
+├── SECURITY.md
 └── README.md
 ```
 
