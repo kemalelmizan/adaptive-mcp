@@ -406,7 +406,7 @@ adaptive-mcp/
 ├── packages/      # @adaptivemcp/* library packages
 ├── examples/      # runnable server, client, and scenarios
 ├── apps/          # docs / playground (scaffolds)
-├── docs/          # ROADMAP.md implementation plan
+├── docs/          # ROADMAP.md plan, doubts.md, adr/ decisions, SEP draft
 ├── scripts/
 ├── vitest.config.ts
 ├── vitest.sqlite-shim.mjs
