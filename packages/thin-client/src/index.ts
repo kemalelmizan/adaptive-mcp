@@ -9,6 +9,8 @@
  */
 export { ThinClient } from "./loop.js";
 export type { ThinClientOptions, ToolHandler } from "./loop.js";
+export { envelopeClassifier } from "./envelope-classifier.js";
+export type { EnvelopeClassifierOptions } from "./envelope-classifier.js";
 export { MiddlewareChain } from "@adaptivemcp/middleware";
 export type { Middleware, MiddlewareContext, PlannedCall, CallResult } from "@adaptivemcp/middleware";
 export { GraphTrackingMiddleware, createGraphTrackingMiddleware } from "./graph-middleware.js";

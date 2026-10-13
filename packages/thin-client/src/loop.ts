@@ -1,4 +1,4 @@
-import type { Store, Recommendation } from "@adaptivemcp/spec";
+import type { Store, Recommendation, ToolResultClassifier } from "@adaptivemcp/spec";
 import type { ApprovalGate, ApprovalDecision } from "@adaptivemcp/approval";
 import type { RetryPolicy } from "@adaptivemcp/orchestration";
 import { MiddlewareChain, type Middleware, type PlannedCall, type CallResult } from "@adaptivemcp/middleware";
@@ -20,6 +20,15 @@ export interface ThinClientOptions {
   requestApproval?: (toolName: string) => boolean | Promise<boolean>;
   /** Default retry policy if none is suggested for a tool. */
   defaultRetry?: RetryPolicy;
+  /**
+   * Optional result classifier. Some servers report logical failures in-band
+   * (e.g. a JSON envelope with `status: "error"`) rather than via the MCP
+   * `isError` flag, so the transport's `ok` can be optimistic. A classifier
+   * runs on each attempt *before* the outcome is recorded, so a corrected
+   * failure is counted as such and can trigger the retry policy. See
+   * `envelopeClassifier` for the common envelope shape.
+   */
+  classifyResult?: ToolResultClassifier;
   /** Middleware registered up-front (D2: explicit `use()`). */
   middleware?: Middleware[];
   /** Optional graph tracking middleware for execution graph intelligence. */
@@ -67,6 +76,7 @@ export class ThinClient {
   private gate: ApprovalGate;
   private requestApproval: (toolName: string) => boolean | Promise<boolean>;
   private defaultRetry: RetryPolicy;
+  private classifyResult?: ToolResultClassifier;
   private chain: MiddlewareChain;
   private graphTracking?: GraphTrackingMiddleware;
   private samplingAdvisor?: SamplingAdvisor;
@@ -84,6 +94,7 @@ export class ThinClient {
       baseDelayMs: 0,
       enabled: false,
     };
+    this.classifyResult = options.classifyResult;
     this.chain = new MiddlewareChain({ store: this.memory, toolName: "" });
     for (const mw of options.middleware ?? []) {
       this.chain.use(mw);
@@ -190,13 +201,31 @@ export class ThinClient {
     let tried = 0;
     for (let attempt = 0; attempt < attempts; attempt++) {
       tried = attempt + 1;
-      last = await handler(call.input);
+      last = this.classify(await handler(call.input), call);
       if (last.ok) return { ...last, attempts: tried };
       if (attempt < attempts - 1 && policy.baseDelayMs > 0) {
         await delay(policy.baseDelayMs * 2 ** attempt);
       }
     }
     return { ...last, attempts: tried };
+  }
+
+  /** Apply the optional result classifier to one raw attempt outcome. */
+  private classify(
+    result: { ok: boolean; error?: string; output?: unknown },
+    call: PlannedCall,
+  ): { ok: boolean; error?: string; output?: unknown } {
+    if (!this.classifyResult) return result;
+    const patch = this.classifyResult(result, {
+      toolName: call.toolName,
+      serverName: call.serverName,
+    });
+    if (!patch) return result;
+    return {
+      ...result,
+      ok: patch.ok ?? result.ok,
+      error: patch.error ?? result.error,
+    };
   }
 }
 

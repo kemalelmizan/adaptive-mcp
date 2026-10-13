@@ -4,6 +4,7 @@ import { ApprovalGate } from "@adaptivemcp/approval";
 import { Orchestrator } from "@adaptivemcp/orchestration";
 import { SamplingAdvisor } from "@adaptivemcp/routing";
 import { ThinClient } from "./loop.js";
+import { envelopeClassifier } from "./envelope-classifier.js";
 import type { Middleware, PlannedCall } from "@adaptivemcp/middleware";
 import type { Recommendation, ToolExecutionEvent } from "@adaptivemcp/spec";
 
@@ -271,6 +272,55 @@ describe("@adaptivemcp/thin-client", () => {
         "srv",
       );
       expect(settled).toBe(true);
+    });
+  });
+
+  describe("result classification", () => {
+    it("reclassifies an in-band error envelope as a recorded failure", async () => {
+      store.ensureTool("qc_tool", "qc");
+      client = new ThinClient({ memory: store, gate, classifyResult: envelopeClassifier() });
+      let recorded: { ok: boolean; error?: string } | undefined;
+      const res = await client.run(
+        "qc_tool",
+        async () => ({ ok: true, output: { status: "error", error: "POLICY_DENIED" } }),
+        {},
+        (ok, error) => {
+          recorded = { ok, error };
+        },
+        "qc",
+      );
+      expect(res.executed).toBe(true);
+      expect(recorded?.ok).toBe(false);
+      expect(recorded?.error).toBe("POLICY_DENIED");
+    });
+
+    it("retries a reclassified in-band failure", async () => {
+      store.ensureTool("qc_tool", "qc");
+      client = new ThinClient({
+        memory: store,
+        gate,
+        classifyResult: envelopeClassifier(),
+        defaultRetry: { maxAttempts: 2, baseDelayMs: 0, enabled: true },
+      });
+      let calls = 0;
+      let recorded: { ok: boolean } | undefined;
+      const res = await client.run(
+        "qc_tool",
+        async () => {
+          calls += 1;
+          return calls === 1
+            ? { ok: true, output: { status: "error", error: "TRANSIENT" } }
+            : { ok: true, output: { status: "ok", data: {} } };
+        },
+        {},
+        (ok) => {
+          recorded = { ok };
+        },
+        "qc",
+      );
+      expect(calls).toBe(2);
+      expect(res.attempts).toBe(2);
+      expect(recorded?.ok).toBe(true);
     });
   });
 });
