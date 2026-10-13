@@ -43,6 +43,33 @@ jobs:
       - name: Release dry-run
         run: node scripts/release.ts --dry-run
 
+  integration:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build libraries
+        run: pnpm -r --filter "./packages/*" run build
+
+      - name: Build examples
+        run: pnpm --filter @adaptivemcp/examples run build
+
+      - name: Integration test (real stdio MCP server)
+        run: pnpm test:integration
+
   release:
     needs: verify
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
