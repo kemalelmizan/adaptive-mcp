@@ -56,4 +56,23 @@ describe("envelopeClassifier", () => {
       error: "in-band failure (status=error)",
     });
   });
+
+  it("parses a JSON-string envelope (MCP text content)", () => {
+    const classify = envelopeClassifier();
+    const output = JSON.stringify({ status: "error", error: "NOT_FOUND" });
+    expect(classify({ ok: true, output }, ctx)).toEqual({ ok: false, error: "NOT_FOUND" });
+  });
+
+  it("can be told not to parse JSON strings", () => {
+    const classify = envelopeClassifier({ parseJsonString: false });
+    const output = JSON.stringify({ status: "error", error: "NOT_FOUND" });
+    expect(classify({ ok: true, output }, ctx)).toBeUndefined();
+  });
+
+  it("ignores a JSON string that is not an envelope object", () => {
+    const classify = envelopeClassifier();
+    expect(classify({ ok: true, output: '"just a string"' }, ctx)).toBeUndefined();
+    expect(classify({ ok: true, output: "[1,2,3]" }, ctx)).toBeUndefined();
+    expect(classify({ ok: true, output: "{not json" }, ctx)).toBeUndefined();
+  });
 });

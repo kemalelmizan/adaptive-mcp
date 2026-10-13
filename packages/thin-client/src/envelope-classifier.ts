@@ -11,10 +11,37 @@ export interface EnvelopeClassifierOptions {
   /** Object key holding the error code/message. Default `"error"`. */
   errorField?: string;
   /**
+   * Parse a JSON-string output before inspecting it. Most MCP servers serialize
+   * their envelope as text content (there is no `structuredContent` for a plain
+   * `dict`), so the payload arrives as a string. The parse is guarded and only
+   * attempted for strings that start with `{`. Default `true`.
+   */
+  parseJsonString?: boolean;
+  /**
    * Optional extra predicate. Return `true` to force a failure even when the
    * status field did not match (e.g. a domain-specific `ok: false` field).
    */
   isFailure?: (output: Record<string, unknown>) => boolean;
+}
+
+/** Coerce an output to the envelope object, parsing a JSON string when allowed. */
+function asRecord(output: unknown, parseJsonString: boolean): Record<string, unknown> | undefined {
+  if (typeof output === "string") {
+    if (!parseJsonString) return undefined;
+    const trimmed = output.trim();
+    if (!trimmed.startsWith("{")) return undefined;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
+  }
+  if (output === null || typeof output !== "object" || Array.isArray(output)) return undefined;
+  return output as Record<string, unknown>;
 }
 
 /**
@@ -40,12 +67,13 @@ export function envelopeClassifier(
     (options.failureValues ?? ["error", "failed", "failure"]).map((value) => value.toLowerCase()),
   );
 
+  const parseJsonString = options.parseJsonString ?? true;
+
   return (outcome) => {
     if (!outcome.ok) return undefined;
-    const output = outcome.output;
-    if (output === null || typeof output !== "object" || Array.isArray(output)) return undefined;
+    const record = asRecord(outcome.output, parseJsonString);
+    if (!record) return undefined;
 
-    const record = output as Record<string, unknown>;
     const status = record[statusField];
     const failedByStatus = typeof status === "string" && failureValues.has(status.toLowerCase());
     const failedByPredicate = options.isFailure?.(record) === true;
