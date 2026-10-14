@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest run examples/src/mcp-server.integration.test.ts",
+    "test:integration": "vitest run examples/src/mcp-server.integration.test.ts examples/src/ignore-extension.conformance.test.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "changeset": "changeset",
