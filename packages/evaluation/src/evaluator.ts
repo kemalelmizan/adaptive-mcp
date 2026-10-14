@@ -8,6 +8,11 @@ export interface EvaluationOptions {
   failureRateThreshold?: number;
   /** Minimum invocations before evaluating. */
   minInvocations?: number;
+  /**
+   * Average output tokens above which a `context_cost_high` insight is emitted
+   * (only when a real token source exists). Default 2000.
+   */
+  contextCostThreshold?: number;
 }
 
 /**
@@ -20,11 +25,13 @@ export class Evaluator {
   private memory: Store;
   private failureRateThreshold: number;
   private minInvocations: number;
+  private contextCostThreshold: number;
 
   constructor(options: EvaluationOptions) {
     this.memory = options.memory;
     this.failureRateThreshold = options.failureRateThreshold ?? 0.1;
     this.minInvocations = options.minInvocations ?? 10;
+    this.contextCostThreshold = options.contextCostThreshold ?? 2000;
   }
 
   /** Evaluate a single tool and persist any derived insights. */
@@ -504,7 +511,9 @@ export class Evaluator {
       }
     }
 
-    // Context cost tracking (output tokens)
+    // Context cost tracking (output tokens): always record the average, and
+    // flag a `context_cost_high` when it crosses the threshold, so a host can
+    // budget/manage context ("this tool is verbose").
     if (stats.avgOutputTokens != null && stats.invocations >= this.minInvocations) {
       insights.push({
         toolName: record.toolName,
@@ -516,19 +525,18 @@ export class Evaluator {
         observedAt: now,
         sampleSize: stats.invocations,
       });
-    }
-
-    if (stats.avgDurationMs != null) {
-      insights.push({
-        toolName: record.toolName,
-        serverName: record.serverName,
-        key: "avg_duration_ms",
-        value: Math.round(stats.avgDurationMs),
-        confidence: confidenceFor(stats.invocations),
-        source: "telemetry",
-        observedAt: new Date().toISOString(),
-        sampleSize: stats.invocations,
-      });
+      if (stats.avgOutputTokens >= this.contextCostThreshold) {
+        insights.push({
+          toolName: record.toolName,
+          serverName: record.serverName,
+          key: "context_cost_high",
+          value: Math.round(stats.avgOutputTokens),
+          confidence: confidenceFor(stats.invocations),
+          source: "evaluation",
+          observedAt: now,
+          sampleSize: stats.invocations,
+        });
+      }
     }
 
     for (const insight of insights) {

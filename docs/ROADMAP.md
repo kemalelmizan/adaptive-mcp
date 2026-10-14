@@ -220,7 +220,7 @@ or the docs, or if a Phase 6/8 item row disappears.
 | # | Item | Risk | Effort | Payoff |
 | --- | --- | --- | --- | --- |
 | 6a | ✅ done — Pattern matching in `ApprovalPolicy` | Low — isolated to `approval`, precedence order unchanged | Low — matcher shipped in `gate.ts`; regression test still to add | Medium — ergonomic, immediate |
-| 6b | 🟡 partially done — Context-cost tracked dimension | Low — additive field, no external dependency | Low remaining — field + insight shipped; `context_cost_high` threshold not built | Medium — unlocks a recommendation type, but needs a real token/byte source to be useful |
+| 6b | ✅ done — Context-cost tracked dimension | Low — additive field, no external dependency | Done — `avg_output_tokens` + a `context_cost_high` threshold insight (default 2000), fed by real token `usage` | Medium — unlocks a recommendation type |
 | 6c | ✅ done — More insight types: cost drift, latency regression, approval friction | Low — additive, same shape as existing insights | Low/Medium — one evaluator pass per insight | Medium — broadens what the YAML surfaces, no new package |
 | 6d | ✅ done — `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Low — `detectRepetition()` wired into `evaluateWorkflow` | Medium/High — new capability, feeds `ApprovalGate` |
 | 6e | ✅ done — Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Done — component tests + a host-ignores-extension scenario (`examples/src/ignore-extension.conformance.test.ts`) | Medium — confidence/trust, not new capability |
@@ -255,12 +255,12 @@ MCP tool-disabling config uses the same glob approach per server namespace
 
 ### 6b. Context-cost as a tracked dimension
 
-**Status update (2026-09-28): partially done.** `ToolStats.avgOutputTokens`
-(`packages/spec/src/types.ts`) is folded from events in
-`packages/memory/src/store.ts` and surfaced by `evaluateRecord()` as the
-`avg_output_tokens` insight (`packages/evaluation/src/evaluator.ts`). Still
-missing: the threshold insight `context_cost_high` (and any recommendation that
-acts on it). Original design note below.
+**Status update (2026-10-14): done.** `ToolStats.avgOutputTokens` is folded from
+events and surfaced as `avg_output_tokens`; the threshold insight
+`context_cost_high` now fires once the average crosses
+`EvaluationOptions.contextCostThreshold` (default 2000), only when a real token
+source exists. (Also removed a pre-existing duplicate `avg_duration_ms` insight.)
+Original design note below.
 
 OpenCode explicitly warns that MCP servers "add to context" and lets users
 disable whole tool namespaces to control it. `ToolStats` tracks `totalCost`

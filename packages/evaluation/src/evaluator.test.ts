@@ -188,4 +188,44 @@ describe("@adaptivemcp/evaluation", () => {
       expect(insights.some((i) => i.key === "tool_cooccurrence")).toBe(true);
     });
   });
+
+  describe("context cost", () => {
+    it("emits context_cost_high when average output tokens exceed the threshold", () => {
+      store.ensureTool("summarize", "srv");
+      for (let i = 0; i < 12; i += 1) {
+        store.recordExecution({
+          id: `ctx-${i}`,
+          toolName: "summarize",
+          serverName: "srv",
+          timestamp: new Date().toISOString(),
+          status: "completed",
+          durationMs: 10,
+          usage: { inputTokens: 100, outputTokens: 5000 },
+        });
+      }
+
+      const insight = evaluator
+        .evaluateTool("summarize", "srv")
+        .find((candidate) => candidate.key === "context_cost_high");
+      expect(insight).toBeDefined();
+      expect(insight?.value).toBe(5000);
+    });
+
+    it("does not fire without a token source", () => {
+      store.ensureTool("small", "srv");
+      for (let i = 0; i < 12; i += 1) {
+        store.recordExecution({
+          id: `small-${i}`,
+          toolName: "small",
+          serverName: "srv",
+          timestamp: new Date().toISOString(),
+          status: "completed",
+          durationMs: 10,
+        });
+      }
+
+      const insights = evaluator.evaluateTool("small", "srv");
+      expect(insights.some((candidate) => candidate.key === "context_cost_high")).toBe(false);
+    });
+  });
 });
