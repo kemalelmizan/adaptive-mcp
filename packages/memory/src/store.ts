@@ -1,4 +1,5 @@
-import { DatabaseSync, type DatabaseSyncOptions } from "node:sqlite";
+import { createRequire } from "node:module";
+import type { DatabaseSyncOptions } from "node:sqlite";
 import type {
   Annotation,
   Insight,
@@ -13,6 +14,17 @@ import type {
   ExecutionNode,
 } from "@adaptivemcp/spec";
 import { runMigrations } from "./migrations.js";
+
+/**
+ * `node:sqlite` is a builtin, but younger than most bundlers' builtin lists, so
+ * a bare `import "node:sqlite"` is mis-resolved when this package is consumed as
+ * a dependency (Vite/Rollup try to resolve it as the package `sqlite`). Load it
+ * via `createRequire` at runtime instead, with a type-only import for the types.
+ */
+type DatabaseSync = import("node:sqlite").DatabaseSync;
+const { DatabaseSync: DatabaseSyncCtor } = createRequire(import.meta.url)(
+  "node:sqlite",
+) as typeof import("node:sqlite");
 
 export interface MemoryStorePragmaOptions {
   journalMode?: string;
@@ -107,7 +119,7 @@ export class MemoryStore implements Store {
     this.isMemory = path === ":memory:";
     this.retention = options.retention;
     this.maxModelsPerTool = options.metricCardinality?.maxModelsPerTool ?? 8;
-    this.db = new DatabaseSync(path, options.dbOptions ?? {});
+    this.db = new DatabaseSyncCtor(path, options.dbOptions ?? {});
 
     const pragmas = { ...DEFAULT_PRAGMAS, ...options.pragmas };
     if (!this.isMemory) {
