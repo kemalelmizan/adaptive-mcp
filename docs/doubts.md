@@ -1005,8 +1005,11 @@ for the overall tuple, pruned by retention); retry accounting — **done
 `retry_rate`); metrics projected into the view — **done** (`ToolMetadataView.metrics`);
 cardinality caps — **done 2026-09-29** (`metricCardinality.maxModelsPerTool`,
 new models fold into `other`); a recent-vs-lifetime **drift helper** — **done**
-(`computeMetricDrift` in `@adaptivemcp/evaluation`, surfaced as `/drift`). Still
-open: `metricCells()` support for non-`MemoryStore` backends.
+(`computeMetricDrift` in `@adaptivemcp/evaluation`, surfaced as `/drift`). The
+last follow-up — `metricCells()` support for non-`MemoryStore` backends — is
+**done**: the `Store` interface declares `metricCells?()` and a conformance test
+pins the graceful fallback (a store without the rollup yields a metrics-free
+view rather than an error).
 
 ## 5. Raw notes (kept from earlier)
 

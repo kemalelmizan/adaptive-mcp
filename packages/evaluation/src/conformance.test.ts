@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import type { Store } from "@adaptivemcp/spec";
 import { MemoryStore } from "@adaptivemcp/memory";
 import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/telemetry";
 import { Evaluator } from "@adaptivemcp/evaluation";
@@ -335,6 +336,34 @@ describe("Conformance: Graceful Degradation", () => {
       
       const record = memory.getTool("serverless_tool");
       expect(record).toBeDefined();
+    });
+  });
+
+  describe("Store without a metric-cell rollup", () => {
+    it("degrades to a metrics-free view when metricCells is absent", () => {
+      memory.ensureTool("search_customer", "srv");
+      memory.recordExecution({
+        id: "e1",
+        toolName: "search_customer",
+        serverName: "srv",
+        timestamp: new Date().toISOString(),
+        status: "completed",
+        durationMs: 10,
+      });
+
+      // A backend that does not offer the durable rollup.
+      const bare = new Proxy(memory, {
+        get(target, prop, receiver) {
+          if (prop === "metricCells") return undefined;
+          return Reflect.get(target, prop, receiver);
+        },
+      }) as Store;
+
+      expect(bare.metricCells).toBeUndefined();
+      const view = new ExtensionController({ memory: bare }).sync();
+      const tool = view.tools.find((candidate) => candidate.name === "search_customer");
+      expect(tool).toBeDefined();
+      expect(tool?.metrics).toBeUndefined();
     });
   });
 });
