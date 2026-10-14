@@ -223,7 +223,7 @@ or the docs, or if a Phase 6/8 item row disappears.
 | 6b | 🟡 partially done — Context-cost tracked dimension | Low — additive field, no external dependency | Low remaining — field + insight shipped; `context_cost_high` threshold not built | Medium — unlocks a recommendation type, but needs a real token/byte source to be useful |
 | 6c | ✅ done — More insight types: cost drift, latency regression, approval friction | Low — additive, same shape as existing insights | Low/Medium — one evaluator pass per insight | Medium — broadens what the YAML surfaces, no new package |
 | 6d | ✅ done — `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Low — `detectRepetition()` wired into `evaluateWorkflow` | Medium/High — new capability, feeds `ApprovalGate` |
-| 6e | 🟡 partially done — Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Low remaining — component-level tests exist; host-ignores-extension scenario still missing | Medium — confidence/trust, not new capability |
+| 6e | ✅ done — Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Done — component tests + a host-ignores-extension scenario (`examples/src/ignore-extension.conformance.test.ts`) | Medium — confidence/trust, not new capability |
 | 6f | ✅ done — Emit `budget` / `require_approval` in the reference impl | Medium — touches the wire schema tracked for SEP graduation | Medium — extend `ExtensionController` view + `spec` types | High — unblocks the SEP stabilization gate (see Blocked list) |
 | 6g | ✅ done — Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Low remaining — `aggregateViews()` merges composite keys + metric cells, with tests; the agent's single store is the cross-server aggregate | Medium/High — real multi-server hosts need this |
 | 6h | ✅ done — Client OAuth delegation flow | Medium — credential handling is security-sensitive | Low remaining — authorize/callback/refresh/token-storage implemented, now with a test suite and CSRF `state` validation; live-provider validation still pending (no HTTP transport yet) | Medium — unblocks one integration, not the core loop |
@@ -323,13 +323,11 @@ from event *sequences*.
 
 ### 6e. Conformance scenarios (graceful degradation)
 
-**Status update (2026-09-28): partially done.** Component-level graceful
-degradation is now covered by `packages/evaluation/src/conformance.test.ts`
-(graph tracking off, closed store, malformed/null events, missing
-recommendations, empty store, approval denial). Still missing: the scenario this
-item actually asks for — a host that ignores the extension entirely (resource
-never read, `report_observation` never called) with the base MCP server/client
-asserted to still work. Original design note below.
+**Status update (2026-10-14): done.** The missing scenario is now covered by
+`examples/src/ignore-extension.conformance.test.ts`: a client that does not
+advertise the extension, never reads the `tools-metadata` resource, and never
+calls `report_observation` still lists and calls the base tools normally. (The
+2026-09-28 update below covers the component-level cases.)
 
 Formerly README's "What's next" list. No host is required to understand the
 `dev.adaptivemcp/tools-metadata` resource or the `report_observation` tool —
