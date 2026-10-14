@@ -96,10 +96,11 @@ tools:
         limit: <number>      # numeric limit
         currency: <string?>  # e.g. "USD" (when the limit is monetary)
       require_approval: <boolean?>  # server SUGGESTS confirmation before call
-    # NOTE: `budget` and `require_approval` are populated by the reference
-    # implementation (`@adaptivemcp/extension`) from routing/approval
-    # recommendations once one exists for a tool (see ROADMAP Phase 6f). They
-    # remain optional per the schema; clients MUST treat them as suggestions.
+    # NOTE: in the derived view, `budget` (from a routing recommendation) and
+    # `require_approval` (from an approval recommendation) are populated from
+    # the client's learned recommendations once one exists for the tool — they
+    # are not authored on the static `annotation` by the server. Both remain
+    # optional; clients MUST treat them as suggestions (see *Security*).
     insights:                # CLIENT-REPORTED: learned from observed behavior
       <key>:
         value: <any>
