@@ -47,7 +47,7 @@ Surfaced while fixing `examples/README.md`'s Walkthrough 2 (a reader assumed
 reasonable guess from the names, and wrong). The doc fix patched the
 symptom; the underlying naming/boundary question is still open.
 
-- [ ] **`AdaptiveRuntime` bundles two different "sides" under one name.** `open`
+- [x] **`AdaptiveRuntime` bundles two different "sides" under one name.** `decided` (2026-10-15)
   Today `AdaptiveRuntime` (`packages/runtime/src/index.ts`) wires telemetry,
   evaluation, `extension`, routing, orchestration, and approval into one
   object — and per §1's two-store model, the whole thing is **client-owned**
@@ -89,6 +89,24 @@ symptom; the underlying naming/boundary question is still open.
   cheap follow-up if the confusion recurs; (1) only if the two-store model
   in §1 hardens into an actual deployment requirement (e.g. a server MUST NOT
   hold the learning Store) rather than today's "MAY fold reports" framing.
+
+  **Decision (2026-10-15): option (3), completed across every doc — not just
+  the one that got caught.** The ambiguity was a *description* problem: the
+  bundle is neither side. The top-level README's Architecture section opened
+  with "runs entirely on the client/runtime side", which is exactly the
+  inference §1c set out to kill; it now describes the split by **ownership**
+  (learning is client-owned because the store is; publishing is a view over
+  that store, served wherever it runs) and names
+  `@adaptivemcp/thin-client` (`ThinClient`) as the client's *execution* loop.
+  - (2) **declined**: renaming a published package trades one vagueness for
+    another — `loop` says nothing about what it learns — and pushes every
+    consumer through a deprecation for zero behavioural gain. The name is not
+    wrong; the sentence around it was.
+  - (1) **stays gated** on §1's two-store model hardening into a deployment
+    requirement ("a server MUST NOT hold the learning Store"). If it does, the
+    split is forced and the rename question is moot.
+  - **Revisit trigger**: a *third* reader misreads the split (this doubt is the
+    second), or the extension gains a second store-backed consumer.
 
 ### 1b. New doubts from SEP critique (2026-07-19)
 
@@ -974,9 +992,10 @@ and every advisory recommendation were designed for. What it exercises today:
 - §6 — upstream SDK PR for SEP-2133 graduation (unchanged; process-bound).
 - §1b/§10 — precedence wording in the SEP (host UI > suggestion > nothing):
   **done 2026-09-29** — stated in SEP §Security and demonstrated by the agent.
-- §1c — `AdaptiveRuntime` naming/boundary: the agent reinforces the two-store
-  reading (it owns the learning Store client-side; the example server serves the
-  extension resource), which supports option (2) rename-long-term over (1) split.
+- §1c — `AdaptiveRuntime` naming/boundary: **decided 2026-10-15** as option (3),
+  completed across all docs. The agent's two-store reading (client owns the
+  learning store; the example server serves the extension resource) is what the
+  docs now state explicitly — an ownership statement, not a rename trigger.
 
 ## 15. Metadata without an events table (2026-09-29)
 

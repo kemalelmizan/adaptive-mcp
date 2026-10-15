@@ -99,7 +99,21 @@ pnpm scenario:adaptive   # full stack: routing + orchestration + approval + thin
 
 ## Architecture
 
-The adaptation loop runs entirely on the client/runtime side:
+The adaptation loop runs wherever the **store** lives; it is not defined by a
+deployment side. A stateless server publishes static `annotation` only — the
+observed behavior is client-owned — so the loop belongs next to whoever holds
+the SQLite store. Two distinct halves run there:
+
+- **Learning**: telemetry → store → evaluation → routing / orchestration /
+  approval. This is the client's half.
+- **Publishing**: `ExtensionController` → derived YAML → the
+  `dev.adaptivemcp/tools-metadata` MCP resource. A *view* over the store,
+  served wherever the store runs (a server process, a client, or neither).
+
+`AdaptiveRuntime` wires both halves together, which is why its name says
+nothing about a deployment side; the client's *execution* loop is
+`@adaptivemcp/thin-client` (`ThinClient`). See the "Server-side vs.
+client-side" note in `examples/README.md`.
 
 ```mermaid
 flowchart TD
