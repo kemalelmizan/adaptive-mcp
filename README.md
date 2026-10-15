@@ -10,7 +10,7 @@ govern themselves from real signal. The first-party host that consumes these
 libraries is the [Adaptive MCP agent](https://github.com/adaptivemcp/agent).
 
 > I introduced this project in the talk session
-> *"Self-Improving MCP Agents"* at the [MCP Dev Summit in Seoul (2026)](https://events.linuxfoundation.org/mcp-dev-summit-seoul/).
+> _"Self-Improving MCP Agents"_ at the [MCP Dev Summit in Seoul (2026)](https://events.linuxfoundation.org/mcp-dev-summit-seoul/).
 > [Check session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
 
 ## Quick start
@@ -44,7 +44,7 @@ import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/tele
 import { Evaluator } from "@adaptivemcp/evaluation";
 import { ExtensionController } from "@adaptivemcp/extension";
 
-const memory = new MemoryStore();                                   // SQLite store
+const memory = new MemoryStore(); // SQLite store
 const telemetry = new TelemetryRecorder({ store: new MemoryBackedTelemetryStore(memory) });
 const evaluator = new Evaluator({ memory });
 const extension = new ExtensionController({ memory, yamlPath: "tools-metadata.yaml" });
@@ -56,25 +56,41 @@ const extension = new ExtensionController({ memory, yamlPath: "tools-metadata.ya
 // tool, a heavier one, and a deploy that hits a flaky window so the evaluator
 // actually has something to learn.
 for (let i = 0; i < 40; i++) {
-  telemetry.complete({ toolName: "search_customer", serverName: "crm" }, { durationMs: 120 + Math.round(Math.random() * 40) });
+  telemetry.complete(
+    { toolName: "search_customer", serverName: "crm" },
+    { durationMs: 120 + Math.round(Math.random() * 40) },
+  );
 }
 for (let i = 0; i < 15; i++) {
-  telemetry.complete({ toolName: "generate_report", serverName: "analytics" }, { durationMs: 1800 + Math.round(Math.random() * 300), cost: { amount: 0.012, currency: "USD" } });
+  telemetry.complete(
+    { toolName: "generate_report", serverName: "analytics" },
+    {
+      durationMs: 1800 + Math.round(Math.random() * 300),
+      cost: { amount: 0.012, currency: "USD" },
+    },
+  );
 }
 for (let i = 0; i < 25; i++) {
-  telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 900 + Math.round(Math.random() * 150) });
+  telemetry.complete(
+    { toolName: "deploy_service", serverName: "demo" },
+    { durationMs: 900 + Math.round(Math.random() * 150) },
+  );
 }
 // A flaky deploy window: ~40% of these blow up, so the evaluator flags
 // deploy_service as flaky and the approval gate will ask for confirmation.
 for (let i = 0; i < 15; i++) {
   if (Math.random() < 0.4) {
-    telemetry.fail({ toolName: "deploy_service", serverName: "demo" }, { message: "upstream timeout", code: "ETIMEDOUT" }, { durationMs: 1100 });
+    telemetry.fail(
+      { toolName: "deploy_service", serverName: "demo" },
+      { message: "upstream timeout", code: "ETIMEDOUT" },
+      { durationMs: 1100 },
+    );
   } else {
     telemetry.complete({ toolName: "deploy_service", serverName: "demo" }, { durationMs: 1100 });
   }
 }
-evaluator.evaluateAll();   // store stats → insights → store
-extension.sync();          // store → tools-metadata.yaml (and the MCP resource text)
+evaluator.evaluateAll(); // store stats → insights → store
+extension.sync(); // store → tools-metadata.yaml (and the MCP resource text)
 console.log(extension.resourceText());
 ```
 
@@ -107,11 +123,11 @@ the SQLite store. Two distinct halves run there:
 - **Learning**: telemetry → store → evaluation → routing / orchestration /
   approval. This is the client's half.
 - **Publishing**: `ExtensionController` → derived YAML → the
-  `dev.adaptivemcp/tools-metadata` MCP resource. A *view* over the store,
+  `dev.adaptivemcp/tools-metadata` MCP resource. A _view_ over the store,
   served wherever the store runs (a server process, a client, or neither).
 
 `AdaptiveRuntime` wires both halves together, which is why its name says
-nothing about a deployment side; the client's *execution* loop is
+nothing about a deployment side; the client's _execution_ loop is
 `@adaptivemcp/thin-client` (`ThinClient`). See the "Server-side vs.
 client-side" note in `examples/README.md`.
 
@@ -134,9 +150,9 @@ whenever metadata changes.
 
 ## Design constraints
 
-- **MCP sets the contract; Adaptive MCP learns the behavior.** MCP answers *"what
-  can the model do?"*; Adaptive MCP answers *"what have we learned about how those
-  capabilities are actually used?"* and turns that into metadata, not new
+- **MCP sets the contract; Adaptive MCP learns the behavior.** MCP answers _"what
+  can the model do?"_; Adaptive MCP answers _"what have we learned about how those
+  capabilities are actually used?"_ and turns that into metadata, not new
   primitives.
 - **Enrich, don't replace.** No first-class `adaptiveTool`, `adaptiveSkill`,
   `adaptiveIntent`, or `adaptiveWorkflow` concepts. Adaptive MCP operates on MCP
@@ -160,13 +176,13 @@ whenever metadata changes.
 > **Unofficial project.** Adaptive MCP is an independent, personal experiment.
 > It is **not** affiliated with, endorsed by, or maintained by the Model Context
 > Protocol project, its stewards, or any vendor. The `dev.adaptivemcp/` extension
-> namespace is a reversed-domain identifier of the project domain (`adaptivemcp.dev`) 
+> namespace is a reversed-domain identifier of the project domain (`adaptivemcp.dev`)
 > and is used in the spirit of, but not as part of, any official MCP extension.
 
 The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open
 standard that lets applications provide context and capabilities (tools,
-resources, prompts) to language models in a uniform way. MCP answers *"what can
-the model do?"* and standardizes the **capabilities** a server exposes.
+resources, prompts) to language models in a uniform way. MCP answers _"what can
+the model do?"_ and standardizes the **capabilities** a server exposes.
 
 Adaptive MCP builds on MCP rather than beside or beneath it. It does
 not fork, extend, or replace the protocol; it observes how MCP tools are actually
@@ -175,7 +191,7 @@ the **existing** MCP primitives. Concretely:
 
 - MCP servers stay standard and stateless; Adaptive MCP adds a client-side
   learning loop and a single derived resource (`dev.adaptivemcp/tools-metadata`)
-  that a server *may* publish to **govern** tool adaptation.
+  that a server _may_ publish to **govern** tool adaptation.
 - The pattern is a server-governed resource that clients read and report
   against, degrading gracefully on any host that ignores it. Our draft is at
   [`docs/sep-2133-tools-metadata.md`](./docs/sep-2133-tools-metadata.md).
@@ -191,15 +207,15 @@ not `tool_name` alone, since two different MCP servers can expose a tool with
 the same name, and a `tool_name`-only key would let one server's record
 silently overwrite the other's:
 
-| Column | Type | Contents |
-| --- | --- | --- |
-| `tool_name` | TEXT (PK) | Tool identifier |
-| `server_name` | TEXT (PK) | Originating MCP server (`''` if unknown) |
-| `annotation` | JSON | Static, human-written `Annotation` |
-| `insights` | JSON | Learned `Insight[]` |
-| `recommendations` | JSON | Suggested `Recommendation[]` |
-| `stats` | JSON | Accumulated `ToolStats` |
-| `updated_at` | TEXT | ISO-8601 timestamp |
+| Column            | Type      | Contents                                 |
+| ----------------- | --------- | ---------------------------------------- |
+| `tool_name`       | TEXT (PK) | Tool identifier                          |
+| `server_name`     | TEXT (PK) | Originating MCP server (`''` if unknown) |
+| `annotation`      | JSON      | Static, human-written `Annotation`       |
+| `insights`        | JSON      | Learned `Insight[]`                      |
+| `recommendations` | JSON      | Suggested `Recommendation[]`             |
+| `stats`           | JSON      | Accumulated `ToolStats`                  |
+| `updated_at`      | TEXT      | ISO-8601 timestamp                       |
 
 ### Core types (`@adaptivemcp/spec`)
 
@@ -223,20 +239,20 @@ human-readable projection consumed by out-of-band MCP clients.
 
 ## Packages
 
-| Package | Responsibility |
-| --- | --- |
-| `@adaptivemcp/spec` | Extension identifiers (`dev.adaptivemcp/` reversed-domain namespace), event schemas, shared types |
-| `@adaptivemcp/memory` | SQLite store (`MemoryStore`) over `node:sqlite` |
-| `@adaptivemcp/telemetry` | `TelemetryRecorder` + memory-backed store + stat queries |
-| `@adaptivemcp/evaluation` | `Evaluator` emits `observed_failure_rate` / `avg_duration_ms` insights |
-| `@adaptivemcp/extension` | `ExtensionController` derives + writes the YAML view and exposes the MCP resource |
-| `@adaptivemcp/routing` | `Router`: model selection + budget guardrails |
-| `@adaptivemcp/orchestration` | `Orchestrator`: retry-policy (`workflow`) recommendations |
-| `@adaptivemcp/approval` | `ApprovalGate`: enforcement (allow / deny / require_confirmation) |
-| `@adaptivemcp/thin-client` | `ThinClient`: client-side execution loop with gate + retry |
-| `@adaptivemcp/graph-analysis` | `GraphAnalyzer`: causal cascade, bottleneck/anti-pattern detection, and forecasting over execution DAGs |
-| `@adaptivemcp/middleware` | `MiddlewareChain`: pluggable hooks (`beforeCall`/`afterCall`/`onError`/`contributeView`) for transform/gate/inject-auth/observe concerns |
-| `@adaptivemcp/mcp-binary` | Wraps an existing CLI binary as an MCP server over stdio — the only sanctioned shell-out layer |
+| Package                       | Responsibility                                                                                                                           |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `@adaptivemcp/spec`           | Extension identifiers (`dev.adaptivemcp/` reversed-domain namespace), event schemas, shared types                                        |
+| `@adaptivemcp/memory`         | SQLite store (`MemoryStore`) over `node:sqlite`                                                                                          |
+| `@adaptivemcp/telemetry`      | `TelemetryRecorder` + memory-backed store + stat queries                                                                                 |
+| `@adaptivemcp/evaluation`     | `Evaluator` emits `observed_failure_rate` / `avg_duration_ms` insights                                                                   |
+| `@adaptivemcp/extension`      | `ExtensionController` derives + writes the YAML view and exposes the MCP resource                                                        |
+| `@adaptivemcp/routing`        | `Router`: model selection + budget guardrails                                                                                            |
+| `@adaptivemcp/orchestration`  | `Orchestrator`: retry-policy (`workflow`) recommendations                                                                                |
+| `@adaptivemcp/approval`       | `ApprovalGate`: enforcement (allow / deny / require_confirmation)                                                                        |
+| `@adaptivemcp/thin-client`    | `ThinClient`: client-side execution loop with gate + retry                                                                               |
+| `@adaptivemcp/graph-analysis` | `GraphAnalyzer`: causal cascade, bottleneck/anti-pattern detection, and forecasting over execution DAGs                                  |
+| `@adaptivemcp/middleware`     | `MiddlewareChain`: pluggable hooks (`beforeCall`/`afterCall`/`onError`/`contributeView`) for transform/gate/inject-auth/observe concerns |
+| `@adaptivemcp/mcp-binary`     | Wraps an existing CLI binary as an MCP server over stdio — the only sanctioned shell-out layer                                           |
 
 ### Adaptation behaviors
 
@@ -244,7 +260,7 @@ human-readable projection consumed by out-of-band MCP clients.
   observed latency/failure profile; emits a `routing` recommendation when a
   tool/server approaches or exceeds its cost budget (≥ 80% of limit).
 - **Orchestration** (`Orchestrator.planTool`): when `failureRate ≥
-  flakyThreshold` (default 0.1), writes a `workflow` recommendation with a retry
+flakyThreshold` (default 0.1), writes a `workflow` recommendation with a retry
   policy scaled to the failure rate (capped at `maxAttempts = 6`).
 - **Approval** (`ApprovalGate.gate`): returns `deny` for denied tools,
   `require_confirmation` for high-risk annotations or flaky tools (failure rate
@@ -266,11 +282,11 @@ the server publishes so clients can read (and report against) learned tool
 metadata. The proposal (draft) lives at
 [`docs/sep-2133-tools-metadata.md`](./docs/sep-2133-tools-metadata.md).
 
-| Field | Value |
-| --- | --- |
-| URI | `dev.adaptivemcp/tools-metadata` |
-| MIME type | `application/yaml` |
-| Scope | server governance (annotations, budgets, required approvals) + client-reported observations |
+| Field     | Value                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------- |
+| URI       | `dev.adaptivemcp/tools-metadata`                                                            |
+| MIME type | `application/yaml`                                                                          |
+| Scope     | server governance (annotations, budgets, required approvals) + client-reported observations |
 
 The `dev.adaptivemcp/` prefix is the reversed domain of `adaptivemcp.dev` (owned
 by the author), using the reversed-domain namespace convention. The client learning
@@ -300,10 +316,19 @@ When a server wants to advertise it explicitly, it can pass the capability:
 ```ts
 // conceptual: advertise the extension in initialize
 const server = new McpServer({ name: "adaptive-example", version: "0.1.0" });
-server.registerResource("tools-metadata", "dev.adaptivemcp/tools-metadata", {
-  title: "Adaptive MCP Tools Metadata",
-  mimeType: "application/yaml",
-}, async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/yaml", text: runtime.extension.resourceText() }] }));
+server.registerResource(
+  "tools-metadata",
+  "dev.adaptivemcp/tools-metadata",
+  {
+    title: "Adaptive MCP Tools Metadata",
+    mimeType: "application/yaml",
+  },
+  async (uri) => ({
+    contents: [
+      { uri: uri.href, mimeType: "application/yaml", text: runtime.extension.resourceText() },
+    ],
+  }),
+);
 // and advertise in initialize:
 // capabilities: { extensions: { "dev.adaptivemcp/tools-metadata": {} } }
 ```
@@ -355,31 +380,37 @@ is generated from each `package.json` by `pnpm docs`; the version column is a
 live npm badge.
 
 <!-- packages:published:start -->
-| Package | Version | Description |
-| --- | --- | --- |
-| `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | Extension identifiers, event schemas, and shared types for Adaptive MCP. |
-| `@adaptivemcp/graph-analysis` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/graph-analysis)](https://www.npmjs.com/package/@adaptivemcp/graph-analysis) | Graph analysis for Adaptive MCP execution DAGs: critical paths, bottlenecks, failure cascades, anti-patterns, and workflow forecasting. |
-| `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | Persistent operational knowledge for Adaptive MCP, backed by SQLite (node:sqlite). |
-| `@adaptivemcp/telemetry` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry) | Tool execution events and observability for Adaptive MCP. |
-| `@adaptivemcp/evaluation` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation) | Outcome scoring and feedback loops for Adaptive MCP. |
-| `@adaptivemcp/extension` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension) | Adaptive MCP extension: derives the YAML tools-metadata view from the SQLite store and serves it to MCP clients. |
-| `@adaptivemcp/runtime` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/runtime)](https://www.npmjs.com/package/@adaptivemcp/runtime) | Batteries-included Adaptive MCP runtime: wires telemetry, evaluation, routing, orchestration, approval, and the extension into one transport-agnostic loop. |
-| `@adaptivemcp/routing` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/routing)](https://www.npmjs.com/package/@adaptivemcp/routing) | Model selection and cost optimization for Adaptive MCP. |
-| `@adaptivemcp/orchestration` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/orchestration)](https://www.npmjs.com/package/@adaptivemcp/orchestration) | Composition and execution strategies for Adaptive MCP. |
-| `@adaptivemcp/approval` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/approval)](https://www.npmjs.com/package/@adaptivemcp/approval) | Intent, plan, and tool approval boundaries for Adaptive MCP. |
-| `@adaptivemcp/thin-client` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/thin-client)](https://www.npmjs.com/package/@adaptivemcp/thin-client) | Minimal client-side execution loop for Adaptive MCP. |
-| `@adaptivemcp/middleware` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/middleware)](https://www.npmjs.com/package/@adaptivemcp/middleware) | Pluggable middleware chain for Adaptive MCP (Transform I/O, gate, inject-auth, observe). |
-| `@adaptivemcp/mcp-binary` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/mcp-binary)](https://www.npmjs.com/package/@adaptivemcp/mcp-binary) | Generic CLI-binary -> MCP-server stdio wrapper (the only sanctioned shell-out layer). |
+
+| Package                       | Version                                                                                                                       | Description                                                                                                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@adaptivemcp/spec`           | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec)                     | Extension identifiers, event schemas, and shared types for Adaptive MCP.                                                                                    |
+| `@adaptivemcp/graph-analysis` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/graph-analysis)](https://www.npmjs.com/package/@adaptivemcp/graph-analysis) | Graph analysis for Adaptive MCP execution DAGs: critical paths, bottlenecks, failure cascades, anti-patterns, and workflow forecasting.                     |
+| `@adaptivemcp/memory`         | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory)                 | Persistent operational knowledge for Adaptive MCP, backed by SQLite (node:sqlite).                                                                          |
+| `@adaptivemcp/telemetry`      | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry)           | Tool execution events and observability for Adaptive MCP.                                                                                                   |
+| `@adaptivemcp/evaluation`     | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation)         | Outcome scoring and feedback loops for Adaptive MCP.                                                                                                        |
+| `@adaptivemcp/extension`      | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension)           | Adaptive MCP extension: derives the YAML tools-metadata view from the SQLite store and serves it to MCP clients.                                            |
+| `@adaptivemcp/runtime`        | [![npm](https://img.shields.io/npm/v/@adaptivemcp/runtime)](https://www.npmjs.com/package/@adaptivemcp/runtime)               | Batteries-included Adaptive MCP runtime: wires telemetry, evaluation, routing, orchestration, approval, and the extension into one transport-agnostic loop. |
+| `@adaptivemcp/routing`        | [![npm](https://img.shields.io/npm/v/@adaptivemcp/routing)](https://www.npmjs.com/package/@adaptivemcp/routing)               | Model selection and cost optimization for Adaptive MCP.                                                                                                     |
+| `@adaptivemcp/orchestration`  | [![npm](https://img.shields.io/npm/v/@adaptivemcp/orchestration)](https://www.npmjs.com/package/@adaptivemcp/orchestration)   | Composition and execution strategies for Adaptive MCP.                                                                                                      |
+| `@adaptivemcp/approval`       | [![npm](https://img.shields.io/npm/v/@adaptivemcp/approval)](https://www.npmjs.com/package/@adaptivemcp/approval)             | Intent, plan, and tool approval boundaries for Adaptive MCP.                                                                                                |
+| `@adaptivemcp/thin-client`    | [![npm](https://img.shields.io/npm/v/@adaptivemcp/thin-client)](https://www.npmjs.com/package/@adaptivemcp/thin-client)       | Minimal client-side execution loop for Adaptive MCP.                                                                                                        |
+| `@adaptivemcp/middleware`     | [![npm](https://img.shields.io/npm/v/@adaptivemcp/middleware)](https://www.npmjs.com/package/@adaptivemcp/middleware)         | Pluggable middleware chain for Adaptive MCP (Transform I/O, gate, inject-auth, observe).                                                                    |
+| `@adaptivemcp/mcp-binary`     | [![npm](https://img.shields.io/npm/v/@adaptivemcp/mcp-binary)](https://www.npmjs.com/package/@adaptivemcp/mcp-binary)         | Generic CLI-binary -> MCP-server stdio wrapper (the only sanctioned shell-out layer).                                                                       |
+
 <!-- packages:published:end -->
 
 ### Not yet published
 
-- **`@adaptivemcp/opencode-plugin`** — an experimental adapter mapping
-  [OpenCode](https://opencode.ai)'s V1 hook system
-  (`tool.execute.before`/`tool.execute.after`/`event`/`dispose`) onto Adaptive MCP
-  telemetry and middleware. It is unit-tested against the documented hook shape
-  but has not been run against a live OpenCode host — treat it as a reference
-  integration, not a supported one.
+- **`@adaptivemcp/opencode-plugin`** — an adapter mapping
+  [OpenCode](https://opencode.ai)'s plugin hooks onto Adaptive MCP telemetry and
+  middleware. The default export is dual-shape: **V2** (OpenCode ≥ 2.0) reads
+  `id` + `setup(ctx)` and registers `tool.hook("execute.before"/"execute.after")`
+  (including the error status), **V1** reads `id` + `server()` (older V1 uses
+  `createAdaptivePlugin`). Unit-tested against both hook shapes and **verified
+  live on OpenCode v2.0.26** — the plugin loads from the package directory and
+  writes `adaptive.db` rows + `tools-metadata.yaml` with per-tool stats. See the
+  package README for the V2 config recipe (a local directory target needs the
+  shipped root `index.mjs`; npm-name loading arrives with the publish).
 
 ## How to build, test, and run
 
@@ -437,7 +468,7 @@ and tested but consumed separately, not through `AdaptiveRuntime` itself. The
 `docs/ROADMAP.md` for the phased status and `examples/README.md` for the
 scenario walkthrough.
 
-This project was introduced publicly in the talk *"Self-Improving MCP Agents"*
+This project was introduced publicly in the talk _"Self-Improving MCP Agents"_
 at the [MCP Dev Summit Seoul 2026](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
 
 ### What's next

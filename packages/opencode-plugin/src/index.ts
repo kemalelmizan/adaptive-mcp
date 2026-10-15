@@ -1,8 +1,18 @@
 /**
- * @adaptivemcp/opencode-plugin — a real OpenCode V1 plugin that feeds the
- * Adaptive MCP adaptation loop.
+ * @adaptivemcp/opencode-plugin — a real OpenCode plugin that feeds the
+ * Adaptive MCP adaptation loop. Supports both host generations:
  *
- * It maps the host's hooks onto the Adaptive MCP libraries:
+ * **V2 (OpenCode ≥ 2.0)** — the default export is a dual-shape definition
+ * `{ id, setup, server }`: the loader validates `id` + `setup` and ignores
+ * `server()`. `setup(ctx)` registers the host's tool hooks and returns a
+ * cleanup function:
+ * - `ctx.tool.hook("execute.before")` → `MiddlewareChain.runBefore`
+ * - `ctx.tool.hook("execute.after")`  → `TelemetryRecorder.complete`/`fail`
+ *   + `MiddlewareChain.runAfter` (V2 reports per-call failures as
+ *   `status: "error"`, which V1 had no hook for)
+ * - returned cleanup → registrations disposed + final flush + store close
+ *
+ * **V1 (OpenCode 1.x)** — `server()` returns the classic hooks object:
  * - `tool.execute.before` → `MiddlewareChain.runBefore`
  * - `tool.execute.after`  → `TelemetryRecorder.complete` + `MiddlewareChain.runAfter`
  * - `event` (session.*)   → session id tracking for telemetry
@@ -12,12 +22,24 @@
  * mirrors OpenCode's hook types structurally instead of depending on
  * `@opencode-ai/plugin` (see `types.ts`).
  *
- * Scope notes (things V1 hooks cannot do):
- * - There is no per-tool error hook; failures are recorded through
- *   `recordToolFailure()` by a host/event integration.
+ * Scope notes:
+ * - The store is constructed lazily inside `setup()`/`server()`, never at
+ *   module scope: host options (`ctx.options` / `server(input, options)`) only
+ *   exist at call time, and constructing at import time made plugin load fail
+ *   wholesale when a previous host run had been terminated while the store was
+ *   open (stale `*.db-shm`/`*.db-wal` sidecars → `ERR_SQLITE_ERROR: disk I/O
+ *   error`). Recovery: delete the stale sidecars (and the db file if it is
+ *   unrecoverable) — SQLite cannot reconcile sidecars whose owner db is gone.
+ * - V1 has no per-tool error hook; failures must be recorded through
+ *   `recordToolFailure()` by a host/event integration. V2 supplies
+ *   `execute.after` with `status: "error"` and records them natively.
+ *   A non-zero `shell` exit code is **not** an error in either generation —
+ *   the host reports the call itself as `"completed"`.
  * - There is no parent/child tool linkage, so execution-graph tracking is not
  *   wired here; `TelemetryRecorder.complete`/`fail` stats still flow normally.
  * - OpenCode does not report MCP server names, so events carry no `serverName`.
+ * - V2 delivers `sessionID` on every tool event, so this adapter tracks the
+ *   session from tool events; it does not subscribe to `ctx.event`.
  */
 
 import { MemoryStore } from "@adaptivemcp/memory";
@@ -33,10 +55,18 @@ import type {
   OpenCodeEvent,
   OpenCodeHooks,
   OpenCodePlugin,
+  OpenCodePluginDefinition,
+  OpenCodePluginInput,
   OpenCodeToolExecuteAfterInput,
   OpenCodeToolExecuteAfterOutput,
   OpenCodeToolExecuteBeforeInput,
   OpenCodeToolExecuteBeforeOutput,
+  OpenCodeV2Cleanup,
+  OpenCodeV2Registration,
+  OpenCodeV2SetupContext,
+  OpenCodeV2ToolExecuteAfterEvent,
+  OpenCodeV2ToolExecuteBeforeEvent,
+  OpenCodeV2ToolResult,
 } from "./types.js";
 
 interface PendingCall {
@@ -45,9 +75,10 @@ interface PendingCall {
 }
 
 /**
- * Wires the Adaptive MCP components into an OpenCode plugin. Construct it
- * directly (and call `hooks()`), or via `createAdaptivePlugin()` for the
- * function shape the host actually loads.
+ * Wires the Adaptive MCP components into an OpenCode plugin. Use `hooks()` for
+ * V1 hosts or `setup(ctx)` for V2 hosts; obtain an instance via
+ * `createAdaptivePlugin()` (V1 function shape) or `createOpenCodePlugin()`
+ * (dual shape, lazy construction).
  */
 export class AdaptiveMcpPlugin {
   readonly memory: MemoryStore;
@@ -64,6 +95,10 @@ export class AdaptiveMcpPlugin {
   private sessionId?: string;
   private timer?: ReturnType<typeof setTimeout>;
   private disposed = false;
+  /** V2 hooks already registered on a host context (guards double setup). */
+  private registeredV2 = false;
+  /** Live V2 hook registrations (empty until `setup(ctx)` runs). */
+  private v2Registrations: OpenCodeV2Registration[] = [];
 
   constructor(options: AdaptivePluginOptions = {}) {
     this.persistDebounceMs = options.persistDebounceMs ?? 250;
@@ -90,6 +125,84 @@ export class AdaptiveMcpPlugin {
       event: (input) => this.onEvent(input.event),
       dispose: () => this.dispose(),
     };
+  }
+
+  /**
+   * OpenCode **V2** entry point: register the host's tool hooks on the setup
+   * context and return the cleanup function the host runs on unload.
+   *
+   * V2 payloads map onto the same internals the V1 hooks use:
+   * - `execute.before` `{tool, sessionID, id, input}` → `callID = id`,
+   *   `args = input`
+   * - `execute.after` completed → `result` folded into the V1
+   *   `{title, output, metadata}` output shape
+   * - `execute.after` `status: "error"` → a real failure record (V1 had no
+   *   per-tool error hook), clearing the pending call for its duration.
+   *
+   * Guarded against double registration: the host may invoke `setup()` more
+   * than once per process (observed live on v2.0.26); re-running it must not
+   * double-count every tool call.
+   */
+  async setup(ctx: OpenCodeV2SetupContext): Promise<OpenCodeV2Cleanup> {
+    if (this.disposed) return () => {};
+    if (this.registeredV2) return () => this.dispose();
+    if (!ctx || typeof ctx.tool?.hook !== "function") {
+      throw new TypeError("@adaptivemcp/opencode-plugin: setup context has no tool.hook() API");
+    }
+    const registrations: OpenCodeV2Registration[] = [];
+    registrations.push(await ctx.tool.hook("execute.before", (event) => this.onV2Before(event)));
+    registrations.push(await ctx.tool.hook("execute.after", (event) => this.onV2After(event)));
+    this.registeredV2 = true;
+    return async () => {
+      for (const registration of registrations) {
+        await registration.dispose();
+      }
+      this.registeredV2 = false;
+      await this.dispose();
+    };
+  }
+
+  private async onV2Before(event: OpenCodeV2ToolExecuteBeforeEvent): Promise<void> {
+    if (this.disposed) return;
+    // V2 carries sessionID on every tool event — track it so currentSessionId()
+    // reflects the active session without a ctx.event subscription.
+    if (typeof event.sessionID === "string" && event.sessionID) {
+      this.sessionId = event.sessionID;
+    }
+    await this.onToolBefore(
+      { tool: event.tool, sessionID: event.sessionID, callID: event.id },
+      { args: event.input },
+    );
+  }
+
+  private async onV2After(event: OpenCodeV2ToolExecuteAfterEvent): Promise<void> {
+    if (this.disposed) return;
+    if (event.status === "error") {
+      const call = this.pending.get(event.id);
+      this.pending.delete(event.id);
+      const sessionId = event.sessionID || call?.sessionId || this.sessionId;
+      const message =
+        typeof event.error?.message === "string" && event.error.message
+          ? event.error.message
+          : `tool ${event.tool} failed`;
+      this.telemetry.fail(
+        { toolName: event.tool, sessionId },
+        { message },
+        { durationMs: call ? Date.now() - call.startedAt : undefined },
+      );
+      // Mirror the thin client: classified failures reach middleware through
+      // runAfter({ ok: false, error }) — runError() is for thrown chain errors.
+      await this.middleware.runAfter(
+        { ok: false, error: message },
+        { toolName: event.tool, input: event.input },
+      );
+      this.schedulePersist();
+      return;
+    }
+    await this.onToolAfter(
+      { tool: event.tool, sessionID: event.sessionID, callID: event.id, args: event.input },
+      mapV2Result(event.result, event.tool),
+    );
   }
 
   private async onToolBefore(
@@ -189,11 +302,9 @@ export class AdaptiveMcpPlugin {
     error: { message: string; code?: string },
     opts: { sessionId?: string; durationMs?: number } = {},
   ): void {
-    this.telemetry.fail(
-      { toolName, sessionId: opts.sessionId ?? this.sessionId },
-      error,
-      { durationMs: opts.durationMs },
-    );
+    this.telemetry.fail({ toolName, sessionId: opts.sessionId ?? this.sessionId }, error, {
+      durationMs: opts.durationMs,
+    });
     this.schedulePersist();
   }
 
@@ -229,5 +340,115 @@ export function createAdaptivePlugin(
   const factory: OpenCodePlugin = async () => plugin.hooks();
   return Object.assign(factory, { plugin });
 }
+
+/**
+ * Fold a V2 `execute.after` `result` into the V1 `{title, output, metadata}`
+ * output shape the telemetry path already stores: text content blocks joined
+ * as the output (falling back to `result.output.output`, e.g. shell stdout),
+ * `result.metadata` as metadata, and the tool name as the title when the host
+ * sends none.
+ */
+function mapV2Result(
+  result: OpenCodeV2ToolResult | undefined,
+  tool: string,
+): OpenCodeToolExecuteAfterOutput {
+  const title = typeof result?.title === "string" && result.title ? result.title : tool;
+  const blocks = Array.isArray(result?.content)
+    ? result.content
+        .map((block) => (typeof block?.text === "string" ? block.text : ""))
+        .filter((text) => text.length > 0)
+    : [];
+  const output =
+    blocks.length > 0
+      ? blocks.join("")
+      : typeof result?.output?.output === "string"
+        ? result.output.output
+        : "";
+  return { title, output, metadata: result?.metadata ?? {} };
+}
+
+/**
+ * Pick the data-only host options (`plugins: [{ package, options }]` in V2
+ * config, `server(input, options)` in V1) and drop anything that cannot cross
+ * a JSON boundary (`middleware` is code — pass it via `createOpenCodePlugin`).
+ * Unknown keys are ignored; wrong-typed known keys are ignored too.
+ */
+function readHostOptions(raw?: Record<string, unknown>): AdaptivePluginOptions {
+  if (!raw || typeof raw !== "object") return {};
+  const options: AdaptivePluginOptions = {};
+  if (typeof raw.dbPath === "string") options.dbPath = raw.dbPath;
+  if (typeof raw.yamlPath === "string") options.yamlPath = raw.yamlPath;
+  if (typeof raw.persistDebounceMs === "number") options.persistDebounceMs = raw.persistDebounceMs;
+  if (raw.approvalPolicy && typeof raw.approvalPolicy === "object") {
+    options.approvalPolicy = raw.approvalPolicy as AdaptivePluginOptions["approvalPolicy"];
+  }
+  return options;
+}
+
+/**
+ * Create the **dual-shape** plugin definition loadable by both host
+ * generations (V2 validates `id` + `setup()` and ignores `server()`; V1 calls
+ * `server()` and ignores `setup()`):
+ *
+ * ```jsonc
+ * // opencode.json (V2) — or `"plugin": ["./path/to/package"]` on V1
+ * { "plugins": [{ "package": "@adaptivemcp/opencode-plugin",
+ *                 "options": { "dbPath": "./adaptive.db" } }] }
+ * ```
+ *
+ * The `AdaptiveMcpPlugin` instance (and with it the store) is constructed
+ * lazily on the first `setup()`/`server()` call — never at module scope, so
+ * importing this module has no side effects and host options are available
+ * before the store opens. The instance is exposed as `.plugin` for
+ * introspection/tests (it is `undefined` until the host calls in).
+ */
+export function createOpenCodePlugin(
+  options: AdaptivePluginOptions = {},
+): OpenCodePluginDefinition & { readonly plugin: AdaptiveMcpPlugin | undefined } {
+  let instance: AdaptiveMcpPlugin | undefined;
+  const construct = (hostOptions?: Record<string, unknown>): AdaptiveMcpPlugin => {
+    instance ??= new AdaptiveMcpPlugin({ ...options, ...readHostOptions(hostOptions) });
+    return instance;
+  };
+  return {
+    id: "adaptivemcp",
+    async setup(ctx: OpenCodeV2SetupContext) {
+      const plugin = construct(ctx?.options);
+      const cleanup = await plugin.setup(ctx);
+      // Release the instance on unload so a later setup() re-constructs fresh
+      // instead of handing back a disposed one.
+      return async () => {
+        await cleanup();
+        if (instance === plugin) instance = undefined;
+      };
+    },
+    async server(_input: OpenCodePluginInput, hostOptions?: Record<string, unknown>) {
+      const plugin = construct(hostOptions);
+      const hooks = plugin.hooks();
+      const dispose = hooks.dispose;
+      hooks.dispose = async () => {
+        await dispose?.();
+        if (instance === plugin) instance = undefined;
+      };
+      return hooks;
+    },
+    get plugin() {
+      return instance;
+    },
+  };
+}
+
+/**
+ * The package's default export — a ready-to-load dual-shape plugin with the
+ * default options (`:memory:` store, no yaml file until configured). Point
+ * OpenCode at this package directory (or npm name) directly; pass `dbPath` /
+ * `yamlPath` / `persistDebounceMs` / `approvalPolicy` through the host's
+ * plugin `options`, or use `createOpenCodePlugin({ middleware: [...] })` when
+ * you need code-level options.
+ */
+const plugin: OpenCodePluginDefinition & { readonly plugin: AdaptiveMcpPlugin | undefined } =
+  createOpenCodePlugin();
+
+export default plugin;
 
 export * from "./types.js";
