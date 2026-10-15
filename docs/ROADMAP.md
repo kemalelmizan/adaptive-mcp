@@ -52,7 +52,12 @@ pnpm --filter @adaptivemcp/examples client
 > Note (2026-09-29): `middleware` and `mcp-binary` are published on npm (first
 > released in v0.4.0) and are in `PUBLISHABLE_PACKAGES`
 > (`scripts/lib/workspace.ts`). (The earlier 2026-07-22 note predated their
-> release.) `graph-analysis` is packaging-ready but deliberately still excluded.
+> release.)
+> Note (2026-10-15): `graph-analysis` is publishable too. It was excluded even
+> though the published `routing` and `evaluation` both depend on it, so a
+> release of either would have shipped a package npm could not resolve.
+> `scripts/check-docs.ts` now enforces that the publishable set is
+> dependency-closed, so a repeat fails CI instead of a release.
 
 ## Phase 0: Foundation (complete)
 

@@ -344,6 +344,7 @@ live npm badge.
 | Package | Version | Description |
 | --- | --- | --- |
 | `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | Extension identifiers, event schemas, and shared types for Adaptive MCP. |
+| `@adaptivemcp/graph-analysis` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/graph-analysis)](https://www.npmjs.com/package/@adaptivemcp/graph-analysis) | Graph analysis for Adaptive MCP execution DAGs: critical paths, bottlenecks, failure cascades, anti-patterns, and workflow forecasting. |
 | `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | Persistent operational knowledge for Adaptive MCP, backed by SQLite (node:sqlite). |
 | `@adaptivemcp/telemetry` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry) | Tool execution events and observability for Adaptive MCP. |
 | `@adaptivemcp/evaluation` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation) | Outcome scoring and feedback loops for Adaptive MCP. |
@@ -359,10 +360,6 @@ live npm badge.
 
 ### Not yet published
 
-- **`@adaptivemcp/graph-analysis`** — fully implemented and tested (`GraphAnalyzer`:
-  causal cascade, anti-pattern detection, workflow forecasting), and already a
-  dependency of `routing`/`evaluation`/`opencode-plugin`, but not yet added to
-  `PUBLISHABLE_PACKAGES`.
 - **`@adaptivemcp/opencode-plugin`** — an experimental adapter mapping
   [OpenCode](https://opencode.ai)'s V1 hook system
   (`tool.execute.before`/`tool.execute.after`/`event`/`dispose`) onto Adaptive MCP
