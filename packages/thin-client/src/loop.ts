@@ -5,8 +5,26 @@ import { MiddlewareChain, type Middleware, type PlannedCall, type CallResult } f
 import type { SamplingAdvisor } from "@adaptivemcp/routing";
 import { GraphTrackingMiddleware } from "./graph-middleware.js";
 
+/**
+ * What a `ToolHandler` is told about the call it is executing, alongside the
+ * input. The important field is `credentials`: an auth-injecting middleware
+ * (see `OAuthMiddleware`) resolves a token in `beforeCall` and puts it here, so
+ * the transport can actually put it on the wire. Without this hand-off the
+ * middleware's work would be dead: `PlannedCall.credentials` never reaches the
+ * handler that owns the connection.
+ */
+export interface ToolHandlerCallContext {
+  toolName: string;
+  serverName?: string;
+  /** Credentials resolved by an auth-injecting middleware. */
+  credentials?: Record<string, unknown>;
+}
+
 export interface ToolHandler {
-  (input: unknown): Promise<{ ok: boolean; error?: string; output?: unknown }>;
+  (
+    input: unknown,
+    context?: ToolHandlerCallContext,
+  ): Promise<{ ok: boolean; error?: string; output?: unknown }>;
 }
 
 export interface ThinClientOptions {
@@ -201,7 +219,16 @@ export class ThinClient {
     let tried = 0;
     for (let attempt = 0; attempt < attempts; attempt++) {
       tried = attempt + 1;
-      last = this.classify(await handler(call.input), call);
+      // Built per attempt: a middleware may mutate credentials between tries,
+      // and the handler must see the current values (e.g. a refreshed token).
+      last = this.classify(
+        await handler(call.input, {
+          toolName: call.toolName,
+          serverName: call.serverName,
+          credentials: call.credentials,
+        }),
+        call,
+      );
       if (last.ok) return { ...last, attempts: tried };
       if (attempt < attempts - 1 && policy.baseDelayMs > 0) {
         await delay(policy.baseDelayMs * 2 ** attempt);

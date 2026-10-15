@@ -132,6 +132,35 @@ describe("@adaptivemcp/thin-client", () => {
     expect(seen).toEqual(["after"]);
   });
 
+  it("hands middleware-resolved credentials to the handler", async () => {
+    record(store, "search_customer", 0, 40);
+    const auth: Middleware = {
+      name: "auth",
+      beforeCall: (call: PlannedCall) => {
+        call.credentials = { ...(call.credentials ?? {}), authorization: "Bearer tok-1" };
+      },
+    };
+    client = new ThinClient({ memory: store, gate, middleware: [auth] });
+
+    const contexts: Array<{ toolName: string; serverName?: string; credentials?: Record<string, unknown> }> = [];
+    const res = await client.run(
+      "search_customer",
+      async (_input, context) => {
+        contexts.push({ toolName: context?.toolName, serverName: context?.serverName, credentials: context?.credentials });
+        return { ok: true, output: context?.credentials?.authorization };
+      },
+      {},
+      () => {},
+      "srv",
+    );
+
+    // The token the middleware resolved is what the transport would put on the wire.
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]?.toolName).toBe("search_customer");
+    expect(contexts[0]?.serverName).toBe("srv");
+    expect(res.output).toBe("Bearer tok-1");
+  });
+
   describe("sampling recommendations", () => {
     function recordTelemetry(toolName: string, serverName: string | undefined, ok: boolean, error?: string): void {
       store.recordExecution({
