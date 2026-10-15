@@ -18,6 +18,7 @@ export const REPO_ROOT = resolve(__dirname, "..", "..");
 /** Packages published to npm. The `examples`/`apps` workspaces stay private. */
 export const PUBLISHABLE_PACKAGES = [
   "@adaptivemcp/spec",
+  "@adaptivemcp/graph-analysis",
   "@adaptivemcp/memory",
   "@adaptivemcp/telemetry",
   "@adaptivemcp/evaluation",

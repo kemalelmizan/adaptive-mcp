@@ -14,7 +14,12 @@
  *      `docs/ROADMAP.md` (items cannot silently disappear);
  *   5. each `CLAIMS` entry's code probe agrees with its ROADMAP status marker:
  *      a capability that exists in code must be marked ✅/🟡, and a marker must
- *      not claim a capability the code no longer has.
+ *      not claim a capability the code no longer has;
+ *   6. the publishable set is dependency-closed: a published package cannot
+ *      depend on an unpublished `@adaptivemcp/*` package, because npm would
+ *      have nothing to resolve (this shipped broken once: `routing` and
+ *      `evaluation` both depended on `graph-analysis`, which was not
+ *      publishable).
  *
  * Read-only. Run standalone (`node scripts/check-docs.ts` / `pnpm docs:check`)
  * or via `pnpm maintenance:check`.
@@ -37,7 +42,6 @@ const PUBLISHABLE = PUBLISHABLE_PACKAGES as readonly string[];
  * matching README note.
  */
 const UNPUBLISHED_PACKAGES: Record<string, string> = {
-  "@adaptivemcp/graph-analysis": "implemented and tested, not yet in PUBLISHABLE_PACKAGES",
   "@adaptivemcp/opencode-plugin": "experimental, untested, unvalidated OpenCode host adapter",
 };
 
@@ -211,11 +215,34 @@ function checkClaims(): void {
   }
 }
 
+function checkPublishClosure(): void {
+  // npm resolves `dependencies` at install time: a published package pointing
+  // at an unpublished one is uninstallable for every user of the published
+  // package, and no test in this repo would notice (link: resolves locally).
+  const publishable = new Set(PUBLISHABLE);
+  for (const dir of listPackageDirs()) {
+    const pkg = readPackageJson(dir);
+    if (!publishable.has(pkg.name)) continue;
+    const deps = Object.keys(pkg.dependencies ?? {}).filter((d) =>
+      d.startsWith("@adaptivemcp/"),
+    );
+    for (const dep of deps) {
+      if (!publishable.has(dep)) {
+        fail(
+          `publishable package ${pkg.name} depends on unpublished ${dep}; ` +
+            `add it to PUBLISHABLE_PACKAGES or drop the dependency`,
+        );
+      }
+    }
+  }
+}
+
 function main(): void {
   checkPackageInventory();
   checkReadmeTable();
   checkRoadmapInventory();
   checkClaims();
+  checkPublishClosure();
 
   if (failures.length > 0) {
     console.error("docs check failed:");
@@ -223,7 +250,8 @@ function main(): void {
     process.exit(1);
   }
   console.log(
-    "docs check passed: package inventory, README table, ROADMAP inventory, and status claims are consistent.",
+    "docs check passed: package inventory, README table, ROADMAP inventory, status claims, " +
+      "and the publishable dependency closure are consistent.",
   );
 }
 
