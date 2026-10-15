@@ -42,7 +42,8 @@ const PUBLISHABLE = PUBLISHABLE_PACKAGES as readonly string[];
  * matching README note.
  */
 const UNPUBLISHED_PACKAGES: Record<string, string> = {
-  "@adaptivemcp/opencode-plugin": "experimental, untested, unvalidated OpenCode host adapter",
+  "@adaptivemcp/opencode-plugin":
+    "OpenCode host adapter (V1+V2, live-verified on v2.0.26); unpublished until the release token is renewed",
 };
 
 /** Minimum ROADMAP status for a documented capability: ✅ "done" or 🟡 "partial". */
@@ -111,8 +112,22 @@ const CLAIMS: Claim[] = [
 ];
 
 const ROADMAP_ITEMS = [
-  "6a", "6b", "6c", "6d", "6e", "6f", "6g", "6h", "6i", "6j",
-  "8a", "8b", "8c", "8d", "8e", "8f",
+  "6a",
+  "6b",
+  "6c",
+  "6d",
+  "6e",
+  "6f",
+  "6g",
+  "6h",
+  "6i",
+  "6j",
+  "8a",
+  "8b",
+  "8c",
+  "8d",
+  "8e",
+  "8f",
 ];
 
 const failures: string[] = [];
@@ -127,7 +142,11 @@ function read(relPath: string): string {
 }
 
 function roadmapRow(roadmap: string, id: string): string | undefined {
-  return roadmap.split("\n").find((line) => line.startsWith(`| ${id} |`));
+  // Tolerate whitespace padding inside the id cell: Prettier's canonical
+  // markdown table format right-pads cells (`| 6a  |`), and the check used to
+  // require exactly `| 6a |`, so any `pnpm format` pass silently broke it.
+  const cell = new RegExp(`^\\|\\s*${id}\\s*\\|`);
+  return roadmap.split("\n").find((line) => cell.test(line));
 }
 
 function statusLevel(row: string): "done" | "partial" | "none" {
@@ -157,16 +176,16 @@ function checkReadmeTable(): void {
     return;
   }
   const block = readme.slice(start, end);
-  const listed = new Set(
-    [...block.matchAll(/`(@adaptivemcp\/[a-z0-9-]+)`/g)].map((m) => m[1]),
-  );
+  const listed = new Set([...block.matchAll(/`(@adaptivemcp\/[a-z0-9-]+)`/g)].map((m) => m[1]));
   const expected = new Set(PUBLISHABLE);
   for (const name of expected) {
     if (!listed.has(name)) fail(`README published table is missing ${name} (run \`pnpm docs\`)`);
   }
   for (const name of listed) {
     if (!expected.has(name)) {
-      fail(`README published table lists ${name}, which is not in PUBLISHABLE_PACKAGES (run \`pnpm docs\`)`);
+      fail(
+        `README published table lists ${name}, which is not in PUBLISHABLE_PACKAGES (run \`pnpm docs\`)`,
+      );
     }
   }
 }
@@ -203,9 +222,7 @@ function checkClaims(): void {
       );
     }
     if (!implemented && level !== "none") {
-      fail(
-        `claim ${claim.id} ROADMAP row claims "${level}" but no probe matched in ${claim.file}`,
-      );
+      fail(`claim ${claim.id} ROADMAP row claims "${level}" but no probe matched in ${claim.file}`);
     }
     if (implemented && claim.minStatus === "done" && level === "partial") {
       fail(
@@ -223,9 +240,7 @@ function checkPublishClosure(): void {
   for (const dir of listPackageDirs()) {
     const pkg = readPackageJson(dir);
     if (!publishable.has(pkg.name)) continue;
-    const deps = Object.keys(pkg.dependencies ?? {}).filter((d) =>
-      d.startsWith("@adaptivemcp/"),
-    );
+    const deps = Object.keys(pkg.dependencies ?? {}).filter((d) => d.startsWith("@adaptivemcp/"));
     for (const dep of deps) {
       if (!publishable.has(dep)) {
         fail(
