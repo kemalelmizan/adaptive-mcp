@@ -8,7 +8,7 @@ plan: each phase is validated by runnable examples before the next begins.
 - **Node 22+** (Node 26 recommended)
 - **pnpm 11+** (pinned via the repo's `packageManager` field).
 - **SQLite is the store.** The `tools-metadata.yaml`
-  file is a *derived view* of the SQLite store, never edited directly.
+  file is a _derived view_ of the SQLite store, never edited directly.
 - **Adaptive MCP computes and writes the YAML.** MCP clients read the YAML as a
   static, human- and machine-readable projection of learned behavior.
 - **MCP extension pattern.** Adaptive behavior lives in middleware packages, not
@@ -32,22 +32,22 @@ pnpm --filter @adaptivemcp/examples server
 pnpm --filter @adaptivemcp/examples client
 ```
 
-| Package | Responsibility | Status |
-| --- | --- | --- |
-| `@adaptivemcp/spec` | Extension identifiers, event schemas, shared types, `Store` interface | ✅ done |
-| `@adaptivemcp/memory` | SQLite store (`node:sqlite`), reference `Store` impl | ✅ done |
-| `@adaptivemcp/telemetry` | Recorder + memory-backed store + queries | ✅ done |
-| `@adaptivemcp/evaluation` | Insight generation from observed stats | ✅ done |
-| `@adaptivemcp/extension` | Derives + writes `tools-metadata.yaml` view; execution-graph/workflow-graph/graph-insights MCP resources | ✅ done |
+| Package                       | Responsibility                                                                                              | Status  |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- | ------- |
+| `@adaptivemcp/spec`           | Extension identifiers, event schemas, shared types, `Store` interface                                       | ✅ done |
+| `@adaptivemcp/memory`         | SQLite store (`node:sqlite`), reference `Store` impl                                                        | ✅ done |
+| `@adaptivemcp/telemetry`      | Recorder + memory-backed store + queries                                                                    | ✅ done |
+| `@adaptivemcp/evaluation`     | Insight generation from observed stats                                                                      | ✅ done |
+| `@adaptivemcp/extension`      | Derives + writes `tools-metadata.yaml` view; execution-graph/workflow-graph/graph-insights MCP resources    | ✅ done |
 | `@adaptivemcp/graph-analysis` | `GraphAnalyzer` — critical path, bottlenecks, failure cascades, causal analysis, anti-patterns, forecasting | ✅ done |
-| `@adaptivemcp/routing` | Model selection / budget optimization; position-aware routing (critical path vs. leaf) | ✅ done |
-| `@adaptivemcp/orchestration` | Execution composition / retries | ✅ done |
-| `@adaptivemcp/approval` | Intent → plan → tool approval gate | ✅ done |
-| `@adaptivemcp/thin-client` | Client-side execution loop + middleware hooks | ✅ done |
-| `@adaptivemcp/middleware` | `Middleware` plugin interface + `MiddlewareChain` + `Compressor` abstraction | ✅ done |
-| `@adaptivemcp/mcp-binary` | Generic CLI-binary → MCP-server wrapper (rtk) | ✅ done |
-| `@adaptivemcp/runtime` | Batteries-included `AdaptiveRuntime` wiring all packages | ✅ done |
-| `examples` | Runnable server + client + scenarios | ✅ done |
+| `@adaptivemcp/routing`        | Model selection / budget optimization; position-aware routing (critical path vs. leaf)                      | ✅ done |
+| `@adaptivemcp/orchestration`  | Execution composition / retries                                                                             | ✅ done |
+| `@adaptivemcp/approval`       | Intent → plan → tool approval gate                                                                          | ✅ done |
+| `@adaptivemcp/thin-client`    | Client-side execution loop + middleware hooks                                                               | ✅ done |
+| `@adaptivemcp/middleware`     | `Middleware` plugin interface + `MiddlewareChain` + `Compressor` abstraction                                | ✅ done |
+| `@adaptivemcp/mcp-binary`     | Generic CLI-binary → MCP-server wrapper (rtk)                                                               | ✅ done |
+| `@adaptivemcp/runtime`        | Batteries-included `AdaptiveRuntime` wiring all packages                                                    | ✅ done |
+| `examples`                    | Runnable server + client + scenarios                                                                        | ✅ done |
 
 > Note (2026-09-29): `middleware` and `mcp-binary` are published on npm (first
 > released in v0.4.0) and are in `PUBLISHABLE_PACKAGES`
@@ -128,14 +128,15 @@ Make the middleware layer pluggable so external integrations — **rtk**
 mapping, and open decisions (D1–D10, with pros/cons) live in `docs/doubts.md` §12.
 
 **Integration model (decided): middleware chains MCP servers, not binaries.**
+
 - `@adaptivemcp/middleware`: new package holding the `Middleware` plugin
   interface (`init` / `beforeCall` / `afterCall` / `onError` / `contributeView`)
   and a `MiddlewareChain`. Depends only on the `Store` interface from `spec`.
   Adds a transport-agnostic `Compressor` abstraction (`compress(content, opts) →
-  { compressed, hash, savings_percent }`) whose implementation is **MCP-client
+{ compressed, hash, savings_percent }`) whose implementation is **MCP-client
   backed** (chains to a compressor MCP server).
 - `@adaptivemcp/mcp-binary` (NEW): a generic **CLI-binary → MCP-server wrapper**
-  (stdio). This is the *only* sanctioned shell-out layer (doubts.md §12b). It
+  (stdio). This is the _only_ sanctioned shell-out layer (doubts.md §12b). It
   exposes a binary's CLI as MCP tools (e.g. rtk → `rtk_exec(command)`), so
   binaries like rtk become chainable through the same `MiddlewareChain` seam
   instead of being stuck at the host layer or shelling out inside core.
@@ -173,17 +174,18 @@ mapping, and open decisions (D1–D10, with pros/cons) live in `docs/doubts.md` 
 **We chain MCP servers, not binaries.** A `MiddlewareChain` is a list of
 `Middleware` plugins invoked around a tool call: `beforeCall` in registration
 order, `afterCall` in reverse. Each middleware sees the output the previous one
-produced. The binary wrapper is just *one* node that turns a CLI subprocess into
+produced. The binary wrapper is just _one_ node that turns a CLI subprocess into
 an MCP tool so it can sit in that chain. Adding rtk to the chain does **not**
 inject rtk into every other tool — only the tools you explicitly route through
 the rtk middleware are affected.
 
 **Two distinct layers for rtk:**
-- *Agent Bash layer* — rtk's own PreToolUse hook (`rtk init -g`) rewrites Bash
-  calls like `git status` → `rtk git status` *before* they run. This is rtk's
+
+- _Agent Bash layer_ — rtk's own PreToolUse hook (`rtk init -g`) rewrites Bash
+  calls like `git status` → `rtk git status` _before_ they run. This is rtk's
   feature, not ours.
-- *MCP tool-output layer* — our `rtk_exec` middleware spawns `rtk gain <cmd>`
-  *after* a tool returns, compressing what the result carries back.
+- _MCP tool-output layer_ — our `rtk_exec` middleware spawns `rtk gain <cmd>`
+  _after_ a tool returns, compressing what the result carries back.
 
 These compose rather than conflict. Adaptive MCP never installs, enables, or
 disables the rtk hook; it only reuses the rtk binary if already present.
@@ -191,7 +193,7 @@ disables the rtk hook; it only reuses the rtk binary if already present.
 **Graceful coexistence when rtk is already installed:** `resolveRtkCommand()`
 looks up the user's existing `rtk` on `PATH` (read-only, never installs a second
 copy), verifies it is rtk-ai via `rtk --version` (guarding against the unrelated
-Rust *Type Kit* crate that also ships a `rtk` binary), and if missing/wrong
+Rust _Type Kit_ crate that also ships a `rtk` binary), and if missing/wrong
 reports `missing`/`wrong-package` so the wrapper degrades to a clear setup
 message instead of spawning a missing binary. Adaptive MCP is therefore **not a
 nuisance** to other MCPs: it chains via MCP and leaves the user's shell and other
@@ -222,25 +224,25 @@ now enforced by `scripts/check-docs.ts` (`pnpm docs:check`, also run by
 its ROADMAP status disagree, if a package is missing from the publishable list
 or the docs, or if a Phase 6/8 item row disappears.
 
-| # | Item | Risk | Effort | Payoff |
-| --- | --- | --- | --- | --- |
-| 6a | ✅ done — Pattern matching in `ApprovalPolicy` | Low — isolated to `approval`, precedence order unchanged | Low — matcher shipped in `gate.ts`; regression test still to add | Medium — ergonomic, immediate |
-| 6b | ✅ done — Context-cost tracked dimension | Low — additive field, no external dependency | Done — `avg_output_tokens` + a `context_cost_high` threshold insight (default 2000), fed by real token `usage` | Medium — unlocks a recommendation type |
-| 6c | ✅ done — More insight types: cost drift, latency regression, approval friction | Low — additive, same shape as existing insights | Low/Medium — one evaluator pass per insight | Medium — broadens what the YAML surfaces, no new package |
-| 6d | ✅ done — `repetition_detected` insight | Low — self-contained in `evaluation`, no schema break | Low — `detectRepetition()` wired into `evaluateWorkflow` | Medium/High — new capability, feeds `ApprovalGate` |
-| 6e | ✅ done — Conformance scenarios (graceful degradation) | Low — test-only, no production code changes | Done — component tests + a host-ignores-extension scenario (`examples/src/ignore-extension.conformance.test.ts`) | Medium — confidence/trust, not new capability |
-| 6f | ✅ done — Emit `budget` / `require_approval` in the reference impl | Medium — touches the wire schema tracked for SEP graduation | Medium — extend `ExtensionController` view + `spec` types | High — unblocks the SEP stabilization gate (see Blocked list) |
-| 6g | ✅ done — Multi-server aggregation (merge `tools-metadata` across servers) | Medium — key-collision handling across servers in `ExtensionController` | Low remaining — `aggregateViews()` merges composite keys + metric cells, with tests; the agent's single store is the cross-server aggregate | Medium/High — real multi-server hosts need this |
-| 6h | ✅ done — Client OAuth delegation flow | Medium — credential handling is security-sensitive | Low remaining — authorize/callback/refresh/token-storage implemented, now with a test suite and CSRF `state` validation; live-provider validation still pending (no HTTP transport yet) | Medium — unblocks one integration, not the core loop |
-| 6i | 🟡 partially done — Host adapter (OpenCode plugin) | Medium — depends on OpenCode's hook signatures | Low remaining — rewired to the real V1 hooks (`tool.execute.before`/`after`/`event`/`dispose`) with unit tests; has not been run against a live OpenCode host | High — proves the loop on a real, popular agent instead of only synthetic demos |
-| 6j | ✅ done — Session-scoped telemetry | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation` | Low remaining — `sessionId` was already threaded; the co-occurrence pass now ships (`Evaluator.evaluateCooccurrence`) with tests | Medium — research-oriented (AGENTS.md open question); benefits from 6i's real session boundaries |
+| #   | Item                                                                            | Risk                                                                         | Effort                                                                                                                                                                                                                            | Payoff                                                                                           |
+| --- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 6a  | ✅ done — Pattern matching in `ApprovalPolicy`                                  | Low — isolated to `approval`, precedence order unchanged                     | Low — matcher shipped in `gate.ts`; regression test still to add                                                                                                                                                                  | Medium — ergonomic, immediate                                                                    |
+| 6b  | ✅ done — Context-cost tracked dimension                                        | Low — additive field, no external dependency                                 | Done — `avg_output_tokens` + a `context_cost_high` threshold insight (default 2000), fed by real token `usage`                                                                                                                    | Medium — unlocks a recommendation type                                                           |
+| 6c  | ✅ done — More insight types: cost drift, latency regression, approval friction | Low — additive, same shape as existing insights                              | Low/Medium — one evaluator pass per insight                                                                                                                                                                                       | Medium — broadens what the YAML surfaces, no new package                                         |
+| 6d  | ✅ done — `repetition_detected` insight                                         | Low — self-contained in `evaluation`, no schema break                        | Low — `detectRepetition()` wired into `evaluateWorkflow`                                                                                                                                                                          | Medium/High — new capability, feeds `ApprovalGate`                                               |
+| 6e  | ✅ done — Conformance scenarios (graceful degradation)                          | Low — test-only, no production code changes                                  | Done — component tests + a host-ignores-extension scenario (`examples/src/ignore-extension.conformance.test.ts`)                                                                                                                  | Medium — confidence/trust, not new capability                                                    |
+| 6f  | ✅ done — Emit `budget` / `require_approval` in the reference impl              | Medium — touches the wire schema tracked for SEP graduation                  | Medium — extend `ExtensionController` view + `spec` types                                                                                                                                                                         | High — unblocks the SEP stabilization gate (see Blocked list)                                    |
+| 6g  | ✅ done — Multi-server aggregation (merge `tools-metadata` across servers)      | Medium — key-collision handling across servers in `ExtensionController`      | Low remaining — `aggregateViews()` merges composite keys + metric cells, with tests; the agent's single store is the cross-server aggregate                                                                                       | Medium/High — real multi-server hosts need this                                                  |
+| 6h  | ✅ done — Client OAuth delegation flow                                          | Medium — credential handling is security-sensitive                           | Low remaining — authorize/callback/refresh/token-storage implemented, now with a test suite and CSRF `state` validation; live-provider validation still pending (no HTTP transport yet)                                           | Medium — unblocks one integration, not the core loop                                             |
+| 6i  | 🟢 mostly done — Host adapter (OpenCode plugin)                                 | Medium — depends on OpenCode's hook signatures                               | Proven live on OpenCode v2.0.26 (V2 `setup(ctx)` + `tool.hook`, direct config load via the package's root `index.mjs`, DB rows + `tools-metadata.yaml` asserted); remaining: npm publish (blocked by #7), execution-graph linkage | High — proves the loop on a real, popular agent instead of only synthetic demos                  |
+| 6j  | ✅ done — Session-scoped telemetry                                              | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation` | Low remaining — `sessionId` was already threaded; the co-occurrence pass now ships (`Evaluator.evaluateCooccurrence`) with tests                                                                                                  | Medium — research-oriented (AGENTS.md open question); benefits from 6i's real session boundaries |
 
 ### 6a. Pattern matching in `ApprovalPolicy`
 
 **Status update (2026-09-28): implemented.** `ApprovalGate.gate()` now matches
 `denyTools` entries as glob patterns via `matchGlob()` (`packages/approval/src/gate.ts`:
 `*` = any chars, `?` = one char); `confirmRiskLevels` stays an exact list because
-it selects risk *levels*, not tool names. Precedence is unchanged. Remaining gap:
+it selects risk _levels_, not tool names. Precedence is unchanged. Remaining gap:
 the only exercise is the ad-hoc `examples/src/test-glob-deny.ts`, which isn't
 wired into any script — add real glob cases to `packages/approval/src/gate.test.ts`.
 
@@ -248,7 +250,7 @@ Original design note below.
 
 `ApprovalPolicy.denyTools` / `confirmRiskLevels` (`packages/approval/src/gate.ts`)
 match exact tool names only. OpenCode's permission config matches tool/command
-*patterns* with last-match-wins (`"git *": "allow"`, `"rm *": "deny"`), and its
+_patterns_ with last-match-wins (`"git *": "allow"`, `"rm *": "deny"`), and its
 MCP tool-disabling config uses the same glob approach per server namespace
 (`"my-mcp*": false`).
 
@@ -316,15 +318,15 @@ the insight. Original design note below.
 OpenCode's `doom_loop` guard is a static heuristic: N identical calls in a row
 → `ask`/`deny`. `@adaptivemcp/evaluation` currently only derives
 `observed_failure_rate` / `avg_duration_ms` from aggregate `ToolStats`, nothing
-from event *sequences*.
+from event _sequences_.
 
 - Add a `repetition_detected` `Insight` computed from consecutive identical
   `(toolName, serverName, input-hash)` events in the telemetry stream, not just
   aggregate counters.
 - Feeds `ApprovalGate` the same way `failureRate` does today: cross a
   threshold → `require_confirmation`.
-- Directly serves the AGENTS.md open question *"can workflows emerge from
-  telemetry?"*
+- Directly serves the AGENTS.md open question _"can workflows emerge from
+  telemetry?"_
 
 ### 6e. Conformance scenarios (graceful degradation)
 
@@ -441,13 +443,11 @@ have, and never exported a host-shaped plugin. Now: telemetry + middleware run i
 sync are debounced off the hot path. Eight unit tests exercise the hooks against a
 fake harness (`packages/opencode-plugin/src/plugin.test.ts`).
 
-Still genuinely unproven:
+Still genuinely unproven (as of 2026-09-29 — resolved 2026-10-15, see the V2
+update below):
 
-- **Never run against a live OpenCode host** — hook shapes match the reference
-  source, but no end-to-end plugin load has happened.
-- **No per-tool error attribution** — V1 has no error hook, so failures require a
-  host/event integration calling `recordToolFailure()`.
-- **No execution-graph tracking** — V1 hooks expose no parent/child linkage.
+- **No execution-graph tracking** — neither host generation's hooks expose
+  parent/child linkage.
 - Highest ceiling of any Phase 6 item — the difference between "library with good
   internal design" and something that learns from a real, popular agent. See
   README's "Not yet published" section for the same caveat surfaced to users.
@@ -467,14 +467,57 @@ accounting, output compression (`HeadroomMiddleware`), cross-client
 `report_observation`, graph-aware guardrails, and per-turn execution DAGs. This
 is the "real harness" this item asked for — with the caveat that it is our own
 host, not OpenCode; the OpenCode plugin above remains the third-party adapter and
-is still unproven live.
+was still unproven live (until the update below).
+
+**Update (2026-10-15): dual-shape V1+V2 export, proven live on OpenCode
+v2.0.26.** The default export is now `{ id, setup, server }` — V2 reads
+`id` + `setup(ctx)` (and ignores `server()`), V1 ≥ 1.18.29 reads `id` +
+`server()`, older V1 keeps the function default (`createAdaptivePlugin`). The
+earlier V1-only cut loaded under V2 but recorded **0 rows**: V2 ignores a
+wrapper-returned hooks object. V2's `setup` registers
+`ctx.tool.hook("execute.before"/"execute.after")` (the payload carries
+`{tool, sessionID, id, input}`, so no `ctx.event` subscription is needed) and
+returns a cleanup that resets the lazily-constructed instance — the store is
+built inside `setup`/`server`, never at module scope. Host options arrive
+through `readHostOptions(ctx.options)` (JSON-safe keys only: `dbPath`,
+`yamlPath`, `approvalPolicy`, `persistDebounceMs`); code (`middleware`) stays
+programmatic via `createOpenCodePlugin`.
+
+Live verification (standalone harness — two shell calls, one succeeding, one
+failing, plus an intentional `read` of a missing file):
+
+- `tools` rows + `tools-metadata.yaml` written at the configured
+  `dbPath`/`yamlPath`, per-tool stats correct (`shell` ×2, avg 31ms).
+- The error path records: `read` → `invocations: 1, failures: 1` — closing the
+  "no per-tool error attribution" gap above (V2 reports `status: "error"`; a
+  non-zero exit code is _not_ a failure, the host reports
+  `status: "completed"`).
+- No double-counting despite the host loading the plugin twice per run
+  (`registeredV2` guard).
+
+Config-shape findings (verified empirically against v2.0.26 — copy them before
+taking a config from the v1 docs):
+
+- `plugins` (current key) accepts strings and `{ package, options }` objects;
+  the deprecated `plugin` key still works with strings and `[path, options]`
+  tuples.
+- For a **directory** target the host probes only a root-level `server.*` /
+  `index.*` file — `package.json` `main`/`exports` are consulted only for npm
+  package names. Absolute **file** plugin paths are rejected outright
+  (`configured plugin path must be a directory`). The package therefore ships a
+  root `index.mjs` shim re-exporting `dist`, so
+  `plugins: [{ "package": "<path>/packages/opencode-plugin", "options": {…} }]`
+  loads directly.
+
+Remaining: npm-name loading (`plugin: ["@adaptivemcp/opencode-plugin"]`) is
+blocked on publish (repo #7); execution-graph linkage stays out of scope.
 
 ### 6j. Session-scoped telemetry
 
 OpenCode treats sessions as first-class (`session.created` / `session.updated` /
 `session.deleted`, plus `session.error`). Adaptive MCP's telemetry needs a
-session tag to answer the AGENTS.md open question *"which tools naturally
-cluster together?"* — the co-occurrence analysis itself doesn't exist yet.
+session tag to answer the AGENTS.md open question _"which tools naturally
+cluster together?"_ — the co-occurrence analysis itself doesn't exist yet.
 
 **Update (2026-07-30):** the data model is already in place —
 `ToolExecutionEvent.sessionId` and `ExecutionNode.sessionId`
@@ -560,7 +603,7 @@ replay; workflow forecasting is historical-baseline extrapolation, not a
 trained model (this codebase has no ML/statistics dependencies anywhere);
 anti-pattern detection covers two named shapes, not general subgraph
 isomorphism (NP-hard); distributed tracing generates valid W3C trace context
-as graph *data* since no live MCP transport exists in this codebase to carry
+as graph _data_ since no live MCP transport exists in this codebase to carry
 headers on; multi-server graph "federation" means a shared schema + builder,
 not an implemented cross-server aggregation/discovery protocol.
 
@@ -571,7 +614,7 @@ resource pagination and subscribe/notify end-to-end.
 ## Phase 8: Decoding Policy (intent-aware sampling, backend-agnostic)
 
 Generalizes the model-routing precedent (`@adaptivemcp/routing`'s `Router`,
-Phase 2 — pick *which model* from observed stats) to *how the model decodes*.
+Phase 2 — pick _which model_ from observed stats) to _how the model decodes_.
 Originated from a 2026-07-28 design conversation about correlating telemetry
 with LLM sampling parameters (temperature/top_p/top_k/presence_penalty/
 repetition_penalty) for a client/harness that owns both `ThinClient` and its
@@ -584,8 +627,8 @@ own completion call.
 delivered via `ThinClient`'s `samplingAdvisor`/`onSamplingRecommendation` hook
 (`packages/thin-client/src/loop.ts`) and surfaced in `tools-metadata.yaml`
 (`packages/extension/src/view.ts`). This conflates two concerns Phase 8 splits
-apart: *which behavior is wanted* (backend-agnostic) vs. *which knobs express
-that behavior on a specific backend* (backend-specific) — see 8a/8b.
+apart: _which behavior is wanted_ (backend-agnostic) vs. _which knobs express
+that behavior on a specific backend_ (backend-specific) — see 8a/8b.
 
 **Explicit non-goal:** intent (e.g. "architecture review") is a
 **caller-supplied hint**, never automatically classified from free text. This
@@ -594,14 +637,14 @@ honestly") — a text classifier for intent would be the first one. Automatic
 intent classification, if ever wanted, is a separate, explicitly-scoped
 future effort — not an implicit part of 8a.
 
-| # | Item | Level | Risk | Effort | Payoff |
-| --- | --- | --- | --- | --- | --- |
-| 8a | ✅ done — `DecodingAdvisor` replaces `SamplingAdvisor`; emits a symbolic `DecodingProfile`, not numbers | 1 | Low — same failure-rate heuristic, new output shape | Low — rename + payload change | Medium — unblocks 8b; no user-visible behavior change yet |
-| 8b | ✅ done — `DecodingResolver`: static, table-driven `(profile, ModelCapabilities) -> ResolvedDecodingSettings` | 1 | Low — pure lookup logic, no learning | Low/Medium — new `ModelCapabilities` type + per-backend tables | High — the actual backend-agnostic payoff |
-| 8c | ✅ done — `DecodingRecommendation` wrapper (`profile`, `resolved`, `resolverVersion`, `confidence`, `reasons[]`); deprecate (don't remove) `SamplingRecommendationPayload` | 1 | Medium — touches a payload shape external middleware may already depend on | Low/Medium — additive type + `@deprecated` tag | High — confidence/reasons let a host decide when to trust an override |
-| 8f | ✅ done — Structured decision trace (intent → base profile → telemetry adjustment → resolved params → resolver version) | 1 | Low — presentational, no new data beyond 8a-8c | Low/Medium — richer `reasons[]`, or a trace object if that proves insufficient | Medium/High — the explainability feature that differentiates this from "middleware silently changed your temperature" |
-| 8d | Extend `ToolExecutionEvent` with optional `decoding: {profile, resolverVersion, resolved}` | 2 | Medium — schema addition (additive/optional, no migration) | Low — mirrors existing optional fields (`model`, `metadata`) | Medium — enables 8e; makes past decisions reproducible even after resolver tables change |
-| 8e | Decoding analyzer: cross-execution report grouped by (tool, profile, model) — retry rate, latency, suggested profile | 3 | Medium/High — first real analysis pass on brand-new data; needs 8d to have accumulated real telemetry first | Medium — mirrors `GraphAnalyzer`'s pure, computed-on-read shape | High — the "evidence, not auto-tuning" story |
+| #   | Item                                                                                                                                                                       | Level | Risk                                                                                                        | Effort                                                                         | Payoff                                                                                                                |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| 8a  | ✅ done — `DecodingAdvisor` replaces `SamplingAdvisor`; emits a symbolic `DecodingProfile`, not numbers                                                                    | 1     | Low — same failure-rate heuristic, new output shape                                                         | Low — rename + payload change                                                  | Medium — unblocks 8b; no user-visible behavior change yet                                                             |
+| 8b  | ✅ done — `DecodingResolver`: static, table-driven `(profile, ModelCapabilities) -> ResolvedDecodingSettings`                                                              | 1     | Low — pure lookup logic, no learning                                                                        | Low/Medium — new `ModelCapabilities` type + per-backend tables                 | High — the actual backend-agnostic payoff                                                                             |
+| 8c  | ✅ done — `DecodingRecommendation` wrapper (`profile`, `resolved`, `resolverVersion`, `confidence`, `reasons[]`); deprecate (don't remove) `SamplingRecommendationPayload` | 1     | Medium — touches a payload shape external middleware may already depend on                                  | Low/Medium — additive type + `@deprecated` tag                                 | High — confidence/reasons let a host decide when to trust an override                                                 |
+| 8f  | ✅ done — Structured decision trace (intent → base profile → telemetry adjustment → resolved params → resolver version)                                                    | 1     | Low — presentational, no new data beyond 8a-8c                                                              | Low/Medium — richer `reasons[]`, or a trace object if that proves insufficient | Medium/High — the explainability feature that differentiates this from "middleware silently changed your temperature" |
+| 8d  | Extend `ToolExecutionEvent` with optional `decoding: {profile, resolverVersion, resolved}`                                                                                 | 2     | Medium — schema addition (additive/optional, no migration)                                                  | Low — mirrors existing optional fields (`model`, `metadata`)                   | Medium — enables 8e; makes past decisions reproducible even after resolver tables change                              |
+| 8e  | Decoding analyzer: cross-execution report grouped by (tool, profile, model) — retry rate, latency, suggested profile                                                       | 3     | Medium/High — first real analysis pass on brand-new data; needs 8d to have accumulated real telemetry first | Medium — mirrors `GraphAnalyzer`'s pure, computed-on-read shape                | High — the "evidence, not auto-tuning" story                                                                          |
 
 Ordered by dependency, not strictly by risk/effort: 8a → 8b → 8c → 8f can ship
 together (Level 1, no telemetry schema change); 8d (Level 2) unlocks 8e
@@ -619,12 +662,12 @@ on 2026-07-28 (the v0 interim) was broken. 8d/8e remain unbuilt.
   (`SamplingAdvisor` → `DecodingAdvisor`). Keeps the same `minInvocations`-gated
   shape as `Router`/`SamplingAdvisor` today.
 - `advise()`/`adviseAll()` compute a `DecodingProfile` (`{ id: "deterministic" |
-  "balanced" | "creative" }`) instead of raw `{temperature, topP}` — nothing
+"balanced" | "creative" }`) instead of raw `{temperature, topP}` — nothing
   backend-specific belongs in this package.
 - **Composition, not replacement:** telemetry adjusts a profile, it doesn't
   originate one. An explicit caller-supplied `intentProfile` (e.g. "architecture
   review" → `balanced`) is the baseline; observed per-tool failure rate can pull
-  the *effective* profile toward `deterministic` regardless of that baseline.
+  the _effective_ profile toward `deterministic` regardless of that baseline.
   This is the piece the v0 heuristic already had (failure rate → stricter
   sampling) and must not get lost when intent is introduced.
 - New `RecommendationType` member `"decoding"` (keep `"sampling"` too, for one
@@ -638,9 +681,9 @@ on 2026-07-28 (the v0 interim) was broken. 8d/8e remain unbuilt.
 
 - New `ModelCapabilities` type — which sampler knobs a given backend/model
   actually exposes: `{ supports: { temperature?, topP?, topK?, minP?,
-  presencePenalty?, repetitionPenalty?, frequencyPenalty? } }`.
+presencePenalty?, repetitionPenalty?, frequencyPenalty? } }`.
 - New `DecodingResolver.resolve(profile: DecodingProfile, capabilities:
-  ModelCapabilities): ResolvedDecodingSettings`. Deliberately dumb: fallback
+ModelCapabilities): ResolvedDecodingSettings`. Deliberately dumb: fallback
   rules, backend quirks, default values, table-driven — no learning, no
   telemetry access at all.
 - Ship at least two backend tables at once (e.g. an OpenAI-style backend with
@@ -659,11 +702,11 @@ on 2026-07-28 (the v0 interim) was broken. 8d/8e remain unbuilt.
 ### 8c. `DecodingRecommendation` + deprecating `SamplingRecommendationPayload` — ✅ done
 
 - `DecodingRecommendation { profile: DecodingProfile; resolved:
-  ResolvedDecodingSettings; resolverVersion: string; confidence: number;
-  reasons: string[] }` — what `DecodingAdvisor` + `DecodingResolver` jointly
+ResolvedDecodingSettings; resolverVersion: string; confidence: number;
+reasons: string[] }` — what `DecodingAdvisor` + `DecodingResolver` jointly
   produce, replacing the bare payload as the unit a host consumes. **Note:**
   `resolved` uses the new `ResolvedDecodingSettings` type (`packages/spec/src/
-  types.ts`), not `SamplingRecommendationPayload` as originally sketched in
+types.ts`), not `SamplingRecommendationPayload` as originally sketched in
   doubts.md §13 — the deprecated type is missing `minP`/`frequencyPenalty`,
   which the resolver needs to actually emit for non-OpenAI-style backends.
   `ResolvedDecodingSettings` is a strict superset with the same field names,
@@ -689,10 +732,10 @@ on 2026-07-28 (the v0 interim) was broken. 8d/8e remain unbuilt.
 ### 8d. Extend telemetry with `decoding` — ✅ done
 
 - Add optional `decoding?: { profile: DecodingProfile["id"]; resolverVersion:
-  string; resolved: ResolvedDecodingSettings }` to `ToolExecutionEvent`
+string; resolved: ResolvedDecodingSettings }` to `ToolExecutionEvent`
   (`packages/spec/src/types.ts`) — additive, no migration, same pattern as the
   existing optional `model`/`metadata` fields.
-- Recording the *resolved* values (not just the profile id) is what keeps old
+- Recording the _resolved_ values (not just the profile id) is what keeps old
   events reproducible after the resolver's tables change — the core reason
   this is a distinct field rather than reusing `metadata`.
 - `resolverVersion` needs an actual version string to bump — simplest is a
@@ -729,7 +772,7 @@ the analyzer that consumes it.
 
 - Extend the "why" from a single `rationale: string` (today's shape, e.g.
   `SamplingAdvisor`'s `"high observed failure rate (0.20) — lower
-  temperature/top_p..."`) into a trace with distinct stages: intent's base
+temperature/top_p..."`) into a trace with distinct stages: intent's base
   profile, the telemetry adjustment (if any) and its reason, the resolver's
   backend + resolved output, and the resolver version.
 - Start with 8c's `reasons: string[]` (already human-readable) and only add a
@@ -757,4 +800,3 @@ abstraction now would buy naming symmetry with no behavior change, before even
 8a-8f exist for decoding alone. Revisit only if/when a second real profile type
 (e.g. `ContextProfile`) is actually being built, so the shared shape is
 inferred from two real cases instead of guessed upfront.
-
