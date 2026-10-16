@@ -1,7 +1,12 @@
 import type { Store, Recommendation, ToolResultClassifier } from "@adaptivemcp/spec";
 import type { ApprovalGate, ApprovalDecision } from "@adaptivemcp/approval";
 import type { RetryPolicy } from "@adaptivemcp/orchestration";
-import { MiddlewareChain, type Middleware, type PlannedCall, type CallResult } from "@adaptivemcp/middleware";
+import {
+  MiddlewareChain,
+  type Middleware,
+  type PlannedCall,
+  type CallResult,
+} from "@adaptivemcp/middleware";
 import type { SamplingAdvisor } from "@adaptivemcp/routing";
 import { GraphTrackingMiddleware } from "./graph-middleware.js";
 
@@ -34,6 +39,10 @@ export interface ThinClientOptions {
   /**
    * Called when the gate returns `require_confirmation`. Return true to proceed.
    * In a real client this would prompt a human; here it is injectable.
+   *
+   * **When omitted, a confirmation is denied** (fail closed) — a host opts in to
+   * auto-approval explicitly. A permissive default here silently ran the exact
+   * tools a policy asked a human about.
    */
   requestApproval?: (toolName: string) => boolean | Promise<boolean>;
   /** Default retry policy if none is suggested for a tool. */
@@ -71,7 +80,10 @@ export interface ThinClientOptions {
    * produces no recommendation, or when the call was denied/blocked before
    * execution.
    */
-  onSamplingRecommendation?: (rec: Recommendation, ctx: { toolName: string; serverName?: string }) => void | Promise<void>;
+  onSamplingRecommendation?: (
+    rec: Recommendation,
+    ctx: { toolName: string; serverName?: string },
+  ) => void | Promise<void>;
 }
 
 /**
@@ -106,7 +118,7 @@ export class ThinClient {
   constructor(options: ThinClientOptions) {
     this.memory = options.memory;
     this.gate = options.gate;
-    this.requestApproval = options.requestApproval ?? (() => true);
+    this.requestApproval = options.requestApproval ?? (() => false);
     this.defaultRetry = options.defaultRetry ?? {
       maxAttempts: 1,
       baseDelayMs: 0,
@@ -141,7 +153,12 @@ export class ThinClient {
     input: unknown,
     record: (ok: boolean, error?: string, output?: unknown) => void,
     serverName?: string,
-  ): Promise<{ decision: ApprovalDecision; executed: boolean; output?: unknown; attempts?: number }> {
+  ): Promise<{
+    decision: ApprovalDecision;
+    executed: boolean;
+    output?: unknown;
+    attempts?: number;
+  }> {
     const decision = this.gate.gate(toolName, serverName);
     if (decision === "deny") {
       return { decision, executed: false };
@@ -149,7 +166,7 @@ export class ThinClient {
     if (decision === "require_confirmation") {
       const approved = await this.requestApproval(toolName);
       if (!approved) {
-        record(false, "approval denied by user");
+        record(false, "approval denied");
         return { decision, executed: false };
       }
     }
@@ -160,7 +177,12 @@ export class ThinClient {
     // one graph-tracking context fork, so concurrent calls (e.g. via
     // `Promise.all`) each get an isolated parent/child stack instead of
     // corrupting a shared one. See GraphTrackingMiddleware.runInContext.
-    const runOnce = async (): Promise<{ decision: ApprovalDecision; executed: boolean; output?: unknown; attempts?: number }> => {
+    const runOnce = async (): Promise<{
+      decision: ApprovalDecision;
+      executed: boolean;
+      output?: unknown;
+      attempts?: number;
+    }> => {
       await this.chain.runBefore(call);
 
       if (this.graphTracking) {
@@ -201,7 +223,11 @@ export class ThinClient {
     const rec = this.memory
       .getTool(toolName, serverName)
       ?.recommendations.find(
-        (r) => r.type === "workflow" && r.payload != null && typeof r.payload === "object" && "retry" in r.payload,
+        (r) =>
+          r.type === "workflow" &&
+          r.payload != null &&
+          typeof r.payload === "object" &&
+          "retry" in r.payload,
       );
     if (rec && rec.payload && typeof rec.payload === "object" && "retry" in rec.payload) {
       return (rec.payload as { retry: RetryPolicy }).retry;
@@ -215,7 +241,10 @@ export class ThinClient {
     policy: RetryPolicy,
   ): Promise<{ ok: boolean; error?: string; output?: unknown; attempts: number }> {
     const attempts = policy.enabled ? Math.max(1, policy.maxAttempts) : 1;
-    let last: { ok: boolean; error?: string; output?: unknown } = { ok: false, error: "no attempt" };
+    let last: { ok: boolean; error?: string; output?: unknown } = {
+      ok: false,
+      error: "no attempt",
+    };
     let tried = 0;
     for (let attempt = 0; attempt < attempts; attempt++) {
       tried = attempt + 1;
