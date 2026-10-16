@@ -55,7 +55,8 @@ export const MIGRATIONS: Migration[] = [
   {
     version: 2,
     name: "add_nodes_timestamp_index",
-    up: (db) => db.exec(`CREATE INDEX IF NOT EXISTS idx_nodes_timestamp ON execution_nodes(timestamp)`),
+    up: (db) =>
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_nodes_timestamp ON execution_nodes(timestamp)`),
   },
   {
     version: 3,
@@ -93,6 +94,29 @@ CREATE INDEX IF NOT EXISTS idx_metric_cells_tool ON metric_cells(tool_name, serv
     name: "add_metric_cells_attempts",
     up: (db) => db.exec(`ALTER TABLE metric_cells ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`),
   },
+  {
+    version: 5,
+    name: "add_suspensions",
+    up: (db) =>
+      db.exec(`
+CREATE TABLE IF NOT EXISTS suspensions (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  question TEXT NOT NULL,
+  response_schema TEXT,
+  resume_state TEXT,
+  status TEXT NOT NULL,
+  answer TEXT,
+  reason TEXT,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_suspensions_session ON suspensions(session_id, status);
+CREATE INDEX IF NOT EXISTS idx_suspensions_status ON suspensions(status);
+`),
+  },
 ];
 
 /** Applies every migration in `migrations` that hasn't already been recorded, in version order. */
@@ -105,10 +129,14 @@ export function runMigrations(db: DatabaseSync, migrations: Migration[] = MIGRAT
     )`,
   );
   const applied = new Set(
-    (db.prepare(`SELECT version FROM schema_migrations`).all() as { version: number }[]).map((r) => r.version),
+    (db.prepare(`SELECT version FROM schema_migrations`).all() as { version: number }[]).map(
+      (r) => r.version,
+    ),
   );
   const ordered = [...migrations].sort((a, b) => a.version - b.version);
-  const insert = db.prepare(`INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`);
+  const insert = db.prepare(
+    `INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`,
+  );
   for (const migration of ordered) {
     if (applied.has(migration.version)) continue;
     migration.up(db);

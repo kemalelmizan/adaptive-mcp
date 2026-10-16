@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { MemoryStore } from "./store.js";
-import type { ToolExecutionEvent, ExecutionNode } from "@adaptivemcp/spec";
+import { MIGRATIONS } from "./migrations.js";
+import type { ToolExecutionEvent, ExecutionNode, Suspension } from "@adaptivemcp/spec";
 
 function makeNode(overrides: Partial<ExecutionNode> = {}): ExecutionNode {
   return {
@@ -87,7 +88,10 @@ describe("@adaptivemcp/memory", () => {
   });
 
   it("caps distinct model cells per tool (folds extra models into 'other')", () => {
-    const capped = new MemoryStore({ path: ":memory:", metricCardinality: { maxModelsPerTool: 2 } });
+    const capped = new MemoryStore({
+      path: ":memory:",
+      metricCardinality: { maxModelsPerTool: 2 },
+    });
     const at = new Date().toISOString();
     for (const model of ["m1", "m2", "m3", "m4"]) {
       capped.recordExecution({
@@ -261,7 +265,11 @@ describe("@adaptivemcp/memory", () => {
         version: number;
       }[];
       raw.close();
-      expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4]);
+      // Compare against the declared history rather than a hard-coded list: the
+      // invariant is "every migration applied exactly once, in order", and it
+      // should not need editing every time one is added.
+      const declared = [...MIGRATIONS].sort((x, y) => x.version - y.version).map((m) => m.version);
+      expect(rows.map((r) => r.version)).toEqual(declared);
     });
 
     it("creates the timestamp index used for pruning", () => {
@@ -271,7 +279,9 @@ describe("@adaptivemcp/memory", () => {
 
       const raw = new DatabaseSync(path);
       const indexes = raw
-        .prepare(`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'execution_nodes'`)
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'execution_nodes'`,
+        )
         .all() as { name: string }[];
       raw.close();
       expect(indexes.map((i) => i.name)).toContain("idx_nodes_timestamp");
@@ -301,12 +311,101 @@ describe("@adaptivemcp/memory", () => {
     it("opportunistically prunes when retention is configured and the check interval has elapsed", () => {
       const retentionStore = new MemoryStore({ path: ":memory:", retention: { maxAgeMs: 1_000 } });
       const now = Date.now();
-      retentionStore.recordExecutionNode(makeNode({ id: "old", timestamp: new Date(now - 5_000).toISOString() }));
-      retentionStore.recordExecutionNode(makeNode({ id: "new", timestamp: new Date(now).toISOString() }));
+      retentionStore.recordExecutionNode(
+        makeNode({ id: "old", timestamp: new Date(now - 5_000).toISOString() }),
+      );
+      retentionStore.recordExecutionNode(
+        makeNode({ id: "new", timestamp: new Date(now).toISOString() }),
+      );
 
       expect(retentionStore.getExecutionNode("old")).toBeUndefined();
       expect(retentionStore.getExecutionNode("new")).toBeDefined();
       retentionStore.close();
+    });
+  });
+
+  describe("suspensions (pause/resume)", () => {
+    function makeSuspension(overrides: Partial<Suspension> = {}): Suspension {
+      return {
+        id: "sus1",
+        sessionId: "s1",
+        kind: "confirmation",
+        question: "Deploy to production?",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        ...overrides,
+      };
+    }
+
+    it("round-trips a suspension, including the opaque host state", () => {
+      store.recordSuspension(
+        makeSuspension({
+          responseSchema: { type: "boolean" },
+          resumeState: { step: 3, plan: "deploy" },
+        }),
+      );
+      const read = store.getSuspension("sus1");
+      expect(read?.question).toBe("Deploy to production?");
+      expect(read?.kind).toBe("confirmation");
+      expect(read?.responseSchema).toEqual({ type: "boolean" });
+      expect(read?.resumeState).toEqual({ step: 3, plan: "deploy" });
+      expect(read?.status).toBe("pending");
+      expect(read?.answer).toBeUndefined();
+    });
+
+    it("filters by status and returns newest first", () => {
+      store.recordSuspension(makeSuspension({ id: "a", createdAt: "2026-01-01T00:00:00.000Z" }));
+      store.recordSuspension(makeSuspension({ id: "b", createdAt: "2026-01-02T00:00:00.000Z" }));
+      store.resolveSuspension("a", { status: "answered", answer: true });
+      expect(store.getSuspensions("s1").map((s) => s.id)).toEqual(["b", "a"]);
+      expect(store.getSuspensions("s1", "pending").map((s) => s.id)).toEqual(["b"]);
+      expect(store.getSuspensions("s1", "answered").map((s) => s.id)).toEqual(["a"]);
+    });
+
+    it("answers a suspension and stamps resolvedAt", () => {
+      store.recordSuspension(makeSuspension());
+      const resolved = store.resolveSuspension("sus1", {
+        status: "answered",
+        answer: { ok: true },
+      });
+      expect(resolved?.status).toBe("answered");
+      expect(resolved?.answer).toEqual({ ok: true });
+      expect(resolved?.resolvedAt).toBeTruthy();
+    });
+
+    it("records a refusal or a timeout with a reason, and no answer", () => {
+      store.recordSuspension(makeSuspension({ id: "c" }));
+      const cancelled = store.resolveSuspension("c", {
+        status: "cancelled",
+        reason: "user declined",
+      });
+      expect(cancelled?.status).toBe("cancelled");
+      expect(cancelled?.reason).toBe("user declined");
+      expect(cancelled?.answer).toBeUndefined();
+    });
+
+    it("is idempotent: a replayed resume cannot overwrite the first answer", () => {
+      store.recordSuspension(makeSuspension());
+      store.resolveSuspension("sus1", { status: "answered", answer: "first" });
+      const again = store.resolveSuspension("sus1", { status: "answered", answer: "second" });
+      expect(again?.answer).toBe("first");
+    });
+
+    it("returns undefined for an unknown id", () => {
+      expect(store.resolveSuspension("nope", { status: "cancelled" })).toBeUndefined();
+      expect(store.getSuspension("nope")).toBeUndefined();
+    });
+
+    it("survives a close/reopen — it is durable state, not a cache", () => {
+      const dir = mkdtempSync(join(tmpdir(), "suspensions-"));
+      const path = join(dir, "s.db");
+      const first = new MemoryStore({ path });
+      first.recordSuspension(makeSuspension({ id: "p", sessionId: "sess" }));
+      first.close();
+      const second = new MemoryStore({ path });
+      expect(second.getSuspensions("sess").map((s) => s.id)).toEqual(["p"]);
+      second.close();
+      rmSync(dir, { recursive: true, force: true });
     });
   });
 });
