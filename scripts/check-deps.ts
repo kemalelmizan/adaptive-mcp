@@ -16,9 +16,9 @@
  * Run: `pnpm deps:check` (also part of `pnpm maintenance:check` and CI).
  */
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { REPO_ROOT, listPackageDirs, readPackageJson } from "./lib/workspace.ts";
+import { REPO_ROOT, readPackageJson } from "./lib/workspace.ts";
 
 /** `from "x"`, `import("x")`, `require("x")` — enough for this codebase. */
 const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*)"([^\s"]+)"/g;
@@ -113,11 +113,60 @@ function checkPackage(dir: string): Problem[] {
   return problems;
 }
 
+/**
+ * Every workspace package directory, expanded from `pnpm-workspace.yaml`'s
+ * `packages:` globs — so a new workspace (`examples/`, `apps/*`) is covered
+ * without editing this script. `packages/*` alone missed `examples`, which is
+ * where the first undeclared test dependency hid.
+ */
+function workspaceDirs(): string[] {
+  const yaml = readFileSync(join(REPO_ROOT, "pnpm-workspace.yaml"), "utf8");
+  const dirs: string[] = [];
+  const globs: string[] = [];
+  let inPackages = false;
+  for (const line of yaml.split("\n")) {
+    if (/^packages:/.test(line)) {
+      inPackages = true;
+      continue;
+    }
+    if (!inPackages) continue;
+    const entry = line.match(/^\s+-\s+"([^"]+)"/);
+    if (!entry) {
+      if (/^\S/.test(line)) break; // left the `packages:` block
+      continue;
+    }
+    globs.push(entry[1] ?? "");
+  }
+  for (const glob of globs) {
+    if (glob.endsWith("/*")) {
+      const parent = glob.slice(0, -2);
+      let entries;
+      try {
+        entries = readdirSync(join(REPO_ROOT, parent), { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (
+          entry.isDirectory() &&
+          existsSync(join(REPO_ROOT, parent, entry.name, "package.json"))
+        ) {
+          dirs.push(`${parent}/${entry.name}`);
+        }
+      }
+    } else if (existsSync(join(REPO_ROOT, glob, "package.json"))) {
+      dirs.push(glob);
+    }
+  }
+  return dirs.sort();
+}
+
 function main(): void {
-  const problems = listPackageDirs().flatMap(checkPackage);
+  const dirs = workspaceDirs();
+  const problems = dirs.flatMap(checkPackage);
   if (problems.length === 0) {
     console.log(
-      `deps check passed: ${listPackageDirs().length} packages — no undeclared imports, no unused declarations.`,
+      `deps check passed: ${dirs.length} workspace packages — no undeclared imports, no unused declarations.`,
     );
     return;
   }
