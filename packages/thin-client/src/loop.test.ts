@@ -73,6 +73,27 @@ describe("@adaptivemcp/thin-client", () => {
     expect(called).toBe(false);
   });
 
+  it("denies a confirmation when no approver is configured (fail closed)", async () => {
+    // A permissive default here used to run the exact tools a policy asked a
+    // human about — in a non-interactive host with nobody to ask.
+    store.ensureTool("deploy_service", "srv");
+    store.setAnnotation({ toolName: "deploy_service", risk: "high" });
+    client = new ThinClient({ memory: store, gate });
+    let called = false;
+    const res = await client.run(
+      "deploy_service",
+      async () => {
+        called = true;
+        return { ok: true };
+      },
+      {},
+      () => {},
+    );
+    expect(res.decision).toBe("require_confirmation");
+    expect(res.executed).toBe(false);
+    expect(called).toBe(false);
+  });
+
   it("respects a rejected confirmation", async () => {
     store.ensureTool("deploy_service", "srv");
     store.setAnnotation({ toolName: "deploy_service", risk: "high" });
@@ -95,7 +116,9 @@ describe("@adaptivemcp/thin-client", () => {
   it("retries using the store-derived policy", async () => {
     record(store, "deploy_service", 0.3, 40);
     new Orchestrator({ memory: store }).planTool("deploy_service");
-    client = new ThinClient({ memory: store, gate });
+    // The learned failure rate makes the gate ask for confirmation; this test is
+    // about the retry policy, so it approves explicitly (the default is deny).
+    client = new ThinClient({ memory: store, gate, requestApproval: () => true });
     let attempts = 0;
     const res = await client.run(
       "deploy_service",
@@ -142,11 +165,19 @@ describe("@adaptivemcp/thin-client", () => {
     };
     client = new ThinClient({ memory: store, gate, middleware: [auth] });
 
-    const contexts: Array<{ toolName: string; serverName?: string; credentials?: Record<string, unknown> }> = [];
+    const contexts: Array<{
+      toolName: string;
+      serverName?: string;
+      credentials?: Record<string, unknown>;
+    }> = [];
     const res = await client.run(
       "search_customer",
       async (_input, context) => {
-        contexts.push({ toolName: context?.toolName, serverName: context?.serverName, credentials: context?.credentials });
+        contexts.push({
+          toolName: context?.toolName,
+          serverName: context?.serverName,
+          credentials: context?.credentials,
+        });
         return { ok: true, output: context?.credentials?.authorization };
       },
       {},
@@ -162,7 +193,12 @@ describe("@adaptivemcp/thin-client", () => {
   });
 
   describe("sampling recommendations", () => {
-    function recordTelemetry(toolName: string, serverName: string | undefined, ok: boolean, error?: string): void {
+    function recordTelemetry(
+      toolName: string,
+      serverName: string | undefined,
+      ok: boolean,
+      error?: string,
+    ): void {
       store.recordExecution({
         id: `${toolName}-${Math.random()}`,
         toolName,
@@ -177,7 +213,11 @@ describe("@adaptivemcp/thin-client", () => {
     it("does not invoke onSamplingRecommendation when samplingAdvisor is unset", async () => {
       record(store, "search_customer", 0, 40);
       const seen: Recommendation[] = [];
-      client = new ThinClient({ memory: store, gate, onSamplingRecommendation: (rec) => void seen.push(rec) });
+      client = new ThinClient({
+        memory: store,
+        gate,
+        onSamplingRecommendation: (rec) => void seen.push(rec),
+      });
       await client.run(
         "search_customer",
         async () => ({ ok: true, output: "result" }),
