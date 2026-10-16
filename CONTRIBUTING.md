@@ -39,14 +39,12 @@ pnpm --filter @adaptivemcp/examples scenario
 - `packages/telemetry`, `packages/evaluation`, `packages/extension` form the
   observe, evaluate, and view steps.
 - `packages/routing`, `packages/orchestration`, `packages/approval`,
-  `packages/thin-client` are client-side executors, and `packages/middleware`
-  and `packages/mcp-binary` are the pluggable middleware chain and its
-  CLI-binary wrapper. All of these are published to npm.
-- `packages/graph-analysis` (execution-graph intelligence) is fully
-  implemented and tested but not yet published — see README's "Not yet
-  published" section. `packages/opencode-plugin` is an experimental,
-  unpublished OpenCode host adapter, unit-tested against the documented V1 hook
-  shape but not yet run against a live host.
+  `packages/thin-client` are client-side executors, `packages/middleware` and
+  `packages/mcp-binary` are the pluggable middleware chain and its CLI-binary
+  wrapper, and `packages/graph-analysis` is execution-graph intelligence. All of
+  these are published to npm.
+- `packages/opencode-plugin` is an OpenCode host adapter, proven live on OpenCode
+  v2.0.26; it is in the publishable set.
 - `docs/ROADMAP.md` tracks phased status. `docs/RELEASE.md` is the release
   runbook. `docs/sep-2133-tools-metadata.md` is the extension draft.
 
