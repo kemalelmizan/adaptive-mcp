@@ -24,9 +24,8 @@
  *      first), skipping already-published versions (resume-safe).
  *
  * Publishable set (defined once in scripts/lib/workspace.ts →
- * PUBLISHABLE_PACKAGES): spec · memory · telemetry · evaluation · extension ·
- * runtime · routing · orchestration · approval · thin-client · middleware ·
- * mcp-binary. `examples` and `apps` stay private.
+ * PUBLISHABLE_PACKAGES): every @adaptivemcp/* package listed there. `examples`
+ * and `apps` stay private.
  *
  * Usage:
  *   pnpm build:publishable            # SEPARATE step: build dist/ (no OTP)

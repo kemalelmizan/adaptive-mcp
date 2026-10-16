@@ -16,9 +16,8 @@ the publish path:
 | Record | `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, push `--follow-tags`. |
 
 Publishable set (defined once in `scripts/lib/workspace.ts` →
-`PUBLISHABLE_PACKAGES`): `spec · memory · telemetry · evaluation · extension ·
-runtime · routing · orchestration · approval · thin-client · middleware ·
-mcp-binary`. `examples` and `apps` stay private.
+`PUBLISHABLE_PACKAGES`): every `@adaptivemcp/*` package listed there. `examples`
+and `apps` stay private.
 
 > **Changed-version publishing.** `release.ts` publishes every publishable
 > package whose `package.json` version is not yet on the registry — which is
