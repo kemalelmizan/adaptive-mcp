@@ -21,7 +21,7 @@
     "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
-    "@adaptivemcp/spec": "workspace:*"
+    "@adaptivemcp/spec": "workspace:^"
   },
   "devDependencies": {
     "@adaptivemcp/memory": "workspace:*",

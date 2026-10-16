@@ -105,10 +105,10 @@ importers:
   packages/approval:
     dependencies:
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       typescript:
@@ -121,31 +121,31 @@ importers:
   packages/evaluation:
     dependencies:
       '@adaptivemcp/approval':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../approval
       '@adaptivemcp/extension':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../extension
       '@adaptivemcp/graph-analysis':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../graph-analysis
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/orchestration':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../orchestration
       '@adaptivemcp/routing':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../routing
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
       '@adaptivemcp/telemetry':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../telemetry
       '@adaptivemcp/thin-client':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../thin-client
     devDependencies:
       typescript:
@@ -158,10 +158,10 @@ importers:
   packages/extension:
     dependencies:
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
       js-yaml:
         specifier: ^4.3.2
@@ -183,10 +183,10 @@ importers:
   packages/graph-analysis:
     dependencies:
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       typescript:
@@ -199,7 +199,7 @@ importers:
   packages/mcp-binary:
     dependencies:
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.1
@@ -218,7 +218,7 @@ importers:
   packages/memory:
     dependencies:
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       '@types/node':
@@ -234,7 +234,7 @@ importers:
   packages/middleware:
     dependencies:
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       '@adaptivemcp/memory':
@@ -250,37 +250,37 @@ importers:
   packages/opencode-plugin:
     dependencies:
       '@adaptivemcp/approval':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../approval
       '@adaptivemcp/evaluation':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../evaluation
       '@adaptivemcp/extension':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../extension
       '@adaptivemcp/graph-analysis':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../graph-analysis
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/middleware':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../middleware
       '@adaptivemcp/orchestration':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../orchestration
       '@adaptivemcp/routing':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../routing
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
       '@adaptivemcp/telemetry':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../telemetry
       '@adaptivemcp/thin-client':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../thin-client
     devDependencies:
       typescript:
@@ -293,10 +293,10 @@ importers:
   packages/orchestration:
     dependencies:
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       typescript:
@@ -309,13 +309,13 @@ importers:
   packages/routing:
     dependencies:
       '@adaptivemcp/graph-analysis':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../graph-analysis
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       typescript:
@@ -328,31 +328,31 @@ importers:
   packages/runtime:
     dependencies:
       '@adaptivemcp/approval':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../approval
       '@adaptivemcp/evaluation':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../evaluation
       '@adaptivemcp/extension':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../extension
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/middleware':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../middleware
       '@adaptivemcp/orchestration':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../orchestration
       '@adaptivemcp/routing':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../routing
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
       '@adaptivemcp/telemetry':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../telemetry
     devDependencies:
       '@types/node':
@@ -377,10 +377,10 @@ importers:
   packages/telemetry:
     dependencies:
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       typescript:
@@ -393,22 +393,22 @@ importers:
   packages/thin-client:
     dependencies:
       '@adaptivemcp/approval':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../approval
       '@adaptivemcp/memory':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../memory
       '@adaptivemcp/middleware':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../middleware
       '@adaptivemcp/orchestration':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../orchestration
       '@adaptivemcp/routing':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../routing
       '@adaptivemcp/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       typescript:

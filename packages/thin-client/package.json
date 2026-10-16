@@ -21,12 +21,12 @@
     "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
-    "@adaptivemcp/spec": "workspace:*",
-    "@adaptivemcp/memory": "workspace:*",
-    "@adaptivemcp/approval": "workspace:*",
-    "@adaptivemcp/orchestration": "workspace:*",
-    "@adaptivemcp/middleware": "workspace:*",
-    "@adaptivemcp/routing": "workspace:*"
+    "@adaptivemcp/spec": "workspace:^",
+    "@adaptivemcp/memory": "workspace:^",
+    "@adaptivemcp/approval": "workspace:^",
+    "@adaptivemcp/orchestration": "workspace:^",
+    "@adaptivemcp/middleware": "workspace:^",
+    "@adaptivemcp/routing": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

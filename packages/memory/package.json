@@ -22,7 +22,7 @@
     "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
-    "@adaptivemcp/spec": "workspace:*"
+    "@adaptivemcp/spec": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
