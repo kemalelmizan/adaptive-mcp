@@ -11,6 +11,11 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "index.mjs",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",

@@ -8,13 +8,13 @@ to `pnpm` / `npm` / `git` and never couple to a specific CI provider.
 
 ## Scripts
 
-| Script | Purpose |
-| --- | --- |
-| `scripts/build.ts` | Build the publishable `@adaptivemcp/*` packages. `--check` fails if the build leaves the git tree dirty. |
-| `scripts/release.ts` | Version (Changesets) + build + publish the publishable packages to npm. `--dry-run` skips publish; `--no-version` publishes as-is; `--tag` also commits the bump + pushes the tag; `--otp <CODE>` (or `NPM_OTP`) supplies the npm 2FA one-time password. |
-| `scripts/deprecate.ts` | Deprecate published versions that still carry `workspace:` dependency specs (uninstallable by consumers). Computes the set from the registry; one `--otp <CODE>` reuses across calls; `--dry-run` lists the plan. |
-| `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, and push `--follow-tags`. `--dry-run` previews; `--no-push` keeps it local. |
-| `scripts/maintenance.ts` | Repo hygiene: `status`, `stale-dist`, `check` (build+lint+test), `outdated`. |
+| Script                       | Purpose                                                                                                                                                                                                                                                  |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/build.ts`           | Build the publishable `@adaptivemcp/*` packages. `--check` fails if the build leaves the git tree dirty.                                                                                                                                                 |
+| `scripts/release.ts`         | Version (Changesets) + build + publish the publishable packages to npm. `--dry-run` skips publish; `--no-version` publishes as-is; `--tag` also commits the bump + pushes the tag; `--otp <CODE>` (or `NPM_OTP`) supplies the npm 2FA one-time password. |
+| `scripts/deprecate.ts`       | Deprecate published versions that still carry `workspace:` dependency specs (uninstallable by consumers). Computes the set from the registry; one `--otp <CODE>` reuses across calls; `--dry-run` lists the plan.                                        |
+| `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, and push `--follow-tags`. `--dry-run` previews; `--no-push` keeps it local.                                                                                                    |
+| `scripts/maintenance.ts`     | Repo hygiene: `status`, `stale-dist`, `check` (build+lint+test), `outdated`.                                                                                                                                                                             |
 
 ## Publishable packages
 
@@ -23,6 +23,7 @@ organization (`https://www.npmjs.com/org/adaptivemcp`). The set is defined once
 in `PUBLISHABLE_PACKAGES` (`scripts/lib/workspace.ts`):
 
 - `@adaptivemcp/spec`
+- `@adaptivemcp/graph-analysis`
 - `@adaptivemcp/memory`
 - `@adaptivemcp/telemetry`
 - `@adaptivemcp/evaluation`
@@ -32,6 +33,9 @@ in `PUBLISHABLE_PACKAGES` (`scripts/lib/workspace.ts`):
 - `@adaptivemcp/orchestration`
 - `@adaptivemcp/approval`
 - `@adaptivemcp/thin-client`
+- `@adaptivemcp/middleware`
+- `@adaptivemcp/mcp-binary`
+- `@adaptivemcp/opencode-plugin`
 
 `examples` and `apps` stay private. To promote a package, add it to
 `PUBLISHABLE_PACKAGES` and ensure its `package.json` has no `"private": true`

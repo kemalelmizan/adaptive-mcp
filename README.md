@@ -380,37 +380,23 @@ is generated from each `package.json` by `pnpm docs`; the version column is a
 live npm badge.
 
 <!-- packages:published:start -->
-
-| Package                       | Version                                                                                                                       | Description                                                                                                                                                 |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@adaptivemcp/spec`           | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec)                     | Extension identifiers, event schemas, and shared types for Adaptive MCP.                                                                                    |
-| `@adaptivemcp/graph-analysis` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/graph-analysis)](https://www.npmjs.com/package/@adaptivemcp/graph-analysis) | Graph analysis for Adaptive MCP execution DAGs: critical paths, bottlenecks, failure cascades, anti-patterns, and workflow forecasting.                     |
-| `@adaptivemcp/memory`         | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory)                 | Persistent operational knowledge for Adaptive MCP, backed by SQLite (node:sqlite).                                                                          |
-| `@adaptivemcp/telemetry`      | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry)           | Tool execution events and observability for Adaptive MCP.                                                                                                   |
-| `@adaptivemcp/evaluation`     | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation)         | Outcome scoring and feedback loops for Adaptive MCP.                                                                                                        |
-| `@adaptivemcp/extension`      | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension)           | Adaptive MCP extension: derives the YAML tools-metadata view from the SQLite store and serves it to MCP clients.                                            |
-| `@adaptivemcp/runtime`        | [![npm](https://img.shields.io/npm/v/@adaptivemcp/runtime)](https://www.npmjs.com/package/@adaptivemcp/runtime)               | Batteries-included Adaptive MCP runtime: wires telemetry, evaluation, routing, orchestration, approval, and the extension into one transport-agnostic loop. |
-| `@adaptivemcp/routing`        | [![npm](https://img.shields.io/npm/v/@adaptivemcp/routing)](https://www.npmjs.com/package/@adaptivemcp/routing)               | Model selection and cost optimization for Adaptive MCP.                                                                                                     |
-| `@adaptivemcp/orchestration`  | [![npm](https://img.shields.io/npm/v/@adaptivemcp/orchestration)](https://www.npmjs.com/package/@adaptivemcp/orchestration)   | Composition and execution strategies for Adaptive MCP.                                                                                                      |
-| `@adaptivemcp/approval`       | [![npm](https://img.shields.io/npm/v/@adaptivemcp/approval)](https://www.npmjs.com/package/@adaptivemcp/approval)             | Intent, plan, and tool approval boundaries for Adaptive MCP.                                                                                                |
-| `@adaptivemcp/thin-client`    | [![npm](https://img.shields.io/npm/v/@adaptivemcp/thin-client)](https://www.npmjs.com/package/@adaptivemcp/thin-client)       | Minimal client-side execution loop for Adaptive MCP.                                                                                                        |
-| `@adaptivemcp/middleware`     | [![npm](https://img.shields.io/npm/v/@adaptivemcp/middleware)](https://www.npmjs.com/package/@adaptivemcp/middleware)         | Pluggable middleware chain for Adaptive MCP (Transform I/O, gate, inject-auth, observe).                                                                    |
-| `@adaptivemcp/mcp-binary`     | [![npm](https://img.shields.io/npm/v/@adaptivemcp/mcp-binary)](https://www.npmjs.com/package/@adaptivemcp/mcp-binary)         | Generic CLI-binary -> MCP-server stdio wrapper (the only sanctioned shell-out layer).                                                                       |
-
+| Package | Version | Description |
+| --- | --- | --- |
+| `@adaptivemcp/spec` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/spec)](https://www.npmjs.com/package/@adaptivemcp/spec) | Extension identifiers, event schemas, and shared types for Adaptive MCP. |
+| `@adaptivemcp/graph-analysis` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/graph-analysis)](https://www.npmjs.com/package/@adaptivemcp/graph-analysis) | Graph analysis for Adaptive MCP execution DAGs: critical paths, bottlenecks, failure cascades, anti-patterns, and workflow forecasting. |
+| `@adaptivemcp/memory` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/memory)](https://www.npmjs.com/package/@adaptivemcp/memory) | Persistent operational knowledge for Adaptive MCP, backed by SQLite (node:sqlite). |
+| `@adaptivemcp/telemetry` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/telemetry)](https://www.npmjs.com/package/@adaptivemcp/telemetry) | Tool execution events and observability for Adaptive MCP. |
+| `@adaptivemcp/evaluation` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/evaluation)](https://www.npmjs.com/package/@adaptivemcp/evaluation) | Outcome scoring and feedback loops for Adaptive MCP. |
+| `@adaptivemcp/extension` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/extension)](https://www.npmjs.com/package/@adaptivemcp/extension) | Adaptive MCP extension: derives the YAML tools-metadata view from the SQLite store and serves it to MCP clients. |
+| `@adaptivemcp/runtime` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/runtime)](https://www.npmjs.com/package/@adaptivemcp/runtime) | Batteries-included Adaptive MCP runtime: wires telemetry, evaluation, routing, orchestration, approval, and the extension into one transport-agnostic loop. |
+| `@adaptivemcp/routing` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/routing)](https://www.npmjs.com/package/@adaptivemcp/routing) | Model selection and cost optimization for Adaptive MCP. |
+| `@adaptivemcp/orchestration` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/orchestration)](https://www.npmjs.com/package/@adaptivemcp/orchestration) | Composition and execution strategies for Adaptive MCP. |
+| `@adaptivemcp/approval` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/approval)](https://www.npmjs.com/package/@adaptivemcp/approval) | Intent, plan, and tool approval boundaries for Adaptive MCP. |
+| `@adaptivemcp/thin-client` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/thin-client)](https://www.npmjs.com/package/@adaptivemcp/thin-client) | Minimal client-side execution loop for Adaptive MCP. |
+| `@adaptivemcp/middleware` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/middleware)](https://www.npmjs.com/package/@adaptivemcp/middleware) | Pluggable middleware chain for Adaptive MCP (Transform I/O, gate, inject-auth, observe). |
+| `@adaptivemcp/mcp-binary` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/mcp-binary)](https://www.npmjs.com/package/@adaptivemcp/mcp-binary) | Generic CLI-binary -> MCP-server stdio wrapper (the only sanctioned shell-out layer). |
+| `@adaptivemcp/opencode-plugin` | [![npm](https://img.shields.io/npm/v/@adaptivemcp/opencode-plugin)](https://www.npmjs.com/package/@adaptivemcp/opencode-plugin) | OpenCode plugin for Adaptive MCP - maps OpenCode hooks to Adaptive MCP telemetry and middleware |
 <!-- packages:published:end -->
-
-### Not yet published
-
-- **`@adaptivemcp/opencode-plugin`** — an adapter mapping
-  [OpenCode](https://opencode.ai)'s plugin hooks onto Adaptive MCP telemetry and
-  middleware. The default export is dual-shape: **V2** (OpenCode ≥ 2.0) reads
-  `id` + `setup(ctx)` and registers `tool.hook("execute.before"/"execute.after")`
-  (including the error status), **V1** reads `id` + `server()` (older V1 uses
-  `createAdaptivePlugin`). Unit-tested against both hook shapes and **verified
-  live on OpenCode v2.0.26** — the plugin loads from the package directory and
-  writes `adaptive.db` rows + `tools-metadata.yaml` with per-tool stats. See the
-  package README for the V2 config recipe (a local directory target needs the
-  shipped root `index.mjs`; npm-name loading arrives with the publish).
 
 ## How to build, test, and run
 

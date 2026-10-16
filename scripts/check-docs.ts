@@ -41,10 +41,7 @@ const PUBLISHABLE = PUBLISHABLE_PACKAGES as readonly string[];
  * Mirrors README's "Not yet published" section; adding a package here requires a
  * matching README note.
  */
-const UNPUBLISHED_PACKAGES: Record<string, string> = {
-  "@adaptivemcp/opencode-plugin":
-    "OpenCode host adapter (V1+V2, live-verified on v2.0.26); unpublished until the release token is renewed",
-};
+const UNPUBLISHED_PACKAGES: Record<string, string> = {};
 
 /** Minimum ROADMAP status for a documented capability: ✅ "done" or 🟡 "partial". */
 type MinStatus = "done" | "partial";
