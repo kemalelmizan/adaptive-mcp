@@ -22,8 +22,8 @@
     "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
-    "@adaptivemcp/spec": "workspace:*",
-    "@adaptivemcp/memory": "workspace:*",
+    "@adaptivemcp/spec": "workspace:^",
+    "@adaptivemcp/memory": "workspace:^",
     "js-yaml": "^4.3.2"
   },
   "devDependencies": {

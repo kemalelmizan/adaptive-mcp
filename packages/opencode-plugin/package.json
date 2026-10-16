@@ -22,17 +22,17 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@adaptivemcp/spec": "workspace:*",
-    "@adaptivemcp/memory": "workspace:*",
-    "@adaptivemcp/telemetry": "workspace:*",
-    "@adaptivemcp/evaluation": "workspace:*",
-    "@adaptivemcp/extension": "workspace:*",
-    "@adaptivemcp/routing": "workspace:*",
-    "@adaptivemcp/orchestration": "workspace:*",
-    "@adaptivemcp/approval": "workspace:*",
-    "@adaptivemcp/graph-analysis": "workspace:*",
-    "@adaptivemcp/middleware": "workspace:*",
-    "@adaptivemcp/thin-client": "workspace:*"
+    "@adaptivemcp/spec": "workspace:^",
+    "@adaptivemcp/memory": "workspace:^",
+    "@adaptivemcp/telemetry": "workspace:^",
+    "@adaptivemcp/evaluation": "workspace:^",
+    "@adaptivemcp/extension": "workspace:^",
+    "@adaptivemcp/routing": "workspace:^",
+    "@adaptivemcp/orchestration": "workspace:^",
+    "@adaptivemcp/approval": "workspace:^",
+    "@adaptivemcp/graph-analysis": "workspace:^",
+    "@adaptivemcp/middleware": "workspace:^",
+    "@adaptivemcp/thin-client": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

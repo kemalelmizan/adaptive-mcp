@@ -23,8 +23,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@adaptivemcp/memory": "workspace:*",
-    "@adaptivemcp/spec": "workspace:*"
+    "@adaptivemcp/memory": "workspace:^",
+    "@adaptivemcp/spec": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
