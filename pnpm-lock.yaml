@@ -104,13 +104,13 @@ importers:
 
   packages/approval:
     dependencies:
-      '@adaptivemcp/memory':
-        specifier: workspace:^
-        version: link:../memory
       '@adaptivemcp/spec':
         specifier: workspace:^
         version: link:../spec
     devDependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:^
+        version: link:../memory
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -120,33 +120,15 @@ importers:
 
   packages/evaluation:
     dependencies:
-      '@adaptivemcp/approval':
-        specifier: workspace:^
-        version: link:../approval
-      '@adaptivemcp/extension':
-        specifier: workspace:^
-        version: link:../extension
       '@adaptivemcp/graph-analysis':
         specifier: workspace:^
         version: link:../graph-analysis
       '@adaptivemcp/memory':
         specifier: workspace:^
         version: link:../memory
-      '@adaptivemcp/orchestration':
-        specifier: workspace:^
-        version: link:../orchestration
-      '@adaptivemcp/routing':
-        specifier: workspace:^
-        version: link:../routing
       '@adaptivemcp/spec':
         specifier: workspace:^
         version: link:../spec
-      '@adaptivemcp/telemetry':
-        specifier: workspace:^
-        version: link:../telemetry
-      '@adaptivemcp/thin-client':
-        specifier: workspace:^
-        version: link:../thin-client
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -157,9 +139,6 @@ importers:
 
   packages/extension:
     dependencies:
-      '@adaptivemcp/memory':
-        specifier: workspace:^
-        version: link:../memory
       '@adaptivemcp/spec':
         specifier: workspace:^
         version: link:../spec
@@ -167,6 +146,9 @@ importers:
         specifier: ^4.3.2
         version: 4.3.2
     devDependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:^
+        version: link:../memory
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -198,9 +180,6 @@ importers:
 
   packages/mcp-binary:
     dependencies:
-      '@adaptivemcp/spec':
-        specifier: workspace:^
-        version: link:../spec
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.1
         version: 1.30.1(supports-color@7.2.0)(zod@4.4.3)
@@ -258,9 +237,6 @@ importers:
       '@adaptivemcp/extension':
         specifier: workspace:^
         version: link:../extension
-      '@adaptivemcp/graph-analysis':
-        specifier: workspace:^
-        version: link:../graph-analysis
       '@adaptivemcp/memory':
         specifier: workspace:^
         version: link:../memory
@@ -273,15 +249,9 @@ importers:
       '@adaptivemcp/routing':
         specifier: workspace:^
         version: link:../routing
-      '@adaptivemcp/spec':
-        specifier: workspace:^
-        version: link:../spec
       '@adaptivemcp/telemetry':
         specifier: workspace:^
         version: link:../telemetry
-      '@adaptivemcp/thin-client':
-        specifier: workspace:^
-        version: link:../thin-client
     devDependencies:
       typescript:
         specifier: ^5.5.0
@@ -292,13 +262,13 @@ importers:
 
   packages/orchestration:
     dependencies:
-      '@adaptivemcp/memory':
-        specifier: workspace:^
-        version: link:../memory
       '@adaptivemcp/spec':
         specifier: workspace:^
         version: link:../spec
     devDependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:^
+        version: link:../memory
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -311,13 +281,13 @@ importers:
       '@adaptivemcp/graph-analysis':
         specifier: workspace:^
         version: link:../graph-analysis
-      '@adaptivemcp/memory':
-        specifier: workspace:^
-        version: link:../memory
       '@adaptivemcp/spec':
         specifier: workspace:^
         version: link:../spec
     devDependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:^
+        version: link:../memory
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -395,9 +365,6 @@ importers:
       '@adaptivemcp/approval':
         specifier: workspace:^
         version: link:../approval
-      '@adaptivemcp/memory':
-        specifier: workspace:^
-        version: link:../memory
       '@adaptivemcp/middleware':
         specifier: workspace:^
         version: link:../middleware
@@ -411,6 +378,9 @@ importers:
         specifier: workspace:^
         version: link:../spec
     devDependencies:
+      '@adaptivemcp/memory':
+        specifier: workspace:^
+        version: link:../memory
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

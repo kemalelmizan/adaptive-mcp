@@ -21,11 +21,11 @@
     "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
-    "@adaptivemcp/spec": "workspace:^",
-    "@adaptivemcp/memory": "workspace:^",
-    "@adaptivemcp/graph-analysis": "workspace:^"
+    "@adaptivemcp/graph-analysis": "workspace:^",
+    "@adaptivemcp/spec": "workspace:^"
   },
   "devDependencies": {
+    "@adaptivemcp/memory": "workspace:^",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }
