@@ -130,6 +130,24 @@ importers:
         specifier: workspace:^
         version: link:../spec
     devDependencies:
+      '@adaptivemcp/approval':
+        specifier: workspace:^
+        version: link:../approval
+      '@adaptivemcp/extension':
+        specifier: workspace:^
+        version: link:../extension
+      '@adaptivemcp/orchestration':
+        specifier: workspace:^
+        version: link:../orchestration
+      '@adaptivemcp/routing':
+        specifier: workspace:^
+        version: link:../routing
+      '@adaptivemcp/telemetry':
+        specifier: workspace:^
+        version: link:../telemetry
+      '@adaptivemcp/thin-client':
+        specifier: workspace:^
+        version: link:../thin-client
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
