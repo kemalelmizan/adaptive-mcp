@@ -12,6 +12,10 @@ import type {
   ToolRecord,
   ToolStats,
   ExecutionNode,
+  Suspension,
+  SuspensionKind,
+  SuspensionResolution,
+  SuspensionStatus,
 } from "@adaptivemcp/spec";
 import { runMigrations } from "./migrations.js";
 
@@ -198,7 +202,13 @@ export class MemoryStore implements Store {
       .prepare(
         `UPDATE tools SET server_name = ?, annotation = ?, updated_at = ? WHERE tool_name = ? AND server_name = ?`,
       )
-      .run(serverName, JSON.stringify(updated.annotation), updated.updatedAt, record.toolName, UNKNOWN_SERVER);
+      .run(
+        serverName,
+        JSON.stringify(updated.annotation),
+        updated.updatedAt,
+        record.toolName,
+        UNKNOWN_SERVER,
+      );
     return updated;
   }
 
@@ -269,7 +279,11 @@ export class MemoryStore implements Store {
    * orchestration, and approval packages so each adaptation pass recomputes its
    * own recommendations instead of appending duplicates on every observation.
    */
-  clearRecommendations(toolName: string, type: RecommendationType, serverName?: string): ToolRecord {
+  clearRecommendations(
+    toolName: string,
+    type: RecommendationType,
+    serverName?: string,
+  ): ToolRecord {
     const record = this.ensureTool(toolName, serverName);
     const updated: ToolRecord = {
       ...record,
@@ -348,7 +362,9 @@ export class MemoryStore implements Store {
   private capModel(toolName: string, serverName: string, model: string): string {
     if (model === "other") return model;
     const rows = this.db
-      .prepare(`SELECT dims FROM metric_cells WHERE tool_name = ? AND server_name = ? AND window = 'all'`)
+      .prepare(
+        `SELECT dims FROM metric_cells WHERE tool_name = ? AND server_name = ? AND window = 'all'`,
+      )
       .all(toolName, serverName) as unknown as { dims: string }[];
     const models = new Set<string>();
     for (const row of rows) {
@@ -489,9 +505,8 @@ export class MemoryStore implements Store {
 
   /** Get an execution node by ID. */
   getExecutionNode(id: string): ExecutionNode | undefined {
-    const row = this.db
-      .prepare(`SELECT * FROM execution_nodes WHERE id = ?`)
-      .get(id) as unknown as ExecutionNodeRow | undefined;
+    const row = this.db.prepare(`SELECT * FROM execution_nodes WHERE id = ?`).get(id) as unknown as
+      ExecutionNodeRow | undefined;
     return row ? deserializeExecutionNode(row) : undefined;
   }
 
@@ -550,7 +565,9 @@ export class MemoryStore implements Store {
   /** Get root nodes (no parent) for a session. */
   getRootNodes(sessionId: string): ExecutionNode[] {
     const rows = this.db
-      .prepare(`SELECT * FROM execution_nodes WHERE session_id = ? AND parent_id IS NULL ORDER BY timestamp`)
+      .prepare(
+        `SELECT * FROM execution_nodes WHERE session_id = ? AND parent_id IS NULL ORDER BY timestamp`,
+      )
       .all(sessionId) as unknown as ExecutionNodeRow[];
     return rows.map(deserializeExecutionNode);
   }
@@ -558,7 +575,9 @@ export class MemoryStore implements Store {
   /** Get leaf nodes (no children) for a session. */
   getLeafNodes(sessionId: string): ExecutionNode[] {
     const rows = this.db
-      .prepare(`SELECT * FROM execution_nodes WHERE session_id = ? AND children_ids = '[]' ORDER BY timestamp`)
+      .prepare(
+        `SELECT * FROM execution_nodes WHERE session_id = ? AND children_ids = '[]' ORDER BY timestamp`,
+      )
       .all(sessionId) as unknown as ExecutionNodeRow[];
     return rows.map(deserializeExecutionNode);
   }
@@ -569,6 +588,104 @@ export class MemoryStore implements Store {
       .prepare(`UPDATE execution_nodes SET children_ids = ? WHERE id = ?`)
       .run(JSON.stringify(childrenIds), parentId);
   }
+  // Suspensions — the durable half of pause/resume (ADR-004). The host owns the
+  // policy; this only stores and resolves what the host decided to pause on.
+
+  /** Persist a suspension (a run paused awaiting a human). */
+  recordSuspension(suspension: Suspension): Suspension {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO suspensions (id, session_id, kind, question, response_schema, resume_state, status, answer, reason, created_at, resolved_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        suspension.id,
+        suspension.sessionId,
+        suspension.kind,
+        suspension.question,
+        suspension.responseSchema ? JSON.stringify(suspension.responseSchema) : null,
+        suspension.resumeState ? JSON.stringify(suspension.resumeState) : null,
+        suspension.status,
+        suspension.answer === undefined ? null : JSON.stringify(suspension.answer),
+        suspension.reason ?? null,
+        suspension.createdAt,
+        suspension.resolvedAt ?? null,
+      );
+    return suspension;
+  }
+
+  /** Read one suspension by id. */
+  getSuspension(id: string): Suspension | undefined {
+    const row = this.db.prepare(`SELECT * FROM suspensions WHERE id = ?`).get(id) as unknown as
+      SuspensionRow | undefined;
+    return row ? deserializeSuspension(row) : undefined;
+  }
+
+  /** Every suspension for a session, newest first; filtered by status when given. */
+  getSuspensions(sessionId: string, status?: SuspensionStatus): Suspension[] {
+    const rows = (status
+      ? this.db
+          .prepare(
+            `SELECT * FROM suspensions WHERE session_id = ? AND status = ? ORDER BY created_at DESC`,
+          )
+          .all(sessionId, status)
+      : this.db
+          .prepare(`SELECT * FROM suspensions WHERE session_id = ? ORDER BY created_at DESC`)
+          .all(sessionId)) as unknown as SuspensionRow[];
+    return rows.map(deserializeSuspension);
+  }
+
+  /**
+   * Resolve a suspension — with an answer, or with the reason it was not
+   * answered. Idempotent: an already-resolved record is returned unchanged, so a
+   * replayed resume cannot overwrite the first answer.
+   */
+  resolveSuspension(id: string, resolution: SuspensionResolution): Suspension | undefined {
+    const existing = this.getSuspension(id);
+    if (!existing) return undefined;
+    if (existing.status !== "pending") return existing;
+    return this.recordSuspension({
+      ...existing,
+      status: resolution.status,
+      answer: resolution.status === "answered" ? resolution.answer : existing.answer,
+      reason: resolution.reason ?? existing.reason,
+      resolvedAt: new Date().toISOString(),
+    });
+  }
+}
+
+interface SuspensionRow {
+  id: string;
+  session_id: string;
+  kind: string;
+  question: string;
+  response_schema: string | null;
+  resume_state: string | null;
+  status: string;
+  answer: string | null;
+  reason: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+function deserializeSuspension(row: SuspensionRow): Suspension {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    kind: row.kind as SuspensionKind,
+    question: row.question,
+    responseSchema: row.response_schema
+      ? (JSON.parse(row.response_schema) as Record<string, unknown>)
+      : undefined,
+    resumeState: row.resume_state
+      ? (JSON.parse(row.resume_state) as Record<string, unknown>)
+      : undefined,
+    status: row.status as SuspensionStatus,
+    answer: row.answer === null ? undefined : (JSON.parse(row.answer) as unknown),
+    reason: row.reason ?? undefined,
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at ?? undefined,
+  };
 }
 
 function deserializeExecutionNode(row: ExecutionNodeRow): ExecutionNode {
@@ -614,12 +731,12 @@ function foldEvent(stats: ToolStats, event: ToolExecutionEvent): ToolStats {
       ? (prevAvg * (invocations - 1) + durations[0]!) / invocations
       : stats.avgDurationMs;
   const totalCost = stats.totalCost + (event.cost?.amount ?? 0);
-  
+
   // Track average output tokens for context cost
   const outputTokens = eventTokens(event).outputTokens ?? 0;
   const prevAvgTokens = stats.avgOutputTokens ?? 0;
   const avgOutputTokens = (prevAvgTokens * (invocations - 1) + outputTokens) / invocations;
-  
+
   return {
     invocations,
     failures,
@@ -702,7 +819,10 @@ const EXEMPLAR_LIMIT = 5;
 
 /** Token usage, preferring the explicit `usage` field and falling back to `cost`. */
 function eventTokens(event: ToolExecutionEvent): { inputTokens?: number; outputTokens?: number } {
-  if (event.usage && (event.usage.inputTokens !== undefined || event.usage.outputTokens !== undefined)) {
+  if (
+    event.usage &&
+    (event.usage.inputTokens !== undefined || event.usage.outputTokens !== undefined)
+  ) {
     return event.usage;
   }
   return { inputTokens: event.cost?.inputTokens, outputTokens: event.cost?.outputTokens };
@@ -787,7 +907,8 @@ function foldMetricCell(
 
   const histogram = [...base.durationHistogram];
   while (histogram.length < DURATION_BUCKET_COUNT) histogram.push(0);
-  if (duration !== undefined) histogram[durationBucketIndex(duration)] = (histogram[durationBucketIndex(duration)] ?? 0) + 1;
+  if (duration !== undefined)
+    histogram[durationBucketIndex(duration)] = (histogram[durationBucketIndex(duration)] ?? 0) + 1;
 
   return {
     ...base,

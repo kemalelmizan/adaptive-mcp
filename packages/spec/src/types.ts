@@ -6,6 +6,8 @@
  * sockets, or HTTP requests — those remain implementation details of MCP servers.
  */
 
+import type { Suspension, SuspensionResolution, SuspensionStatus } from "./suspension.js";
+
 export type ToolStatus = "started" | "completed" | "failed" | "cancelled";
 
 export interface CostInfo {
@@ -129,7 +131,8 @@ export interface Annotation {
   metadata?: Record<string, unknown>;
 }
 
-export type RecommendationType = "model" | "approval" | "workflow" | "routing" | "sampling" | "decoding";
+export type RecommendationType =
+  "model" | "approval" | "workflow" | "routing" | "sampling" | "decoding";
 
 /**
  * A suggested adaptation derived from accumulated knowledge.
@@ -513,4 +516,21 @@ export interface Store {
   getLeafNodes?(sessionId: string): ExecutionNode[];
   /** Update children IDs of a parent node. */
   updateChildrenIds?(parentId: string, childrenIds: string[]): void;
+
+  // Suspension methods (optional — implemented by a backend that can persist a
+  // run which stopped for a human; the durable half of ADR-004's pause/resume).
+  /** Persist a suspension (a run paused awaiting a human). */
+  recordSuspension?(suspension: Suspension): Suspension;
+  /** Read one suspension by id. */
+  getSuspension?(id: string): Suspension | undefined;
+  /** Every suspension for a session, newest first; filtered by status when given. */
+  getSuspensions?(sessionId: string, status?: SuspensionStatus): Suspension[];
+  /**
+   * Resolve a suspension — with an answer, or with a reason it was not answered.
+   * Returns the updated record, or `undefined` for an unknown id. Resolving is
+   * **idempotent**: an already-resolved suspension is returned unchanged rather
+   * than overwritten, because a resume may be replayed (`langgraph` re-executes
+   * the node it resumed into, so the same answer can arrive twice).
+   */
+  resolveSuspension?(id: string, resolution: SuspensionResolution): Suspension | undefined;
 }
