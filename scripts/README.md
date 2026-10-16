@@ -61,7 +61,7 @@ node scripts/version-release.ts --no-push # commit + tag locally, no push
 2. builds `PUBLISHABLE_PACKAGES` (`pnpm -r --filter … run build`);
 3. applies pending Changesets (`pnpm changeset version`);
 4. rebuilds after the version bump;
-5. `npm publish --access public --ignore-scripts` each package in dependency
+5. `pnpm publish --access public --ignore-scripts --no-git-checks` each package in dependency
    order (`spec` → `memory` → `telemetry` → `evaluation` → `extension`).
 
 It never commits the version bump or pushes tags by default. That is left to
