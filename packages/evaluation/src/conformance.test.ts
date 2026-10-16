@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import type { Store } from "@adaptivemcp/spec";
 import { MemoryStore } from "@adaptivemcp/memory";
 import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/telemetry";
-import { Evaluator } from "@adaptivemcp/evaluation";
+import { Evaluator } from "./index.js";
 import { ExtensionController } from "@adaptivemcp/extension";
 import { Router } from "@adaptivemcp/routing";
 import { Orchestrator } from "@adaptivemcp/orchestration";

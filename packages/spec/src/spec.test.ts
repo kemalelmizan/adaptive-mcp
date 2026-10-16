@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createToolEvent, isExtensionIdentifier, packageIdentifier, TOOLS_METADATA_EXTENSION } from "@adaptivemcp/spec";
+import { createToolEvent, isExtensionIdentifier, packageIdentifier, TOOLS_METADATA_EXTENSION } from "./index.js";
 
 describe("@adaptivemcp/spec", () => {
   it("creates a tool event with defaults", () => {
