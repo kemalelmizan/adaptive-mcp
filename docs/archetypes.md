@@ -72,25 +72,27 @@ have to settle.
 
 ## Framework gaps, and whether they are even ours
 
-For each missing component, the honest question is **library or host?** Neutral
-criteria that seem to fall out of the existing design:
+**Decided in [ADR-004](adr/004-archetype-component-ownership.md)** (2026-10-17).
+The question for each missing component was **library or host?**, and the answer
+adds **no new packages**: shapes go in `spec`, persistence in `memory`, the step
+model extends `orchestration`, and the rest stays with the host.
+
+| Gap                           | Decision                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------ |
+| Pause/resume                  | shape in `spec`, storage in `memory`, policy in the host                                   |
+| Delegation                    | **host** (sessions, derived permissions, background jobs)                                  |
+| Shared task list              | `Task` shape in `spec`, coordinator in the host                                            |
+| Step/pipeline model           | **extends `orchestration`** (no new package, no second name)                               |
+| Typed memory steps + planning | shape in `spec`/`memory`; the plan pass is the host's                                      |
+| Skills                        | not a protocol concept — host loader; a corpus may later be a `dev.adaptivemcp/*` resource |
+
+The criteria that produced those calls, for reference:
 
 | Signal                                                               | Suggests                                             |
 | -------------------------------------------------------------------- | ---------------------------------------------------- |
 | Host-agnostic, protocol/primitive-shaped, and useful to any MCP host | **library** (like `approval`, `memory`, `telemetry`) |
 | Needs the host's session lifecycle, UI, or process model             | **host** (like the MCP client, the model seam)       |
 | Observational analytics over what happened                           | **library** (like `evaluation`, `graph-analysis`)    |
-
-Applied:
-
-| Gap                             | Library or host? (open question) | Why it is ambiguous                                                                                                                       |
-| ------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Pause/resume over durable state | **library-leaning**              | the _primitive_ (persist a suspension, resume it) is host-agnostic and resembles `memory`; _its scheduling_ is the host's                 |
-| Delegation (spawn a sub-agent)  | **host-leaning**                 | needs sessions, permissions, background jobs — all host lifecycle                                                                         |
-| Shared task list + modes        | **library-leaning**              | a data model + a coordinator, independent of any host; `agno` ships it in the platform, not the agent                                     |
-| Pipeline / step model           | **library-leaning**              | `orchestration` is already the tool-call version of this; a step model generalises it                                                     |
-| Skills (disclosure + loading)   | **ambiguous**                    | the _loader_ is host; a _skill resource_ could be a server-published primitive (which would make it an extension concern, not a new noun) |
-| Typed memory steps / planning   | **library-leaning**              | it is a shape for `memory` + a pass in `evaluation`                                                                                       |
 
 ## What we already have that is relevant (and under-used)
 
