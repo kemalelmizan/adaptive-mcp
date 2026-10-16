@@ -63,16 +63,17 @@ node scripts/version-release.ts --no-push # commit + tag locally, no push
 `release.ts` is the single entry point for distribution. It:
 
 1. refuses to run on a dirty working tree;
-2. builds `PUBLISHABLE_PACKAGES` (`pnpm -r --filter … run build`);
-3. applies pending Changesets (`pnpm changeset version`);
-4. rebuilds after the version bump;
-5. `pnpm publish --access public --ignore-scripts --no-git-checks` each package in dependency
-   order (`spec` → `memory` → `telemetry` → `evaluation` → `extension`).
+2. applies pending Changesets (`pnpm changeset version`) — skipped with
+   `--no-version` / `--continue` / `--packages`;
+3. `pnpm publish --access public --ignore-scripts --no-git-checks` every
+   publishable package whose version is not yet on the registry, in dependency
+   order (`spec` → `memory` → `telemetry` → …).
 
-It never commits the version bump or pushes tags by default. That is left to
-`scripts/version-release.ts` (or a Changesets release CI workflow). Pass
-`--tag` to `release.ts` to do both in one flow. See `docs/ROADMAP.md` for the full
-step-by-step publish walkthrough.
+It does **not** build: run `pnpm build:publishable` first (a separate, slow step
+that needs no OTP) so `dist/` already exists. It never commits the version bump or
+pushes tags by default. That is left to `scripts/version-release.ts` (or a
+Changesets release CI workflow). Pass `--tag` to `release.ts` to do both in one
+flow. See `docs/ROADMAP.md` for the full step-by-step publish walkthrough.
 
 > Requires `NPM_TOKEN` (org publish rights) in the environment. If the npm
 > account has **2FA for publishing**, pass `--otp <CODE>` (or `NPM_OTP`). The
