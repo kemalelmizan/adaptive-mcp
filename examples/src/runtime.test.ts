@@ -62,13 +62,15 @@ describe("AdaptiveRuntime integration", () => {
     // The approval gate reflects the high-risk annotation and writes its own
     // recommendation into the store.
     expect(rt.gate("deploy_service")).toBe("require_confirmation");
-    expect(rt.memory.getTool("deploy_service")?.recommendations.some((r) => r.type === "approval")).toBe(true);
+    expect(
+      rt.memory.getTool("deploy_service")?.recommendations.some((r) => r.type === "approval"),
+    ).toBe(true);
 
     // The YAML view is a faithful projection of the store.
     const view = toToolMetadataView(record!);
     expect(view.name).toBe("deploy_service");
     expect(view.annotation.risk).toBe("high");
-    expect(view.insights.observed_failure_rate.value).toBeCloseTo(0.3, 1);
+    expect(view.insights.observed_failure_rate?.value).toBeCloseTo(0.3, 1);
     expect(view.recommendations.length).toBe(record!.recommendations.length);
   });
 

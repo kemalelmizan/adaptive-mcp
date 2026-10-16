@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { Store } from "@adaptivemcp/spec";
+import type { Store, ToolExecutionEvent } from "@adaptivemcp/spec";
 import { MemoryStore } from "@adaptivemcp/memory";
 import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/telemetry";
 import { Evaluator } from "./index.js";
@@ -12,7 +12,7 @@ import { ThinClient, GraphTrackingMiddleware } from "@adaptivemcp/thin-client";
 
 /**
  * Conformance scenarios for graceful degradation.
- * 
+ *
  * These tests verify that the system degrades gracefully when:
  * - Graph tracking is disabled
  * - Memory store is unavailable
@@ -61,8 +61,8 @@ describe("Conformance: Graceful Degradation", () => {
 
       const view = extension.view();
       expect(view.tools.length).toBe(1);
-      expect(view.tools[0].name).toBe("deploy_service");
-      expect(view.tools[0].stats.invocations).toBe(20);
+      expect(view.tools[0]?.name).toBe("deploy_service");
+      expect(view.tools[0]?.stats.invocations).toBe(20);
     });
 
     it("should not crash when graph analyzer methods are called without graph data", () => {
@@ -89,18 +89,30 @@ describe("Conformance: Graceful Degradation", () => {
   describe("Memory store unavailable", () => {
     it("should handle closed memory store gracefully", () => {
       memory.close();
-      
+
       // These may throw on closed DB - that's acceptable behavior
       // The important thing is they don't crash the process
       expect(() => {
-        try { memory.getTool("test"); } catch { /* expected */ }
+        try {
+          memory.getTool("test");
+        } catch {
+          /* expected */
+        }
       }).not.toThrow();
       expect(() => {
-        try { memory.allTools(); } catch { /* expected */ }
+        try {
+          memory.allTools();
+        } catch {
+          /* expected */
+        }
       }).not.toThrow();
       // ensureTool may throw on closed DB, that's acceptable
       expect(() => {
-        try { memory.ensureTool("test"); } catch { /* expected */ }
+        try {
+          memory.ensureTool("test");
+        } catch {
+          /* expected */
+        }
       }).not.toThrow();
     });
   });
@@ -116,7 +128,7 @@ describe("Conformance: Graceful Degradation", () => {
       };
 
       expect(() => telemetry.record(event)).not.toThrow();
-      
+
       const record = memory.getTool("test_tool");
       expect(record).toBeDefined();
       expect(record?.stats.invocations).toBe(1);
@@ -128,10 +140,12 @@ describe("Conformance: Graceful Degradation", () => {
         toolName: "test_tool",
         timestamp: new Date().toISOString(),
         status: "completed" as const,
+        // A JSON-decoded payload can carry null where the type says undefined;
+        // the recorder must tolerate it rather than throwing.
         cost: null,
       };
 
-      expect(() => telemetry.record(event)).not.toThrow();
+      expect(() => telemetry.record(event as unknown as ToolExecutionEvent)).not.toThrow();
     });
 
     it("should handle events with negative duration", () => {
@@ -149,33 +163,27 @@ describe("Conformance: Graceful Degradation", () => {
 
   describe("Missing recommendations", () => {
     it("should handle tools with no recommendations", () => {
-      telemetry.complete(
-        { toolName: "simple_tool", serverName: "test" },
-        { durationMs: 100 },
-      );
-      
+      telemetry.complete({ toolName: "simple_tool", serverName: "test" }, { durationMs: 100 });
+
       evaluator.evaluateAll();
       router.routeAll();
       orchestrator.planAll();
       extension.sync();
 
       const view = extension.view();
-      const tool = view.tools.find(t => t.name === "simple_tool");
+      const tool = view.tools.find((t) => t.name === "simple_tool");
       expect(tool).toBeDefined();
       expect(tool?.recommendations).toEqual([]);
     });
 
     it("should handle tools with empty insights", () => {
-      telemetry.complete(
-        { toolName: "another_tool", serverName: "test" },
-        { durationMs: 100 },
-      );
-      
+      telemetry.complete({ toolName: "another_tool", serverName: "test" }, { durationMs: 100 });
+
       evaluator.evaluateAll();
       extension.sync();
 
       const view = extension.view();
-      const tool = view.tools.find(t => t.name === "another_tool");
+      const tool = view.tools.find((t) => t.name === "another_tool");
       expect(tool).toBeDefined();
       expect(tool?.insights).toEqual({});
     });
@@ -185,10 +193,10 @@ describe("Conformance: Graceful Degradation", () => {
     it("should handle SQLite constraint violations gracefully", () => {
       // Insert a tool record
       memory.ensureTool("test_tool", "test_server");
-      
+
       // Try to insert duplicate (should not throw due to INSERT OR REPLACE)
       memory.ensureTool("test_tool", "test_server");
-      
+
       const record = memory.getTool("test_tool", "test_server");
       expect(record).toBeDefined();
     });
@@ -219,7 +227,7 @@ describe("Conformance: Graceful Degradation", () => {
         {},
         (ok, err) => {
           if (!ok) console.log("Blocked:", err);
-        }
+        },
       );
 
       expect(result.executed).toBe(true);
@@ -248,7 +256,7 @@ describe("Conformance: Graceful Degradation", () => {
         {},
         (ok, err) => {
           if (!ok) console.log("Blocked:", err);
-        }
+        },
       );
 
       expect(result.executed).toBe(true);
@@ -275,7 +283,7 @@ describe("Conformance: Graceful Degradation", () => {
         {},
         (ok, err) => {
           if (!ok) console.log("Blocked:", err);
-        }
+        },
       );
 
       expect(result.executed).toBe(false);
@@ -285,9 +293,11 @@ describe("Conformance: Graceful Degradation", () => {
 
   describe("Extension controller resilience", () => {
     it("should generate valid YAML even with empty store", () => {
-      const emptyExtension = new ExtensionController({ memory: new MemoryStore({ path: ":memory:" }) });
+      const emptyExtension = new ExtensionController({
+        memory: new MemoryStore({ path: ":memory:" }),
+      });
       const yaml = emptyExtension.resourceText();
-      
+
       expect(yaml).toContain("version:");
       expect(yaml).toContain("tools:");
       expect(yaml).toContain("[]");
@@ -301,16 +311,13 @@ describe("Conformance: Graceful Degradation", () => {
     });
 
     it("should handle resourceText with different MIME types", () => {
-      telemetry.complete(
-        { toolName: "test_tool", serverName: "test" },
-        { durationMs: 100 },
-      );
+      telemetry.complete({ toolName: "test_tool", serverName: "test" }, { durationMs: 100 });
       evaluator.evaluateAll();
       extension.sync();
 
       const yaml = extension.resourceText("application/yaml");
       const json = extension.resourceText("application/json");
-      
+
       expect(yaml).toContain("version:");
       expect(json).toContain('"version"');
     });
@@ -319,10 +326,10 @@ describe("Conformance: Graceful Degradation", () => {
   describe("Router and Orchestrator resilience", () => {
     it("should handle tools with zero invocations", () => {
       memory.ensureTool("new_tool", "test");
-      
+
       router.routeAll();
       orchestrator.planAll();
-      
+
       // Should not throw, just skip tools with insufficient data
       const record = memory.getTool("new_tool");
       expect(record?.recommendations).toEqual([]);
@@ -330,10 +337,10 @@ describe("Conformance: Graceful Degradation", () => {
 
     it("should handle tools with missing server name", () => {
       memory.ensureTool("serverless_tool");
-      
+
       router.routeTool("serverless_tool");
       orchestrator.planTool("serverless_tool");
-      
+
       const record = memory.getTool("serverless_tool");
       expect(record).toBeDefined();
     });

@@ -36,6 +36,7 @@ export const PUBLISHABLE_PACKAGES = [
 export type PackageJson = {
   name: string;
   version: string;
+  description?: string;
   private?: boolean;
   scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
@@ -158,13 +159,15 @@ export function dirtyFiles(): string[] {
   try {
     const out = run("git", ["status", "--porcelain"], { silent: true }).trim();
     if (!out) return [];
-    return out
-      .split("\n")
-      // Porcelain format is "XY path" (2 status chars + 1 space + path).
-      // Skip the 2 status chars, then trim the single separator space so
-      // paths beginning with "." (e.g. ".changeset/") are preserved.
-      .map((line) => line.slice(2).trim())
-      .filter(Boolean);
+    return (
+      out
+        .split("\n")
+        // Porcelain format is "XY path" (2 status chars + 1 space + path).
+        // Skip the 2 status chars, then trim the single separator space so
+        // paths beginning with "." (e.g. ".changeset/") are preserved.
+        .map((line) => line.slice(2).trim())
+        .filter(Boolean)
+    );
   } catch {
     return [];
   }

@@ -131,6 +131,7 @@ describe("@adaptivemcp/memory", () => {
       value: 0.1,
       confidence: 0.9,
       source: "evaluation",
+      observedAt: new Date().toISOString(),
     });
     store.addInsight({
       toolName: "deploy_service",
@@ -138,10 +139,11 @@ describe("@adaptivemcp/memory", () => {
       value: 0.2,
       confidence: 0.95,
       source: "evaluation",
+      observedAt: new Date().toISOString(),
     });
     const insights = store.getTool("deploy_service")?.insights ?? [];
     expect(insights).toHaveLength(1);
-    expect(insights[0].value).toBe(0.2);
+    expect(insights[0]?.value).toBe(0.2);
   });
 
   it("addRecommendation appends and clearRecommendations removes by type", () => {
@@ -166,7 +168,7 @@ describe("@adaptivemcp/memory", () => {
     store.clearRecommendations("deploy_service", "approval");
     const recs = store.getTool("deploy_service")?.recommendations ?? [];
     expect(recs).toHaveLength(1);
-    expect(recs[0].type).toBe("model");
+    expect(recs[0]?.type).toBe("model");
   });
 
   it("keeps separate records for the same tool name on different servers", () => {

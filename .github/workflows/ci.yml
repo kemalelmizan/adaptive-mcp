@@ -26,6 +26,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Typecheck
+        run: pnpm typecheck
+
       - name: Doc consistency
         run: pnpm docs:check
 

@@ -39,13 +39,19 @@ function fakeServer(): BinaryMcpServer {
   });
 }
 
+/** The first text part of a tool result, or `""` when there is none. */
+function textOf(res: unknown): string {
+  const parts = ((res as { content?: unknown }).content ?? []) as Array<{ text?: string }>;
+  return parts[0]?.text ?? "";
+}
+
 async function withClient(
   server: BinaryMcpServer,
   fn: (client: Client) => Promise<void>,
 ): Promise<void> {
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0.0.0" });
-  await Promise.all([server.server.connect(serverT), client.connect(clientT)]);
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
   try {
     await fn(client);
   } finally {
@@ -69,7 +75,7 @@ describe("@adaptivemcp/mcp-binary", () => {
     const srv = fakeServer();
     await withClient(srv, async (client) => {
       const res = await client.callTool({ name: "fake_run", arguments: { command: "git status" } });
-      const text = (res.content[0] as { text: string }).text;
+      const text = textOf(res);
       expect(JSON.parse(text)).toEqual({ sub: "run", rest: ["git status"] });
     });
   });
@@ -78,7 +84,7 @@ describe("@adaptivemcp/mcp-binary", () => {
     const srv = fakeServer();
     await withClient(srv, async (client) => {
       const res = await client.callTool({ name: "fake_flags", arguments: { a: "1", b: "2" } });
-      const text = (res.content[0] as { text: string }).text;
+      const text = textOf(res);
       expect(JSON.parse(text)).toEqual({ sub: "flags", rest: ["--a", "1", "--b", "2"] });
     });
   });
@@ -97,7 +103,7 @@ describe("@adaptivemcp/mcp-binary", () => {
     await withClient(srv, async (client) => {
       const res = await client.callTool({ name: "rtk_exec", arguments: { command: "git status" } });
       expect((res as { isError?: boolean }).isError).toBe(true);
-      const text = (res.content[0] as { text: string }).text;
+      const text = textOf(res);
       expect(text).toMatch(/rtk/i);
     });
   });

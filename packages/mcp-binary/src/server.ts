@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { z } from "zod";
 
 /**
@@ -116,12 +117,12 @@ export class BinaryMcpServer {
   }
 
   /** Spawn the binary, write `input` (if any) to stdin, resolve with stdout. */
-  private run(subcommand: string, args: Record<string, unknown>, style: "flags" | "positionals"): Promise<string> {
-    const cliArgs = [
-      ...(this.opts.baseArgs ?? []),
-      subcommand,
-      ...this.renderArgs(args, style),
-    ];
+  private run(
+    subcommand: string,
+    args: Record<string, unknown>,
+    style: "flags" | "positionals",
+  ): Promise<string> {
+    const cliArgs = [...(this.opts.baseArgs ?? []), subcommand, ...this.renderArgs(args, style)];
     return new Promise((resolve, reject) => {
       const child: ChildProcessWithoutNullStreams = spawn(this.opts.command, cliArgs, {
         stdio: ["pipe", "pipe", "pipe"],
@@ -130,7 +131,11 @@ export class BinaryMcpServer {
       let stderr = "";
       const timer = setTimeout(() => {
         child.kill("SIGKILL");
-        reject(new Error(`binary ${this.opts.command} timed out after ${this.opts.timeoutMs ?? 30000}ms`));
+        reject(
+          new Error(
+            `binary ${this.opts.command} timed out after ${this.opts.timeoutMs ?? 30000}ms`,
+          ),
+        );
       }, this.opts.timeoutMs ?? 30000);
 
       child.stdout.on("data", (d) => (stdout += d.toString()));
@@ -142,7 +147,10 @@ export class BinaryMcpServer {
       child.on("close", (code) => {
         clearTimeout(timer);
         if (code === 0) resolve(stdout.trim());
-        else reject(new Error(`${this.opts.command} exited ${code}: ${stderr.trim() || stdout.trim()}`));
+        else
+          reject(
+            new Error(`${this.opts.command} exited ${code}: ${stderr.trim() || stdout.trim()}`),
+          );
       });
     });
   }
@@ -161,7 +169,14 @@ export class BinaryMcpServer {
 
   /** Attach to stdio and start listening. */
   async start(): Promise<void> {
-    const transport = new StdioServerTransport();
+    await this.connect(new StdioServerTransport());
+  }
+
+  /**
+   * Attach to any transport, rather than stdio — a host that owns its transport
+   * (or an in-memory linked pair, in a test) uses this.
+   */
+  async connect(transport: Transport): Promise<void> {
     await this.server.connect(transport);
   }
 

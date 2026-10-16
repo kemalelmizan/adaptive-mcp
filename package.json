@@ -16,6 +16,7 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run examples/src/mcp-server.integration.test.ts examples/src/ignore-extension.conformance.test.ts",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.check.json",
     "format": "prettier --write .",
     "changeset": "changeset",
     "version": "changeset version",

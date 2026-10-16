@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "rootDir": ".",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@adaptivemcp/*": ["packages/*/src/index.ts"]
+    },
+    "allowImportingTsExtensions": true
+  },
+  "include": ["packages/*/src/**/*.ts", "examples/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "**/dist/**"]
+}

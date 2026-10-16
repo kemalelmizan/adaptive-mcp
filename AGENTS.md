@@ -10,19 +10,19 @@ The project does **not** attempt to replace MCP, redefine tools, or introduce en
 
 Instead, Adaptive MCP investigates:
 
-* observations;
-* annotations;
-* insights;
-* recommendations.
+- observations;
+- annotations;
+- insights;
+- recommendations.
 
 ## Non-goals
 
 Avoid introducing:
 
-* `adaptiveTool`
-* `adaptiveSkill`
-* `adaptiveIntent`
-* `adaptiveWorkflow`
+- `adaptiveTool`
+- `adaptiveSkill`
+- `adaptiveIntent`
+- `adaptiveWorkflow`
 
 as first-class protocol concepts.
 
@@ -46,11 +46,11 @@ Adaptive MCP operates on MCP primitives because they are intentional boundaries.
 
 Avoid coupling to:
 
-* shell commands;
-* filesystems;
-* processes;
-* sockets;
-* HTTP requests.
+- shell commands;
+- filesystems;
+- processes;
+- sockets;
+- HTTP requests.
 
 Those remain implementation details.
 
@@ -60,11 +60,11 @@ Middleware is not the product.
 
 Middleware exists to:
 
-* observe;
-* evaluate;
-* remember;
-* route;
-* recommend.
+- observe;
+- evaluate;
+- remember;
+- route;
+- recommend.
 
 The adaptation loop:
 
@@ -88,10 +88,10 @@ Metadata update
 
 The client should remain small:
 
-* transport;
-* capability negotiation;
-* middleware hooks;
-* execution lifecycle.
+- transport;
+- capability negotiation;
+- middleware hooks;
+- execution lifecycle.
 
 Business logic belongs in middleware packages.
 
@@ -99,9 +99,9 @@ Business logic belongs in middleware packages.
 
 Assume MCP servers are:
 
-* lightweight;
-* stateless;
-* replaceable.
+- lightweight;
+- stateless;
+- replaceable.
 
 Servers **govern**: they publish adaptive policy (annotations, cost budgets,
 required approvals) as the `dev.adaptivemcp/tools-metadata` resource, following
@@ -135,9 +135,9 @@ Adaptive MCP should feel like a runtime ecosystem rather than an alternative pro
 
 Owns:
 
-* extension identifiers;
-* event schemas;
-* shared interfaces.
+- extension identifiers;
+- event schemas;
+- shared interfaces.
 
 Must remain dependency-light.
 
@@ -145,42 +145,42 @@ Must remain dependency-light.
 
 Owns:
 
-* traces;
-* events;
-* metrics;
-* execution history.
+- traces;
+- events;
+- metrics;
+- execution history.
 
 ### `evaluation`
 
 Owns:
 
-* scoring;
-* feedback collection;
-* quality signals.
+- scoring;
+- feedback collection;
+- quality signals.
 
 ### `memory`
 
 Owns:
 
-* persistence;
-* pattern extraction;
-* historical context.
+- persistence;
+- pattern extraction;
+- historical context.
 
 ### `routing`
 
 Owns:
 
-* model selection;
-* budget optimization;
-* fallback strategies.
+- model selection;
+- budget optimization;
+- fallback strategies.
 
 ### `orchestration`
 
 Owns:
 
-* execution composition;
-* retries;
-* planning experiments.
+- execution composition;
+- retries;
+- planning experiments.
 
 ### `approval`
 
@@ -198,9 +198,9 @@ Tool
 
 Open questions:
 
-* What should users approve?
-* Can approval boundaries adapt?
-* How much autonomy should agents receive?
+- What should users approve?
+- Can approval boundaries adapt?
+- How much autonomy should agents receive?
 
 ## Repository conventions
 
@@ -229,12 +229,20 @@ docs/
 
 Use:
 
-* TypeScript
-* pnpm workspaces
-* Changesets
-* ESLint
-* Prettier
-* Vitest
+- TypeScript
+- pnpm workspaces
+- Changesets
+- ESLint
+- Prettier
+- Vitest
+
+**Type checking is a gate, not a side effect of building.** `pnpm typecheck`
+runs one program over every package's source _and_ its tests, plus `examples/`
+and `scripts/` (`tsconfig.check.json`, using `paths` so packages resolve each
+other's source). Without it the test suites and `scripts/` went unchecked — 15
+packages' worth — and 34 type errors had accumulated there: a private field a
+test reached through, a `PackageJson` type missing `description`, and two
+argument-reading bugs in the release scripts.
 
 **Prettier caveat.** `pnpm format` (`prettier --write .`) rewrites files you did
 not touch: the committed tree predates the current prettier's output for TS
@@ -246,12 +254,12 @@ ESLint but not formatting, so nothing will catch it for you.
 
 ## Long-term research questions
 
-* Which tools naturally cluster together?
-* Which metadata fields become stale?
-* Which approval boundaries do humans prefer?
-* Which models perform best for specific tools?
-* Can workflows emerge from telemetry?
-* Can metadata evolve safely?
+- Which tools naturally cluster together?
+- Which metadata fields become stale?
+- Which approval boundaries do humans prefer?
+- Which models perform best for specific tools?
+- Can workflows emerge from telemetry?
+- Can metadata evolve safely?
 
 ## Guiding sentence
 

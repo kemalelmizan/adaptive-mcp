@@ -31,9 +31,8 @@ const OTP_INDEX = process.argv.indexOf("--otp");
 const OTP = OTP_INDEX >= 0 ? process.argv[OTP_INDEX + 1] : process.env.NPM_OTP;
 const MSG_INDEX = process.argv.indexOf("--message");
 const MESSAGE =
-  MSG_INDEX >= 0
-    ? process.argv[MSG_INDEX + 1]
-    : "broken workspace: dependency spec — install a newer version";
+  (MSG_INDEX >= 0 ? process.argv[MSG_INDEX + 1] : undefined) ??
+  "broken workspace: dependency spec — install a newer version";
 const PKG_INDEX = process.argv.indexOf("--packages");
 const PACKAGES_ARG = PKG_INDEX >= 0 ? process.argv[PKG_INDEX + 1] : undefined;
 
@@ -167,7 +166,11 @@ async function main(): Promise<void> {
       ok += 1;
     } catch (error) {
       const e = error as { stderr?: string; message?: string };
-      const detail = `${e.stderr ?? ""}\n${e.message ?? ""}`.trim().split("\n").slice(-2).join(" | ");
+      const detail = `${e.stderr ?? ""}\n${e.message ?? ""}`
+        .trim()
+        .split("\n")
+        .slice(-2)
+        .join(" | ");
       console.log(`[deprecate]   ✗ ${spec} — ${detail}`);
       failed.push(spec);
     }
