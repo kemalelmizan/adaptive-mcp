@@ -236,6 +236,14 @@ Use:
 * Prettier
 * Vitest
 
+**Prettier caveat.** `pnpm format` (`prettier --write .`) rewrites files you did
+not touch: the committed tree predates the current prettier's output for TS
+argument wrapping and for markdown (`*` bullets and `*emphasis*` become `-` and
+`_emphasis_`), and **no prettier version in the declared range is clean** (#49).
+Run prettier on the files a change already touches, never as a blanket sweep — a
+blanket run buries the real change in cosmetic churn across ~98 files. CI checks
+ESLint but not formatting, so nothing will catch it for you.
+
 ## Long-term research questions
 
 * Which tools naturally cluster together?
