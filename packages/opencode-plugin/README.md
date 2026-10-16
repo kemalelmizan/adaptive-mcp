@@ -117,6 +117,17 @@ const definition = createOpenCodePlugin({
 - **Session id = last seen `sessionID`.** A single host process is assumed; no
   per-message attribution.
 - **Middleware is code.** It cannot travel through JSON config `options`.
+- **Non-zero exits are classified, not reported by the host.** OpenCode reports a
+  failing `shell` command as `status: "completed"`; the adapter reads the result's
+  `exit` code and classifies it via `treatNonZeroExitAsFailure` (`"non-zero"`
+  default, `"gte2"` to treat `exit: 1` as a negative result, `"off"` to trust the
+  host). Without this the learned failure rate would stay 0.
+- **Token / cost usage is unreachable.** The tool hook payload carries no model
+  usage, so `avg_output_tokens` and cost stay 0 on OpenCode and the
+  context-cost / cost-drift insights cannot fire here.
+- **Persistence is on by default.** With no `dbPath`, the store lives at
+  `$XDG_DATA_HOME/adaptivemcp/adaptive.db` (default `~/.local/share/...`) and the
+  view at `tools-metadata.yaml` beside it; pass `":memory:"` for an ephemeral run.
 
 ## Development
 

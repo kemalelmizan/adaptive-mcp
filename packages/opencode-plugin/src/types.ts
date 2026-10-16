@@ -140,6 +140,10 @@ export interface OpenCodeV2SetupContext {
   event?: {
     subscribe(options?: { signal?: AbortSignal }): AsyncIterable<OpenCodeV2Event>;
   };
+  /** MCP introspection (live on v2.0.26): used to attribute tool calls to their server. */
+  mcp?: {
+    list?: () => Promise<{ data?: Array<{ name?: string; status?: unknown }> }>;
+  };
   [key: string]: unknown;
 }
 
@@ -160,10 +164,28 @@ export interface OpenCodePluginDefinition {
 }
 
 export interface AdaptivePluginOptions {
-  /** SQLite path for the store. Defaults to in-memory (`:memory:`). */
+  /**
+   * SQLite path for the store. Defaults to `adaptive.db` under the XDG data
+   * dir (`$XDG_DATA_HOME/adaptivemcp` or `~/.local/share/adaptivemcp`), so
+   * learned metadata persists out of the box. Pass `":memory:"` for an
+   * ephemeral store.
+   */
   dbPath?: string;
-  /** Where to write the derived `tools-metadata.yaml` view. */
+  /**
+   * Where to write the derived `tools-metadata.yaml` view. Defaults next to
+   * `dbPath` (`tools-metadata.yaml` in the same dir); no file when `dbPath` is
+   * `:memory:`.
+   */
   yamlPath?: string;
+  /**
+   * How a tool call whose result carries a non-zero exit code is classified.
+   * OpenCode reports such calls as `status: "completed"` (they completed, they
+   * just failed), so without this the learned failure rate stays 0.
+   * `"non-zero"` (default) treats any non-zero exit as a failure; `"gte2"`
+   * ignores `exit: 1` (a "negative result" for `grep`/`diff`/`test`); `"off"`
+   * keeps the host's verdict only.
+   */
+  treatNonZeroExitAsFailure?: "off" | "non-zero" | "gte2";
   /** Approval policy used by the gate (advisory; the host owns enforcement). */
   approvalPolicy?: ApprovalPolicy;
   /** Extra middleware, applied around every tool call. */

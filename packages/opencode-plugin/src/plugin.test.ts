@@ -328,7 +328,7 @@ describe("@adaptivemcp/opencode-plugin (OpenCode V2)", () => {
     await p.dispose();
   });
 
-  it("ignores a non-zero shell exit as a success (host reports completed)", async () => {
+  it("records a non-zero shell exit as a failure (default policy)", async () => {
     const h = v2Harness();
     await plugin.setup(h.ctx);
     await h.fire("execute.before", v2Before("shell", "call-1"));
@@ -341,7 +341,62 @@ describe("@adaptivemcp/opencode-plugin (OpenCode V2)", () => {
 
     const record = plugin.memory.getTool("shell");
     expect(record?.stats.invocations).toBe(1);
+    expect(record?.stats.failures).toBe(1);
+  });
+
+  it("treatNonZeroExitAsFailure: 'gte2' ignores exit 1 but fails exit 2", async () => {
+    const p = new AdaptiveMcpPlugin({
+      dbPath: ":memory:",
+      persistDebounceMs: 0,
+      treatNonZeroExitAsFailure: "gte2",
+    });
+    const h = v2Harness();
+    await p.setup(h.ctx);
+    for (const [id, exit] of [
+      ["c1", 1],
+      ["c2", 2],
+    ] as const) {
+      await h.fire("execute.before", v2Before("shell", id));
+      const ev = v2AfterCompleted("shell", id);
+      ev.result = { output: { exit, status: "completed" }, metadata: { exit } };
+      await h.fire("execute.after", ev);
+    }
+    const record = p.memory.getTool("shell");
+    expect(record?.stats.invocations).toBe(2);
+    expect(record?.stats.failures).toBe(1);
+    await p.dispose();
+  });
+
+  it("treatNonZeroExitAsFailure: 'off' keeps the host verdict", async () => {
+    const p = new AdaptiveMcpPlugin({
+      dbPath: ":memory:",
+      persistDebounceMs: 0,
+      treatNonZeroExitAsFailure: "off",
+    });
+    const h = v2Harness();
+    await p.setup(h.ctx);
+    await h.fire("execute.before", v2Before("shell", "c1"));
+    const ev = v2AfterCompleted("shell", "c1");
+    ev.result = { output: { exit: 2, status: "completed" }, metadata: { exit: 2 } };
+    await h.fire("execute.after", ev);
+    const record = p.memory.getTool("shell");
+    expect(record?.stats.invocations).toBe(1);
     expect(record?.stats.failures).toBe(0);
+    await p.dispose();
+  });
+
+  it("attributes an MCP tool call to its server (serverName from ctx.mcp.list)", async () => {
+    const p = new AdaptiveMcpPlugin({ dbPath: ":memory:", persistDebounceMs: 0 });
+    const h = v2Harness();
+    (h.ctx as unknown as { mcp: unknown }).mcp = {
+      list: async () => ({ data: [{ name: "headroom" }, { name: "serena" }] }),
+    };
+    await p.setup(h.ctx);
+    await h.fire("execute.before", v2Before("headroom_headroom_compress", "c1"));
+    await h.fire("execute.after", v2AfterCompleted("headroom_headroom_compress", "c1"));
+    const record = p.memory.getTool("headroom_compress", "headroom");
+    expect(record?.stats.invocations).toBe(1);
+    await p.dispose();
   });
 
   it("is guarded against the host calling setup() twice", async () => {
