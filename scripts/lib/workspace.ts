@@ -30,6 +30,7 @@ export const PUBLISHABLE_PACKAGES = [
   "@adaptivemcp/thin-client",
   "@adaptivemcp/middleware",
   "@adaptivemcp/mcp-binary",
+  "@adaptivemcp/opencode-plugin",
 ] as const;
 
 export type PackageJson = {
