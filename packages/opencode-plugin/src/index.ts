@@ -33,11 +33,13 @@
  * - V1 has no per-tool error hook; failures must be recorded through
  *   `recordToolFailure()` by a host/event integration. V2 supplies
  *   `execute.after` with `status: "error"` and records them natively.
- *   A non-zero `shell` exit code is **not** an error in either generation —
- *   the host reports the call itself as `"completed"`.
+ *   A non-zero `shell` exit also arrives as `status: "completed"`, so the exit
+ *   code is classified separately (see `treatNonZeroExitAsFailure`).
  * - There is no parent/child tool linkage, so execution-graph tracking is not
  *   wired here; `TelemetryRecorder.complete`/`fail` stats still flow normally.
- * - OpenCode does not report MCP server names, so events carry no `serverName`.
+ * - OpenCode does not put the server in the hook payload, but names MCP tools
+ *   `<server>_<tool>`; the adapter reads `ctx.mcp.list()` (V2) so a call whose
+ *   prefix is a connected server is attributed to it (`serverName`).
  * - V2 delivers `sessionID` on every tool event, so this adapter tracks the
  *   session from tool events; it does not subscribe to `ctx.event`.
  */
@@ -50,6 +52,9 @@ import { Router } from "@adaptivemcp/routing";
 import { Orchestrator } from "@adaptivemcp/orchestration";
 import { ApprovalGate } from "@adaptivemcp/approval";
 import { MiddlewareChain } from "@adaptivemcp/middleware";
+import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import type {
   AdaptivePluginOptions,
   OpenCodeEvent,
@@ -75,6 +80,16 @@ interface PendingCall {
 }
 
 /**
+ * The default store directory: `adaptivemcp/` under the XDG data home
+ * (`$XDG_DATA_HOME` or `~/.local/share`). Used when no `dbPath` is configured,
+ * so the plugin persists learned metadata out of the box.
+ */
+function defaultDataDir(): string {
+  const base = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
+  return join(base, "adaptivemcp");
+}
+
+/**
  * Wires the Adaptive MCP components into an OpenCode plugin. Use `hooks()` for
  * V1 hosts or `setup(ctx)` for V2 hosts; obtain an instance via
  * `createAdaptivePlugin()` (V1 function shape) or `createOpenCodePlugin()`
@@ -91,10 +106,15 @@ export class AdaptiveMcpPlugin {
   readonly middleware: MiddlewareChain;
 
   private readonly persistDebounceMs: number;
+  private readonly exitPolicy: "off" | "non-zero" | "gte2";
   private readonly pending = new Map<string, PendingCall>();
   private sessionId?: string;
   private timer?: ReturnType<typeof setTimeout>;
   private disposed = false;
+  /** V2 setup context, retained to read the host's MCP server list. */
+  private hostCtx?: OpenCodeV2SetupContext;
+  /** Cached MCP server names (empty results are not cached, so a later connect is picked up). */
+  private mcpServerNames?: string[];
   /** V2 hooks already registered on a host context (guards double setup). */
   private registeredV2 = false;
   /** Live V2 hook registrations (empty until `setup(ctx)` runs). */
@@ -102,12 +122,18 @@ export class AdaptiveMcpPlugin {
 
   constructor(options: AdaptivePluginOptions = {}) {
     this.persistDebounceMs = options.persistDebounceMs ?? 250;
-    this.memory = new MemoryStore({ path: options.dbPath ?? ":memory:" });
+    this.exitPolicy = options.treatNonZeroExitAsFailure ?? "non-zero";
+    const dbPath = options.dbPath ?? join(defaultDataDir(), "adaptive.db");
+    const yamlPath =
+      options.yamlPath ??
+      (dbPath === ":memory:" ? undefined : join(dirname(dbPath), "tools-metadata.yaml"));
+    if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
+    this.memory = new MemoryStore({ path: dbPath });
     this.telemetry = new TelemetryRecorder({
       store: new MemoryBackedTelemetryStore(this.memory),
     });
     this.evaluator = new Evaluator({ memory: this.memory });
-    this.extension = new ExtensionController({ memory: this.memory, yamlPath: options.yamlPath });
+    this.extension = new ExtensionController({ memory: this.memory, yamlPath });
     this.router = new Router({ memory: this.memory });
     this.orchestrator = new Orchestrator({ memory: this.memory });
     this.approval = new ApprovalGate({ memory: this.memory, policy: options.approvalPolicy });
@@ -149,6 +175,7 @@ export class AdaptiveMcpPlugin {
     if (!ctx || typeof ctx.tool?.hook !== "function") {
       throw new TypeError("@adaptivemcp/opencode-plugin: setup context has no tool.hook() API");
     }
+    this.hostCtx = ctx;
     const registrations: OpenCodeV2Registration[] = [];
     registrations.push(await ctx.tool.hook("execute.before", (event) => this.onV2Before(event)));
     registrations.push(await ctx.tool.hook("execute.after", (event) => this.onV2After(event)));
@@ -185,8 +212,9 @@ export class AdaptiveMcpPlugin {
         typeof event.error?.message === "string" && event.error.message
           ? event.error.message
           : `tool ${event.tool} failed`;
+      const { toolName, serverName } = await this.resolveTool(event.tool);
       this.telemetry.fail(
-        { toolName: event.tool, sessionId },
+        { toolName, serverName, sessionId },
         { message },
         { durationMs: call ? Date.now() - call.startedAt : undefined },
       );
@@ -203,6 +231,58 @@ export class AdaptiveMcpPlugin {
       { tool: event.tool, sessionID: event.sessionID, callID: event.id, args: event.input },
       mapV2Result(event.result, event.tool),
     );
+  }
+
+  /**
+   * The host's MCP server names, read lazily from `ctx.mcp.list()` (populated
+   * only once servers connect). Never cached while empty, so a server that
+   * connects after the first tool call is still picked up.
+   */
+  private async serverNames(): Promise<string[]> {
+    if (this.mcpServerNames?.length) return this.mcpServerNames;
+    try {
+      const result = await this.hostCtx?.mcp?.list?.();
+      const names = (result?.data ?? [])
+        .map((server) => server?.name)
+        .filter((name): name is string => typeof name === "string" && name.length > 0);
+      if (names.length > 0) this.mcpServerNames = names;
+      return names;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Split a host tool name into `{ serverName, toolName }`. OpenCode namespaces
+   * MCP tools as `<server>_<tool>` (`McpCatalog.toolName`), so a name whose
+   * prefix is a *connected server* is attributed to it; built-ins (`shell`,
+   * `read`, `edit`, …, `apply_patch`) keep an empty server. The tool name
+   * becomes the server's own tool name: `headroom_headroom_compress` → server
+   * `headroom`, tool `headroom_compress`.
+   */
+  private async resolveTool(toolName: string): Promise<{ toolName: string; serverName?: string }> {
+    for (const server of await this.serverNames()) {
+      if (toolName.startsWith(`${server}_`)) {
+        return { toolName: toolName.slice(server.length + 1), serverName: server };
+      }
+    }
+    return { toolName };
+  }
+
+  /**
+   * Classify a completed call from its result metadata. OpenCode reports a
+   * non-zero `shell` exit as `status: "completed"`, so the exit code is the
+   * only failure signal; the configured policy decides whether it counts.
+   */
+  private exitFailure(metadata: unknown): { message: string; code: string } | undefined {
+    if (this.exitPolicy === "off") return undefined;
+    const exit =
+      metadata && typeof metadata === "object"
+        ? (metadata as Record<string, unknown>).exit
+        : undefined;
+    if (typeof exit !== "number" || exit === 0) return undefined;
+    if (this.exitPolicy === "gte2" && exit < 2) return undefined;
+    return { message: `tool exited with code ${exit}`, code: String(exit) };
   }
 
   private async onToolBefore(
@@ -225,12 +305,27 @@ export class AdaptiveMcpPlugin {
     const call = this.pending.get(input.callID);
     this.pending.delete(input.callID);
     const sessionId = input.sessionID || call?.sessionId || this.sessionId;
+    const { toolName, serverName } = await this.resolveTool(input.tool);
+    const durationMs = call ? Date.now() - call.startedAt : undefined;
+    const outputRecord = { title: output.title, output: output.output, metadata: output.metadata };
+    const failure = this.exitFailure(output.metadata);
+    if (failure) {
+      // The host reported "completed", but the call exited non-zero — a real
+      // failure the learned failure rate must see (see `treatNonZeroExitAsFailure`).
+      this.telemetry.fail({ toolName, serverName, sessionId }, failure, {
+        durationMs,
+        output: outputRecord,
+      });
+      await this.middleware.runAfter(
+        { ok: false, error: failure.message },
+        { toolName: input.tool, input: input.args, output: output.output },
+      );
+      this.schedulePersist();
+      return;
+    }
     this.telemetry.complete(
-      { toolName: input.tool, sessionId },
-      {
-        durationMs: call ? Date.now() - call.startedAt : undefined,
-        output: { title: output.title, output: output.output, metadata: output.metadata },
-      },
+      { toolName, serverName, sessionId },
+      { durationMs, output: outputRecord },
     );
     await this.middleware.runAfter(
       { ok: true },
@@ -379,6 +474,13 @@ function readHostOptions(raw?: Record<string, unknown>): AdaptivePluginOptions {
   if (typeof raw.dbPath === "string") options.dbPath = raw.dbPath;
   if (typeof raw.yamlPath === "string") options.yamlPath = raw.yamlPath;
   if (typeof raw.persistDebounceMs === "number") options.persistDebounceMs = raw.persistDebounceMs;
+  if (
+    raw.treatNonZeroExitAsFailure === "off" ||
+    raw.treatNonZeroExitAsFailure === "non-zero" ||
+    raw.treatNonZeroExitAsFailure === "gte2"
+  ) {
+    options.treatNonZeroExitAsFailure = raw.treatNonZeroExitAsFailure;
+  }
   if (raw.approvalPolicy && typeof raw.approvalPolicy === "object") {
     options.approvalPolicy = raw.approvalPolicy as AdaptivePluginOptions["approvalPolicy"];
   }
