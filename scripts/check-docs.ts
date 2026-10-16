@@ -173,7 +173,11 @@ function checkReadmeTable(): void {
     return;
   }
   const block = readme.slice(start, end);
-  const listed = new Set([...block.matchAll(/`(@adaptivemcp\/[a-z0-9-]+)`/g)].map((m) => m[1]));
+  const listed = new Set(
+    [...block.matchAll(/`(@adaptivemcp\/[a-z0-9-]+)`/g)]
+      .map((match) => match[1])
+      .filter((name): name is string => name !== undefined),
+  );
   const expected = new Set(PUBLISHABLE);
   for (const name of expected) {
     if (!listed.has(name)) fail(`README published table is missing ${name} (run \`pnpm docs\`)`);

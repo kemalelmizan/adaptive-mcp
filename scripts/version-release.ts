@@ -38,7 +38,9 @@ const NO_PUSH = process.argv.includes("--no-push");
 const PKG_INDEX = process.argv.indexOf("--packages");
 const PACKAGES_ARG = PKG_INDEX >= 0 ? process.argv[PKG_INDEX + 1] : undefined;
 const SCOPED_PACKAGES = PACKAGES_ARG
-  ? PACKAGES_ARG.split(",").map((s) => s.trim()).filter(Boolean)
+  ? PACKAGES_ARG.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
   : undefined;
 
 // `isExpectedBumpFile` / `onlyBumpIsDirty` live in scripts/lib/workspace.ts and
@@ -55,7 +57,7 @@ function packageVersion(pkg: string): string {
 function releaseVersion(): string {
   const pkgs = SCOPED_PACKAGES ?? [...PUBLISHABLE_PACKAGES];
   const versions = pkgs.map(packageVersion);
-  return versions.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0];
+  return versions.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0] ?? "0.0.0";
 }
 
 function main(): void {
@@ -68,7 +70,9 @@ function main(): void {
     process.exit(1);
   }
   if (isDirty()) {
-    console.log("[version-release] working tree has the expected version bump; proceeding to commit it.");
+    console.log(
+      "[version-release] working tree has the expected version bump; proceeding to commit it.",
+    );
   }
 
   const version = releaseVersion();
@@ -90,7 +94,10 @@ function main(): void {
 
   // 1. Commit the version bump + CHANGELOGs (only if there is something to commit).
   run("git", ["add", "-A"], { cwd: REPO_ROOT });
-  const staged = run("git", ["diff", "--cached", "--name-only"], { cwd: REPO_ROOT, silent: true }).trim();
+  const staged = run("git", ["diff", "--cached", "--name-only"], {
+    cwd: REPO_ROOT,
+    silent: true,
+  }).trim();
   if (staged.length === 0) {
     console.log("[version-release] nothing staged to commit; skipping commit.");
   } else {

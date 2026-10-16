@@ -166,7 +166,7 @@ describe("@adaptivemcp/thin-client", () => {
     client = new ThinClient({ memory: store, gate, middleware: [auth] });
 
     const contexts: Array<{
-      toolName: string;
+      toolName?: string;
       serverName?: string;
       credentials?: Record<string, unknown>;
     }> = [];

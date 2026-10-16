@@ -3,7 +3,9 @@ import { MemoryStore } from "@adaptivemcp/memory";
 import { Evaluator } from "./evaluator.js";
 import type { ToolExecutionEvent, ExecutionNode } from "@adaptivemcp/spec";
 
-function node(overrides: Partial<ExecutionNode> & { id: string; sessionId: string; workflowId: string }): ExecutionNode {
+function node(
+  overrides: Partial<ExecutionNode> & { id: string; sessionId: string; workflowId: string },
+): ExecutionNode {
   return {
     toolName: "deploy",
     childrenIds: [],
@@ -67,7 +69,7 @@ describe("@adaptivemcp/evaluation", () => {
   it("confidence saturates near 0.95 for large samples", () => {
     record(store, "deploy_service", 0, 200);
     const insights = evaluator.evaluateAll();
-    expect(insights[0].confidence).toBeCloseTo(0.95, 2);
+    expect(insights[0]?.confidence).toBeCloseTo(0.95, 2);
   });
 
   it("persists insights into the store", () => {
@@ -79,15 +81,23 @@ describe("@adaptivemcp/evaluation", () => {
 
   describe("evaluateAllWorkflows (multi-session learning, Phase 10.4)", () => {
     it("returns [] when graph tracking is not enabled", () => {
-      const ev = new Evaluator({ memory: { allTools: () => [], getTool: () => undefined } as never });
+      const ev = new Evaluator({
+        memory: { allTools: () => [], getTool: () => undefined } as never,
+      });
       expect(ev.evaluateAllWorkflows()).toEqual([]);
     });
 
     it("evaluates every session of every workflow and learns the common cross-session pattern", () => {
       // Three sessions of the same workflow, all running the identical single-tool
       // sequence, so detectCommonPatterns' default minOccurrences (3) is met.
-      for (const [sessionId, durationMs] of [["s1", 100], ["s2", 200], ["s3", 300]] as const) {
-        store.recordExecutionNode(node({ id: `${sessionId}-root`, sessionId, workflowId: "wf1", durationMs }));
+      for (const [sessionId, durationMs] of [
+        ["s1", 100],
+        ["s2", 200],
+        ["s3", 300],
+      ] as const) {
+        store.recordExecutionNode(
+          node({ id: `${sessionId}-root`, sessionId, workflowId: "wf1", durationMs }),
+        );
       }
 
       const insights = evaluator.evaluateAllWorkflows();
@@ -107,8 +117,12 @@ describe("@adaptivemcp/evaluation", () => {
 
     it("does not learn a cross-session pattern below the occurrence threshold", () => {
       // Only two sessions - below detectCommonPatterns' default minOccurrences of 3.
-      store.recordExecutionNode(node({ id: "s1-root", sessionId: "s1", workflowId: "wf1", durationMs: 100 }));
-      store.recordExecutionNode(node({ id: "s2-root", sessionId: "s2", workflowId: "wf1", durationMs: 200 }));
+      store.recordExecutionNode(
+        node({ id: "s1-root", sessionId: "s1", workflowId: "wf1", durationMs: 100 }),
+      );
+      store.recordExecutionNode(
+        node({ id: "s2-root", sessionId: "s2", workflowId: "wf1", durationMs: 200 }),
+      );
 
       const insights = evaluator.evaluateAllWorkflows();
       expect(insights.some((i) => i.key === "workflow_common_pattern")).toBe(false);
@@ -165,7 +179,9 @@ describe("@adaptivemcp/evaluation", () => {
           node({ id: `${sessionId}-2`, sessionId, workflowId: "wf", toolName: "summarize" }),
         );
       }
-      store.recordExecutionNode(node({ id: "solo-1", sessionId: "solo", workflowId: "wf", toolName: "lonely" }));
+      store.recordExecutionNode(
+        node({ id: "solo-1", sessionId: "solo", workflowId: "wf", toolName: "lonely" }),
+      );
 
       const insights = evaluator.evaluateCooccurrence();
       const search = insights.find((i) => i.toolName === "search");

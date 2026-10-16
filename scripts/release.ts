@@ -112,9 +112,9 @@ function changedPackages(): string[] {
     const text = readFileSync(join(CHANGESET_DIR, file), "utf8");
     const fm = text.match(/^---\n([\s\S]*?)\n---/);
     if (!fm) continue;
-    for (const line of fm[1].split("\n")) {
+    for (const line of (fm[1] ?? "").split("\n")) {
       const m = line.match(/^\s*"([^"]+)":\s*(patch|minor|major)\s*$/);
-      if (m) names.add(m[1]);
+      if (m?.[1]) names.add(m[1]);
     }
   }
   return [...names].filter((p) => PUBLISHABLE.includes(p));
@@ -155,7 +155,9 @@ function internalDeps(pkg: string): string[] {
  * `latest` never references a dependency version that isn't on npm yet.
  */
 function buildWaves(): string[][] {
-  const deps = new Map([...PUBLISHABLE_PACKAGES].map((p) => [p, internalDeps(p)]));
+  const deps = new Map<string, string[]>(
+    [...PUBLISHABLE_PACKAGES].map((p) => [p, internalDeps(p)]),
+  );
   const remaining = new Set<string>([...PUBLISHABLE_PACKAGES]);
   const done = new Set<string>();
   const waves: string[][] = [];
@@ -236,7 +238,9 @@ async function main(): Promise<void> {
   if (DRY_RUN) {
     // True dry run: preview the pending changesets WITHOUT consuming them or
     // bumping versions. Build separately with `pnpm build:publishable` first.
-    console.log("[release] --dry-run: previewing pending changesets (no build, no publish, no version bump)");
+    console.log(
+      "[release] --dry-run: previewing pending changesets (no build, no publish, no version bump)",
+    );
     changesetStatus();
     console.log("[release] --dry-run: publish waves (dependency order, parallel within a wave):");
     for (const [index, wave] of buildWaves().entries()) {
@@ -308,9 +312,13 @@ async function main(): Promise<void> {
   console.log("[release] done.");
   if (TAG) {
     console.log("[release] --tag: committing version bump + pushing tag");
-    run("node", [join(REPO_ROOT, "scripts", "version-release.ts"), "--packages", candidates.join(",")], {
-      cwd: REPO_ROOT,
-    });
+    run(
+      "node",
+      [join(REPO_ROOT, "scripts", "version-release.ts"), "--packages", candidates.join(",")],
+      {
+        cwd: REPO_ROOT,
+      },
+    );
   } else {
     console.log("[release] remember to push the version commit + tags (or re-run with --tag).");
   }

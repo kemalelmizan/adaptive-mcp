@@ -39,11 +39,12 @@ describe("@adaptivemcp/extension", () => {
       value: 0.2,
       confidence: 0.9,
       source: "evaluation",
+      observedAt: new Date().toISOString(),
     });
     const view = toToolMetadataView(store.getTool("deploy_service")!);
     expect(view.name).toBe("deploy_service");
     expect(view.annotation.risk).toBe("high");
-    expect(view.insights.observed_failure_rate.value).toBe(0.2);
+    expect(view.insights.observed_failure_rate?.value).toBe(0.2);
     expect(view.stats.failure_rate).toBe(0);
   });
 
@@ -119,9 +120,9 @@ describe("@adaptivemcp/extension", () => {
         "search@srv-b",
       ]);
       // First store wins for a duplicated (tool, server).
-      expect(doc.tools.find((t) => t.name === "deploy" && t.server === "srv-a")?.annotation.owner).toBe(
-        "team-a",
-      );
+      expect(
+        doc.tools.find((t) => t.name === "deploy" && t.server === "srv-a")?.annotation.owner,
+      ).toBe("team-a");
       // Metrics are merged too.
       expect(doc.tools.find((t) => t.name === "search")?.metrics?.["all"]?.invocations).toBe(1);
     } finally {
@@ -149,9 +150,9 @@ describe("@adaptivemcp/extension", () => {
     // render timestamp and etag, which are intentionally regenerated each call).
     const stripVolatile = (s: string) =>
       s.replace(/generated_at:.*\n/, "").replace(/etag:.*\n/, "");
-    expect(
-      stripVolatile(toYaml(renderToolsMetadata(store.allTools(), SPEC_VERSION))),
-    ).toBe(stripVolatile(text));
+    expect(stripVolatile(toYaml(renderToolsMetadata(store.allTools(), SPEC_VERSION)))).toBe(
+      stripVolatile(text),
+    );
   });
 
   it("controller exposes the spec-compliant resource URI", () => {
@@ -199,11 +200,12 @@ describe("@adaptivemcp/extension", () => {
     const controller = new ExtensionController({ memory: store });
     const tool = controller.reportObservationTool();
     expect(tool.name).toBe("report_observation");
-    expect(tool.inputSchema.properties.tool.type).toBe("string");
+    const properties = tool.inputSchema.properties as Record<string, { type: string }>;
+    expect(properties.tool?.type).toBe("string");
     expect(tool.inputSchema.required).toContain("tool");
     expect(tool.inputSchema.required).toContain("status");
     expect(tool.inputSchema.required).toContain("timestamp");
-    expect(tool.inputSchema.properties.client_id).toBeDefined();
+    expect(properties.client_id).toBeDefined();
   });
 
   it("reportObservation folds a valid report and updates stats", () => {
@@ -257,16 +259,26 @@ describe("@adaptivemcp/extension", () => {
 
   describe("graph resource ETags (Phase 9.3)", () => {
     it.each([
-      ["executionGraphResourceText", (c: ExtensionController) => c.executionGraphResourceText("s1", "application/json")],
-      ["workflowGraphResourceText", (c: ExtensionController) => c.workflowGraphResourceText("wf1", "application/json")],
-      ["graphInsightsResourceText", (c: ExtensionController) => c.graphInsightsResourceText("s1", "application/json")],
+      [
+        "executionGraphResourceText",
+        (c: ExtensionController) => c.executionGraphResourceText("s1", "application/json"),
+      ],
+      [
+        "workflowGraphResourceText",
+        (c: ExtensionController) => c.workflowGraphResourceText("wf1", "application/json"),
+      ],
+      [
+        "graphInsightsResourceText",
+        (c: ExtensionController) => c.graphInsightsResourceText("s1", "application/json"),
+      ],
     ] as const)("%s computes a real, stable etag for unchanged data", (_name, call) => {
       store.recordExecutionNode(node({ id: "root", workflowId: "wf1" }));
       const controller = new ExtensionController({ memory: store });
 
       const first = call(controller);
       const second = call(controller);
-      if (typeof first !== "string" || typeof second !== "string") throw new Error("expected documents");
+      if (typeof first !== "string" || typeof second !== "string")
+        throw new Error("expected documents");
 
       const etagA = (JSON.parse(first) as { etag: string }).etag;
       const etagB = (JSON.parse(second) as { etag: string }).etag;
@@ -275,26 +287,38 @@ describe("@adaptivemcp/extension", () => {
     });
 
     it.each([
-      ["executionGraphResourceText", (c: ExtensionController, opts: { ifNoneMatch?: string }) =>
-        c.executionGraphResourceText("s1", "application/json", opts)],
-      ["workflowGraphResourceText", (c: ExtensionController, opts: { ifNoneMatch?: string }) =>
-        c.workflowGraphResourceText("wf1", "application/json", opts)],
-      ["graphInsightsResourceText", (c: ExtensionController, opts: { ifNoneMatch?: string }) =>
-        c.graphInsightsResourceText("s1", "application/json", opts)],
-    ] as const)("%s returns notModified when ifNoneMatch matches, full doc when stale", (_name, call) => {
-      store.recordExecutionNode(node({ id: "root", workflowId: "wf1" }));
-      const controller = new ExtensionController({ memory: store });
+      [
+        "executionGraphResourceText",
+        (c: ExtensionController, opts: { ifNoneMatch?: string }) =>
+          c.executionGraphResourceText("s1", "application/json", opts),
+      ],
+      [
+        "workflowGraphResourceText",
+        (c: ExtensionController, opts: { ifNoneMatch?: string }) =>
+          c.workflowGraphResourceText("wf1", "application/json", opts),
+      ],
+      [
+        "graphInsightsResourceText",
+        (c: ExtensionController, opts: { ifNoneMatch?: string }) =>
+          c.graphInsightsResourceText("s1", "application/json", opts),
+      ],
+    ] as const)(
+      "%s returns notModified when ifNoneMatch matches, full doc when stale",
+      (_name, call) => {
+        store.recordExecutionNode(node({ id: "root", workflowId: "wf1" }));
+        const controller = new ExtensionController({ memory: store });
 
-      const initial = call(controller, {});
-      if (typeof initial !== "string") throw new Error("expected a document");
-      const etag = (JSON.parse(initial) as { etag: string }).etag;
+        const initial = call(controller, {});
+        if (typeof initial !== "string") throw new Error("expected a document");
+        const etag = (JSON.parse(initial) as { etag: string }).etag;
 
-      const matched = call(controller, { ifNoneMatch: etag });
-      expect(matched).toEqual({ notModified: true, etag });
+        const matched = call(controller, { ifNoneMatch: etag });
+        expect(matched).toEqual({ notModified: true, etag });
 
-      const stale = call(controller, { ifNoneMatch: "bogus" });
-      expect(typeof stale).toBe("string");
-    });
+        const stale = call(controller, { ifNoneMatch: "bogus" });
+        expect(typeof stale).toBe("string");
+      },
+    );
 
     it("execution graph etag changes when a new node is recorded for the session", () => {
       store.recordExecutionNode(node({ id: "root", workflowId: "wf1" }));
@@ -335,7 +359,9 @@ describe("@adaptivemcp/extension", () => {
     it("returns at most pageSize nodes and a next_cursor when more remain", () => {
       seedChainOfNodes(5);
       const controller = new ExtensionController({ memory: store });
-      const doc = JSON.parse(controller.executionGraphResourceText("s1", "application/json", { pageSize: 2 }) as string);
+      const doc = JSON.parse(
+        controller.executionGraphResourceText("s1", "application/json", { pageSize: 2 }) as string,
+      );
 
       expect(doc.nodes.map((n: { id: string }) => n.id)).toEqual(["n0", "n1"]);
       expect(doc.next_cursor).toBe("n1");
@@ -345,7 +371,10 @@ describe("@adaptivemcp/extension", () => {
       seedChainOfNodes(5);
       const controller = new ExtensionController({ memory: store });
       const doc = JSON.parse(
-        controller.executionGraphResourceText("s1", "application/json", { cursor: "n2", pageSize: 2 }) as string,
+        controller.executionGraphResourceText("s1", "application/json", {
+          cursor: "n2",
+          pageSize: 2,
+        }) as string,
       );
 
       expect(doc.nodes.map((n: { id: string }) => n.id)).toEqual(["n3", "n4"]);
@@ -356,7 +385,10 @@ describe("@adaptivemcp/extension", () => {
       seedChainOfNodes(3);
       const controller = new ExtensionController({ memory: store });
       const doc = JSON.parse(
-        controller.executionGraphResourceText("s1", "application/json", { cursor: "does-not-exist", pageSize: 2 }) as string,
+        controller.executionGraphResourceText("s1", "application/json", {
+          cursor: "does-not-exist",
+          pageSize: 2,
+        }) as string,
       );
 
       expect(doc.nodes.map((n: { id: string }) => n.id)).toEqual(["n0", "n1"]);
@@ -365,7 +397,9 @@ describe("@adaptivemcp/extension", () => {
     it("always returns every edge, regardless of the current node page", () => {
       seedChainOfNodes(5);
       const controller = new ExtensionController({ memory: store });
-      const doc = JSON.parse(controller.executionGraphResourceText("s1", "application/json", { pageSize: 2 }) as string);
+      const doc = JSON.parse(
+        controller.executionGraphResourceText("s1", "application/json", { pageSize: 2 }) as string,
+      );
 
       expect(doc.edges).toHaveLength(4); // 5 nodes chained -> 4 edges, all present despite a 2-node page
     });
@@ -373,7 +407,9 @@ describe("@adaptivemcp/extension", () => {
     it("defaults to a full page (pageSize 50) when no pagination options are given", () => {
       seedChainOfNodes(3);
       const controller = new ExtensionController({ memory: store });
-      const doc = JSON.parse(controller.executionGraphResourceText("s1", "application/json") as string);
+      const doc = JSON.parse(
+        controller.executionGraphResourceText("s1", "application/json") as string,
+      );
 
       expect(doc.nodes).toHaveLength(3);
       expect(doc.next_cursor).toBeUndefined();
@@ -396,13 +432,33 @@ describe("@adaptivemcp/extension", () => {
     });
 
     it("emits a quoted, labeled node per execution node and an edge per parent-child link", () => {
-      store.recordExecutionNode(node({ id: "root", toolName: "deploy", durationMs: 100, status: "completed", childrenIds: ["a"] }));
-      store.recordExecutionNode(node({ id: "a", parentId: "root", toolName: "k8s.apply", status: "failed", childrenIds: [] }));
+      store.recordExecutionNode(
+        node({
+          id: "root",
+          toolName: "deploy",
+          durationMs: 100,
+          status: "completed",
+          childrenIds: ["a"],
+        }),
+      );
+      store.recordExecutionNode(
+        node({
+          id: "a",
+          parentId: "root",
+          toolName: "k8s.apply",
+          status: "failed",
+          childrenIds: [],
+        }),
+      );
       const controller = new ExtensionController({ memory: store });
 
       const dot = controller.executionGraphDotResourceText("s1");
-      expect(dot).toContain('"root" [label="deploy\\n100ms", style=filled, fillcolor="#ccffcc", color="#00ff00"];');
-      expect(dot).toContain('"a" [label="k8s.apply\\n0ms", style=filled, fillcolor="#ffcccc", color="#ff0000"];');
+      expect(dot).toContain(
+        '"root" [label="deploy\\n100ms", style=filled, fillcolor="#ccffcc", color="#00ff00"];',
+      );
+      expect(dot).toContain(
+        '"a" [label="k8s.apply\\n0ms", style=filled, fillcolor="#ffcccc", color="#ff0000"];',
+      );
       expect(dot).toContain('"root" -> "a";');
       expect(dot.trim().startsWith("digraph execution_graph {")).toBe(true);
       expect(dot.trim().endsWith("}")).toBe(true);
@@ -410,8 +466,12 @@ describe("@adaptivemcp/extension", () => {
 
     it("exposes the /dot resource URI alongside the /mermaid one", () => {
       const controller = new ExtensionController({ memory: store });
-      expect(controller.executionGraphDotResourceUri("s1")).toBe("dev.adaptivemcp://execution-graph/s1/dot");
-      expect(controller.executionGraphMermaidResourceUri("s1")).toBe("dev.adaptivemcp://execution-graph/s1/mermaid");
+      expect(controller.executionGraphDotResourceUri("s1")).toBe(
+        "dev.adaptivemcp://execution-graph/s1/dot",
+      );
+      expect(controller.executionGraphMermaidResourceUri("s1")).toBe(
+        "dev.adaptivemcp://execution-graph/s1/mermaid",
+      );
     });
   });
 });
