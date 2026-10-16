@@ -5,7 +5,12 @@
  * does not need the npm 2FA OTP, so it is kept out of the publish path. Run
  * `pnpm build:publishable` (scripts/build.ts) BEFORE this script so the `dist/`
  * outputs already exist on disk; this script only bumps versions and calls
- * `npm publish`.
+ * `pnpm publish`.
+ *
+ * IMPORTANT: publish with `pnpm publish`, never `npm publish`. Packages depend
+ * on each other via the `workspace:` protocol, and only pnpm rewrites those
+ * specs to real semver ranges at pack time; `npm publish` ships `workspace:*`
+ * verbatim, which consumers fail to resolve (`EUNSUPPORTEDPROTOCOL`). See #20.
  *
  * Flow:
  *   1. ensure a clean working tree (or, with `--continue`, a tree that holds
@@ -184,10 +189,13 @@ async function publishOne(pkg: string): Promise<PublishResult> {
   if (await isPublished(pkg, version)) {
     return { pkg, version, status: "skipped" };
   }
-  const args = ["publish", "--access", "public", "--ignore-scripts"];
+  // `pnpm publish` (not `npm publish`) rewrites `workspace:*` deps to real
+  // versions at pack time. `--no-git-checks` is required because `changeset
+  // version` leaves the tree dirty at this point.
+  const args = ["publish", "--access", "public", "--ignore-scripts", "--no-git-checks"];
   if (OTP) args.push("--otp", OTP);
   try {
-    await runAsync("npm", args, { cwd: packageDir(pkg) });
+    await runAsync("pnpm", args, { cwd: packageDir(pkg) });
     return { pkg, version, status: "published" };
   } catch (error) {
     const e = error as { stderr?: string; message?: string };

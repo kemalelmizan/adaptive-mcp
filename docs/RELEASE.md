@@ -187,7 +187,7 @@ What `release.ts` does, in order:
    narrows it to the named packages only.
 3. Applies pending changesets (`pnpm changeset version`), unless `--no-version`
    / `--continue` / `--packages` is given.
-4. `npm publish --access public --ignore-scripts` each unpublished package, in
+4. `pnpm publish --access public --ignore-scripts --no-git-checks` each unpublished package, in
    **dependency waves**: packages are topologically sorted by their internal
    `@adaptivemcp/*` dependencies and each wave is published **in parallel**
    (dependencies always first). This keeps the OTP window short while ensuring a
@@ -364,6 +364,28 @@ Notes:
 - Because it skips `changeset version`, there is no version bump — only publish.
   Use this for re-releasing a specific package whose `dist/` you've rebuilt, or
   for finishing a release that died after the bump was committed.
+
+### 9. Never publish with `npm publish` (the `workspace:` protocol)
+
+Packages here depend on each other with the `workspace:` protocol. Only
+**`pnpm publish`** rewrites those specs to real semver ranges at pack time;
+**`npm publish` ships `workspace:*` verbatim**, producing packages that every
+consumer fails to install:
+
+```
+npm error code EUNSUPPORTEDPROTOCOL
+npm error Unsupported URL Type "workspace:": workspace:*
+```
+
+`release.ts` therefore calls `pnpm publish --access public --ignore-scripts
+--no-git-checks`. If you ever publish by hand, use `pnpm publish`, never `npm
+publish`. Verify a tarball's specs before trusting it:
+
+```bash
+(cd packages/<pkg> && pnpm pack --pack-destination /tmp/pack)
+tar xzf /tmp/pack/<pkg>-*.tgz -C /tmp/pack
+grep -A6 '"dependencies"' /tmp/pack/package/package.json   # no workspace:* should remain
+```
 
 ---
 
