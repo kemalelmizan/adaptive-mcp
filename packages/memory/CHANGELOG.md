@@ -1,5 +1,51 @@
 # @adaptivemcp/memory
 
+## 0.4.0
+
+### Minor Changes
+
+- 175358c: Rich, queryable metadata without a raw events table; time-bucketed cells, retry
+  accounting, and metrics in the derived view.
+
+  - **spec:** `ToolExecutionEvent` gains optional `decoding`, `usage`, and
+    `attempts`; new `MetricDimensions`/`MetricCell`; `Store.metricCells?()`.
+  - **memory:** migration 3 adds `metric_cells` — bounded dimension tuples folded
+    on `recordExecution` (counters, error codes, a fixed-bucket duration histogram,
+    token/cost sums, attempts, EWMA recency, bounded exemplars); migration 4 adds
+    `attempts`. The overall cell also gets an hourly window for drift, pruned by
+    retention. `metricCells()` reads them.
+  - **thin-client:** `ThinClient.run` returns `attempts` (≥1; >1 when retried).
+  - **runtime:** `observeCompleted` forwards `decoding`/`usage`/`attempts`.
+  - **routing:** `DecodingAnalyzer` (pure, computed-on-read) over events or, via
+    `analyzeCells()`, the durable cells.
+  - **extension:** the derived view gains a per-tool `metrics` map (window/dimension
+    labels → counts, failure rate, latency, tokens, `retry_rate`, EWMA).
+
+- 46edecd: Phase 6g/6h/6j exercised, plus metadata guardrails.
+
+  - **evaluation:** `Evaluator.evaluateCooccurrence()` — session-scoped
+    `tool_cooccurrence` insight (most frequent partners + support), run as part of
+    `evaluateAllWorkflows()`. New pure `computeMetricDrift()` — recent-vs-lifetime
+    drift from metric cells.
+  - **memory/spec:** `Store.getSessionIds?()` + `MemoryStore` implementation; metric
+    cardinality cap (`metricCardinality.maxModelsPerTool`, default 8) folds new
+    models into an `other` bucket.
+  - **extension:** `aggregateViews()` also merges metric cells.
+  - **thin-client:** `OAuthMiddleware.handleCallback` now validates the CSRF `state`
+    (single-use, server-bound, TTL); `afterCall` refreshes on 401 without the bogus
+    retry throw. Adds an OAuth test suite.
+
+### Patch Changes
+
+- 8503992: Load `node:sqlite` via `createRequire` (with a type-only import) instead of a
+  bare `import "node:sqlite"`. Most bundlers' builtin lists predate the builtin, so
+  consuming `memory` as a dependency (e.g. the first-party agent under Vite/Vitest)
+  mis-resolved it as the package `sqlite` and failed. Behaviour is unchanged.
+- Updated dependencies [175358c]
+- Updated dependencies [46edecd]
+- Updated dependencies [d28b0fb]
+  - @adaptivemcp/spec@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes

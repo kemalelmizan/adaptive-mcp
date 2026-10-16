@@ -1,5 +1,42 @@
 # @adaptivemcp/evaluation
 
+## 0.4.0
+
+### Minor Changes
+
+- 46edecd: Phase 6g/6h/6j exercised, plus metadata guardrails.
+
+  - **evaluation:** `Evaluator.evaluateCooccurrence()` — session-scoped
+    `tool_cooccurrence` insight (most frequent partners + support), run as part of
+    `evaluateAllWorkflows()`. New pure `computeMetricDrift()` — recent-vs-lifetime
+    drift from metric cells.
+  - **memory/spec:** `Store.getSessionIds?()` + `MemoryStore` implementation; metric
+    cardinality cap (`metricCardinality.maxModelsPerTool`, default 8) folds new
+    models into an `other` bucket.
+  - **extension:** `aggregateViews()` also merges metric cells.
+  - **thin-client:** `OAuthMiddleware.handleCallback` now validates the CSRF `state`
+    (single-use, server-bound, TTL); `afterCall` refreshes on 401 without the bogus
+    retry throw. Adds an OAuth test suite.
+
+### Patch Changes
+
+- Updated dependencies [175358c]
+- Updated dependencies [5334879]
+- Updated dependencies [b3a91fc]
+- Updated dependencies [8503992]
+- Updated dependencies [771d1ec]
+- Updated dependencies [46edecd]
+- Updated dependencies [d28b0fb]
+  - @adaptivemcp/spec@0.4.0
+  - @adaptivemcp/memory@0.4.0
+  - @adaptivemcp/routing@0.4.0
+  - @adaptivemcp/thin-client@0.4.0
+  - @adaptivemcp/extension@0.5.0
+  - @adaptivemcp/approval@0.2.4
+  - @adaptivemcp/graph-analysis@0.2.1
+  - @adaptivemcp/orchestration@0.2.4
+  - @adaptivemcp/telemetry@0.1.7
+
 ## 0.3.0
 
 ### Minor Changes

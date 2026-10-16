@@ -1,5 +1,16 @@
 # @adaptivemcp/telemetry
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [175358c]
+- Updated dependencies [8503992]
+- Updated dependencies [46edecd]
+- Updated dependencies [d28b0fb]
+  - @adaptivemcp/spec@0.4.0
+  - @adaptivemcp/memory@0.4.0
+
 ## 0.1.6
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @adaptivemcp/graph-analysis
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [175358c]
+- Updated dependencies [8503992]
+- Updated dependencies [46edecd]
+- Updated dependencies [d28b0fb]
+  - @adaptivemcp/spec@0.4.0
+  - @adaptivemcp/memory@0.4.0
+
 ## 0.2.0
 
 ### Minor Changes

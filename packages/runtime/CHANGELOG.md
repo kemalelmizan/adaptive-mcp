@@ -1,5 +1,48 @@
 # @adaptivemcp/runtime
 
+## 0.4.0
+
+### Minor Changes
+
+- 175358c: Rich, queryable metadata without a raw events table; time-bucketed cells, retry
+  accounting, and metrics in the derived view.
+
+  - **spec:** `ToolExecutionEvent` gains optional `decoding`, `usage`, and
+    `attempts`; new `MetricDimensions`/`MetricCell`; `Store.metricCells?()`.
+  - **memory:** migration 3 adds `metric_cells` — bounded dimension tuples folded
+    on `recordExecution` (counters, error codes, a fixed-bucket duration histogram,
+    token/cost sums, attempts, EWMA recency, bounded exemplars); migration 4 adds
+    `attempts`. The overall cell also gets an hourly window for drift, pruned by
+    retention. `metricCells()` reads them.
+  - **thin-client:** `ThinClient.run` returns `attempts` (≥1; >1 when retried).
+  - **runtime:** `observeCompleted` forwards `decoding`/`usage`/`attempts`.
+  - **routing:** `DecodingAnalyzer` (pure, computed-on-read) over events or, via
+    `analyzeCells()`, the durable cells.
+  - **extension:** the derived view gains a per-tool `metrics` map (window/dimension
+    labels → counts, failure rate, latency, tokens, `retry_rate`, EWMA).
+
+- 64214b8: `AdaptiveRuntimeOptions` gains `routerModels`, `routerBudget`, and
+  `routerMinInvocations`, forwarded to the internal `Router`. Hosts that own a
+  model catalog can now pass their selectable model ids so `model` recommendations
+  reference models they can actually run (previously the Router's two-model preset
+  was always used).
+
+### Patch Changes
+
+- Updated dependencies [175358c]
+- Updated dependencies [8503992]
+- Updated dependencies [46edecd]
+- Updated dependencies [d28b0fb]
+  - @adaptivemcp/spec@0.4.0
+  - @adaptivemcp/memory@0.4.0
+  - @adaptivemcp/routing@0.4.0
+  - @adaptivemcp/extension@0.5.0
+  - @adaptivemcp/evaluation@0.4.0
+  - @adaptivemcp/approval@0.2.4
+  - @adaptivemcp/middleware@0.1.2
+  - @adaptivemcp/orchestration@0.2.4
+  - @adaptivemcp/telemetry@0.1.7
+
 ## 0.3.0
 
 ### Minor Changes
