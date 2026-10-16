@@ -1,5 +1,29 @@
 # @adaptivemcp/examples
 
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [7b0d76f]
+- Updated dependencies [580d8c2]
+- Updated dependencies [06c094a]
+- Updated dependencies [ecc9b70]
+- Updated dependencies [126bdbd]
+- Updated dependencies [e897d0e]
+  - @adaptivemcp/thin-client@0.5.0
+  - @adaptivemcp/approval@0.2.5
+  - @adaptivemcp/evaluation@0.4.1
+  - @adaptivemcp/extension@0.5.1
+  - @adaptivemcp/graph-analysis@0.2.2
+  - @adaptivemcp/mcp-binary@0.2.0
+  - @adaptivemcp/memory@0.5.0
+  - @adaptivemcp/middleware@0.1.3
+  - @adaptivemcp/orchestration@0.2.5
+  - @adaptivemcp/routing@0.4.1
+  - @adaptivemcp/runtime@0.4.1
+  - @adaptivemcp/telemetry@0.1.8
+  - @adaptivemcp/spec@0.5.0
+
 ## 0.0.11
 
 ### Patch Changes

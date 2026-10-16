@@ -1,5 +1,58 @@
 # @adaptivemcp/opencode-plugin
 
+## 0.3.0
+
+### Minor Changes
+
+- 70914d8: Attribute MCP tool calls to their server and classify non-zero exits as failures.
+
+  - **`server_name` is now derived** for MCP tools. OpenCode names them
+    `<server>_<tool>` but omits the server from the hook payload; the adapter reads
+    the host's server list (`ctx.mcp.list()`) and attributes the call, so
+    `headroom_headroom_compress` records as server `headroom`, tool
+    `headroom_compress`.
+  - **A `shell` call whose result exits non-zero is recorded as a failure.**
+    OpenCode reports such calls as `status: "completed"`, so the learned failure
+    rate previously stayed 0 for the most common failure class. Configurable via
+    `treatNonZeroExitAsFailure` (`"non-zero"` default, `"gte2"` to treat `exit: 1`
+    as a negative result, `"off"` to trust the host).
+  - **`dbPath` now defaults to `$XDG_DATA_HOME/adaptivemcp/adaptive.db`** (with
+    `tools-metadata.yaml` beside it), so learned metadata persists out of the box;
+    `":memory:"` is still available for an ephemeral store.
+
+### Patch Changes
+
+- 580d8c2: Internal dependencies now use caret ranges (`workspace:^`) instead of exact pins.
+
+  pnpm rewrote `workspace:*` to an exact version on publish, so a consumer mixing
+  `@adaptivemcp/*` packages from different releases could end up with two copies of
+  the same package (duplicate state, `instanceof` mismatches, no dedupe). The
+  ranges are now compatible (`^x.y.z`), so a resolver picks one copy.
+
+- 06c094a: Drop dependencies that were declared but never imported.
+
+  `@adaptivemcp/evaluation` declared six internal dependencies
+  (approval, extension, orchestration, routing, telemetry, thin-client) that only
+  its cross-package conformance _test_ imports, so installing it pulled ten
+  transitive `@adaptivemcp/*` packages instead of three. They move to
+  `devDependencies`. Five packages declared `@adaptivemcp/memory` but only import it from
+  tests (their source takes the `Store` interface from `spec`) — it moves to
+  `devDependencies`. `@adaptivemcp/opencode-plugin` drops three and
+  `@adaptivemcp/mcp-binary` one. Fewer packages installed, and a declared
+  graph that matches the real one.
+
+- Updated dependencies [580d8c2]
+- Updated dependencies [06c094a]
+- Updated dependencies [e897d0e]
+  - @adaptivemcp/approval@0.2.5
+  - @adaptivemcp/evaluation@0.4.1
+  - @adaptivemcp/extension@0.5.1
+  - @adaptivemcp/memory@0.5.0
+  - @adaptivemcp/middleware@0.1.3
+  - @adaptivemcp/orchestration@0.2.5
+  - @adaptivemcp/routing@0.4.1
+  - @adaptivemcp/telemetry@0.1.8
+
 ## 0.2.0
 
 ### Minor Changes

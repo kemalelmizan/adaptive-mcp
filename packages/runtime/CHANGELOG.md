@@ -1,5 +1,41 @@
 # @adaptivemcp/runtime
 
+## 0.4.1
+
+### Patch Changes
+
+- 580d8c2: Internal dependencies now use caret ranges (`workspace:^`) instead of exact pins.
+
+  pnpm rewrote `workspace:*` to an exact version on publish, so a consumer mixing
+  `@adaptivemcp/*` packages from different releases could end up with two copies of
+  the same package (duplicate state, `instanceof` mismatches, no dedupe). The
+  ranges are now compatible (`^x.y.z`), so a resolver picks one copy.
+
+- 126bdbd: Close only a store the runtime created.
+
+  `AdaptiveRuntime.close()` called `memory.close()` unconditionally, so a runtime built
+  on an **injected** `store` closed the caller's store — the documented "swap in a
+  file-backed or remote store" path, and exactly the case where sharing happens (a
+  parent runtime and its child sessions over one store). Nothing threw at the close;
+  the failure surfaced later, in the _other_ runtime, as `database is not open`
+  (ERR_INVALID_STATE).
+
+  An injected store now belongs to the caller, who closes it. The self-created path
+  is unchanged, so no leak is introduced.
+
+- Updated dependencies [580d8c2]
+- Updated dependencies [06c094a]
+- Updated dependencies [e897d0e]
+  - @adaptivemcp/approval@0.2.5
+  - @adaptivemcp/evaluation@0.4.1
+  - @adaptivemcp/extension@0.5.1
+  - @adaptivemcp/memory@0.5.0
+  - @adaptivemcp/middleware@0.1.3
+  - @adaptivemcp/orchestration@0.2.5
+  - @adaptivemcp/routing@0.4.1
+  - @adaptivemcp/telemetry@0.1.8
+  - @adaptivemcp/spec@0.5.0
+
 ## 0.4.0
 
 ### Minor Changes

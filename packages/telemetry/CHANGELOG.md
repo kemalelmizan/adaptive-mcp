@@ -1,5 +1,21 @@
 # @adaptivemcp/telemetry
 
+## 0.1.8
+
+### Patch Changes
+
+- 580d8c2: Internal dependencies now use caret ranges (`workspace:^`) instead of exact pins.
+
+  pnpm rewrote `workspace:*` to an exact version on publish, so a consumer mixing
+  `@adaptivemcp/*` packages from different releases could end up with two copies of
+  the same package (duplicate state, `instanceof` mismatches, no dedupe). The
+  ranges are now compatible (`^x.y.z`), so a resolver picks one copy.
+
+- Updated dependencies [580d8c2]
+- Updated dependencies [e897d0e]
+  - @adaptivemcp/memory@0.5.0
+  - @adaptivemcp/spec@0.5.0
+
 ## 0.1.7
 
 ### Patch Changes

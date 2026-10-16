@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/mcp-binary",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Generic CLI-binary -> MCP-server stdio wrapper (the only sanctioned shell-out layer).",
   "license": "MIT",
   "type": "module",

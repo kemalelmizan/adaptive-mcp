@@ -1,5 +1,48 @@
 # @adaptivemcp/thin-client
 
+## 0.5.0
+
+### Minor Changes
+
+- 7b0d76f: Fail closed on an unconfigured approver.
+
+  `requestApproval` defaulted to **approve**, so a host that never wired an
+  approver silently ran every tool the gate marked `require_confirmation` — a tool
+  a policy had flagged for a human, in a mode where nobody is asked. The default is
+  now **deny**: auto-approval is an explicit opt-in (`requestApproval: () => true`).
+  The denial is recorded as `"approval denied"` rather than `"approval denied by
+user"`, since in this path no user was involved.
+
+### Patch Changes
+
+- 580d8c2: Internal dependencies now use caret ranges (`workspace:^`) instead of exact pins.
+
+  pnpm rewrote `workspace:*` to an exact version on publish, so a consumer mixing
+  `@adaptivemcp/*` packages from different releases could end up with two copies of
+  the same package (duplicate state, `instanceof` mismatches, no dedupe). The
+  ranges are now compatible (`^x.y.z`), so a resolver picks one copy.
+
+- 06c094a: Drop dependencies that were declared but never imported.
+
+  `@adaptivemcp/evaluation` declared six internal dependencies
+  (approval, extension, orchestration, routing, telemetry, thin-client) that only
+  its cross-package conformance _test_ imports, so installing it pulled ten
+  transitive `@adaptivemcp/*` packages instead of three. They move to
+  `devDependencies`. Five packages declared `@adaptivemcp/memory` but only import it from
+  tests (their source takes the `Store` interface from `spec`) — it moves to
+  `devDependencies`. `@adaptivemcp/opencode-plugin` drops three and
+  `@adaptivemcp/mcp-binary` one. Fewer packages installed, and a declared
+  graph that matches the real one.
+
+- Updated dependencies [580d8c2]
+- Updated dependencies [06c094a]
+- Updated dependencies [e897d0e]
+  - @adaptivemcp/approval@0.2.5
+  - @adaptivemcp/middleware@0.1.3
+  - @adaptivemcp/orchestration@0.2.5
+  - @adaptivemcp/routing@0.4.1
+  - @adaptivemcp/spec@0.5.0
+
 ## 0.4.0
 
 ### Minor Changes
