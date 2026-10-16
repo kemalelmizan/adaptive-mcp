@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@adaptivemcp/memory": "workspace:^",
+    "fast-check": "^4.10.2",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

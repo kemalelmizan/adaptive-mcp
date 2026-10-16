@@ -29,6 +29,9 @@ jobs:
       - name: Doc consistency
         run: pnpm docs:check
 
+      - name: Dependency graph
+        run: pnpm deps:check
+
       - name: Build
         run: pnpm -r --filter "./packages/*" run build
 

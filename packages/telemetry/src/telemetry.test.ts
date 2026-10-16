@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { InMemoryTelemetryStore, TelemetryRecorder, computeToolStats } from "@adaptivemcp/telemetry";
+import { InMemoryTelemetryStore, TelemetryRecorder, computeToolStats } from "./index.js";
 
 describe("@adaptivemcp/telemetry", () => {
   it("records and queries events by tool", () => {

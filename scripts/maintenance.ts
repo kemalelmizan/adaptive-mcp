@@ -5,7 +5,7 @@
  *   node scripts/maintenance.ts status     # package versions, dirty tree, dist state
  *   node scripts/maintenance.ts stale-dist # list packages whose dist/ is missing
  *   node scripts/maintenance.ts docs       # doc/plan consistency guard (check-docs.ts)
- *   node scripts/maintenance.ts check      # docs + build + lint + test (CI gate)
+ *   node scripts/maintenance.ts check      # docs + deps + build + lint + test (CI gate)
  *   node scripts/maintenance.ts outdated   # pnpm outdated for the workspace
  *
  * These are read-only or CI-style checks; none of them publish or rewrite
@@ -54,8 +54,14 @@ function checkDocs(): void {
   run("node", ["scripts/check-docs.ts"]);
 }
 
+/** Dependency-graph guard — fails on undeclared or unused dependencies. */
+function checkDeps(): void {
+  run("node", ["scripts/check-deps.ts"]);
+}
+
 function runChecks(): void {
   checkDocs();
+  checkDeps();
   pnpm(["-r", ...PUBLISHABLE_PACKAGES.flatMap((p) => ["--filter", p]), "run", "build"]);
   pnpm(["lint"]);
   pnpm(["test"]);
