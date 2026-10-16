@@ -1,8 +1,5 @@
 import { MemoryStore } from "@adaptivemcp/memory";
-import {
-  TelemetryRecorder,
-  MemoryBackedTelemetryStore,
-} from "@adaptivemcp/telemetry";
+import { TelemetryRecorder, MemoryBackedTelemetryStore } from "@adaptivemcp/telemetry";
 import { Evaluator } from "@adaptivemcp/evaluation";
 import { ExtensionController } from "@adaptivemcp/extension";
 import { Router, type BudgetPolicy, type ModelOption } from "@adaptivemcp/routing";
@@ -16,6 +13,11 @@ export interface AdaptiveRuntimeOptions {
    * The persistence backend. Defaults to an in-memory `MemoryStore`. Any object
    * implementing the `Store` interface from `@adaptivemcp/spec` is accepted, so
    * callers can swap in a file-backed or remote store without touching the loop.
+   *
+   * **An injected store is owned by the caller**, not by this runtime: `close()`
+   * closes only a store this runtime created, so several runtimes (a parent and
+   * its child sessions, say) can share one store without one of them tearing it
+   * down under the others. Close the store yourself if you supplied it.
    */
   store?: Store;
   /** SQLite path for the default store. Ignored when `store` is provided. */
@@ -69,10 +71,14 @@ export class AdaptiveRuntime {
   readonly orchestrator: Orchestrator;
   readonly approval: ApprovalGate;
   readonly middleware: MiddlewareChain;
+  /** Whether `memory` is ours to close (false when it was injected). */
+  private readonly ownsStore: boolean;
 
   constructor(options: AdaptiveRuntimeOptions = {}) {
+    this.ownsStore = options.store === undefined;
     this.memory = options.store ?? new MemoryStore({ path: options.dbPath ?? ":memory:" });
-    const graphMemory = options.enableGraph && this.memory instanceof MemoryStore ? this.memory : undefined;
+    const graphMemory =
+      options.enableGraph && this.memory instanceof MemoryStore ? this.memory : undefined;
     this.telemetry = new TelemetryRecorder({
       store: new MemoryBackedTelemetryStore(this.memory),
       memory: graphMemory,
@@ -138,7 +144,13 @@ export class AdaptiveRuntime {
         cost: input.cost ? { amount: input.cost.amount, currency: input.cost.currency } : undefined,
         output: input.output ?? (input.status === "completed" ? { ok: true } : undefined),
       },
-      { status: input.status, error: input.error, decoding: input.decoding, usage: input.usage, attempts: input.attempts },
+      {
+        status: input.status,
+        error: input.error,
+        decoding: input.decoding,
+        usage: input.usage,
+        attempts: input.attempts,
+      },
     );
     this.evaluator.evaluateAll();
     // Surface middleware contributions (D3: YAML `middleware` map).
@@ -169,7 +181,10 @@ export class AdaptiveRuntime {
   }
 
   /** Start a child node in the workflow graph. */
-  startChild(ctx: { toolName: string; serverName?: string; model?: string }, parentId: string): { nodeId: string } {
+  startChild(
+    ctx: { toolName: string; serverName?: string; model?: string },
+    parentId: string,
+  ): { nodeId: string } {
     const node = this.telemetry.startChild(
       { toolName: ctx.toolName, serverName: ctx.serverName, model: ctx.model },
       parentId,
@@ -185,7 +200,9 @@ export class AdaptiveRuntime {
     this.telemetry.completeNode(nodeId, {
       durationMs: result.durationMs,
       output: result.output,
-      cost: result.cost ? { amount: result.cost.amount, currency: result.cost.currency } : undefined,
+      cost: result.cost
+        ? { amount: result.cost.amount, currency: result.cost.currency }
+        : undefined,
     });
   }
 
@@ -199,8 +216,14 @@ export class AdaptiveRuntime {
     return this.approval.gate(toolName, serverName);
   }
 
+  /**
+   * Release resources. Closes the store **only if this runtime created it**: a
+   * store passed via `store` belongs to the caller, and closing it here would
+   * break every other runtime sharing it — the failure appears later, in the
+   * other runtime, as `database is not open`.
+   */
   close(): void {
-    this.memory.close();
+    if (this.ownsStore) this.memory.close();
   }
 }
 
