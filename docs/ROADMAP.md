@@ -646,8 +646,8 @@ future effort — not an implicit part of 8a.
 | 8b  | ✅ done — `DecodingResolver`: static, table-driven `(profile, ModelCapabilities) -> ResolvedDecodingSettings`                                                              | 1     | Low — pure lookup logic, no learning                                                                        | Low/Medium — new `ModelCapabilities` type + per-backend tables                 | High — the actual backend-agnostic payoff                                                                             |
 | 8c  | ✅ done — `DecodingRecommendation` wrapper (`profile`, `resolved`, `resolverVersion`, `confidence`, `reasons[]`); deprecate (don't remove) `SamplingRecommendationPayload` | 1     | Medium — touches a payload shape external middleware may already depend on                                  | Low/Medium — additive type + `@deprecated` tag                                 | High — confidence/reasons let a host decide when to trust an override                                                 |
 | 8f  | ✅ done — Structured decision trace (intent → base profile → telemetry adjustment → resolved params → resolver version)                                                    | 1     | Low — presentational, no new data beyond 8a-8c                                                              | Low/Medium — richer `reasons[]`, or a trace object if that proves insufficient | Medium/High — the explainability feature that differentiates this from "middleware silently changed your temperature" |
-| 8d  | Extend `ToolExecutionEvent` with optional `decoding: {profile, resolverVersion, resolved}`                                                                                 | 2     | Medium — schema addition (additive/optional, no migration)                                                  | Low — mirrors existing optional fields (`model`, `metadata`)                   | Medium — enables 8e; makes past decisions reproducible even after resolver tables change                              |
-| 8e  | Decoding analyzer: cross-execution report grouped by (tool, profile, model) — retry rate, latency, suggested profile                                                       | 3     | Medium/High — first real analysis pass on brand-new data; needs 8d to have accumulated real telemetry first | Medium — mirrors `GraphAnalyzer`'s pure, computed-on-read shape                | High — the "evidence, not auto-tuning" story                                                                          |
+| 8d  | ✅ done — `ToolExecutionEvent.decoding` (profile, resolverVersion, resolved) recorded                                                                                      | 2     | Medium — schema addition (additive/optional, no migration)                                                  | Low — mirrors existing optional fields (`model`, `metadata`)                   | Medium — enables 8e; makes past decisions reproducible even after resolver tables change                              |
+| 8e  | ✅ done — `DecodingAnalyzer`: cross-execution report by (tool, profile, model, resolverVersion)                                                                            | 3     | Medium/High — first real analysis pass on brand-new data; needs 8d to have accumulated real telemetry first | Medium — mirrors `GraphAnalyzer`'s pure, computed-on-read shape                | High — the "evidence, not auto-tuning" story                                                                          |
 
 Ordered by dependency, not strictly by risk/effort: 8a → 8b → 8c → 8f can ship
 together (Level 1, no telemetry schema change); 8d (Level 2) unlocks 8e
@@ -657,7 +657,15 @@ naturally last.
 **8a/8b/8c/8f shipped 2026-07-28** (Level 1, all together, per the dependency
 note above). `SamplingAdvisor` and `SamplingRecommendationPayload` were kept
 alongside (deprecated, not removed) exactly as decided — nothing that shipped
-on 2026-07-28 (the v0 interim) was broken. 8d/8e remain unbuilt.
+on 2026-07-28 (the v0 interim) was broken. **8d/8e shipped 2026-09-29** (Levels
+2–3): `ToolExecutionEvent` gained optional `decoding`/`usage` (additive, no
+migration), so the decoding a step actually used is recorded and stays
+reproducible after the resolver's tables change, and `DecodingAnalyzer` reads
+those events — or the `metric_cells` rollup — to report failure rate, latency,
+tokens and a suggested profile per `(tool, profile, model, resolverVersion)`.
+It is a report, never a write-back: the first-party agent surfaces it as
+`/decoding-report`. `scripts/check-docs.ts` now probes both, so this row cannot
+go stale the way it did.
 
 ### 8a. `DecodingAdvisor` (replaces `SamplingAdvisor`) — ✅ done
 
