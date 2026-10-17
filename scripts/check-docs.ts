@@ -10,8 +10,8 @@
  *   2. the README `packages:published` table lists exactly `PUBLISHABLE_PACKAGES`
  *      (catches a stale `pnpm docs` run);
  *   3. every package name is mentioned in `docs/ROADMAP.md`;
- *   4. every Phase 6 (6a-6j) and Phase 8 (8a-8f) item row is still present in
- *      `docs/ROADMAP.md` (items cannot silently disappear);
+ *   4. every Phase 6 (6a-6j), Phase 8 (8a-8f) and Phase 9 (9a-9b) item row is
+ *      still present in `docs/ROADMAP.md` (items cannot silently disappear);
  *   5. each `CLAIMS` entry's code probe agrees with its ROADMAP status marker:
  *      a capability that exists in code must be marked ✅/🟡, and a marker must
  *      not claim a capability the code no longer has;
@@ -106,6 +106,20 @@ const CLAIMS: Claim[] = [
     pattern: /DecodingResolver/,
     minStatus: "done",
   },
+  {
+    id: "9a",
+    capability: "shared task list with dependency ordering",
+    file: "packages/memory/src/store.ts",
+    pattern: /readyTasks\s*\(/,
+    minStatus: "done",
+  },
+  {
+    id: "9b",
+    capability: "typed memory steps as one history",
+    file: "packages/memory/src/store.ts",
+    pattern: /getSteps\s*\(/,
+    minStatus: "done",
+  },
 ];
 
 const ROADMAP_ITEMS = [
@@ -125,6 +139,8 @@ const ROADMAP_ITEMS = [
   "8d",
   "8e",
   "8f",
+  "9a",
+  "9b",
 ];
 
 const failures: string[] = [];
