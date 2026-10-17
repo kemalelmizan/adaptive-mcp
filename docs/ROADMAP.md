@@ -803,3 +803,22 @@ abstraction now would buy naming symmetry with no behavior change, before even
 8a-8f exist for decoding alone. Revisit only if/when a second real profile type
 (e.g. `ContextProfile`) is actually being built, so the shared shape is
 inferred from two real cases instead of guessed upfront.
+
+## Phase 9: Archetype component shapes (complete, 2026-10-17)
+
+The components the sibling
+[`agent/docs/archetypes/`](../../agent/docs/archetypes/README.md) catalogue calls
+for, split by [ADR-004](adr/004-archetype-component-ownership.md) into the half a
+library can own and the half that stays the host's policy. Only the _record_ is
+ours; a coordinator, a planning pass and a pause policy are not.
+
+| Item | Capability                                                                                                                        | Status  |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 9a   | Shared **task list**: `Task`/`TaskStatus`/`TaskPatch`, with dependency ordering from `Store.readyTasks` (an unknown id blocks it) | ✅ done |
+| 9b   | **Typed memory steps**: `ActionStep`/`PlanStep`, and one `Store.recordStep`/`getStep`/`getSteps` history merging tasks and steps  | ✅ done |
+
+`@adaptivemcp/agent` is the first consumer of both: an action step per attempted
+call, a plan step per planning pass (`--plan-interval`, re-planned from the
+recorded state rather than the conversation), and a task list ordered by
+`readyTasks`. None of that policy lives here, which is the point — `docs/archetypes.md`
+records the split component by component.

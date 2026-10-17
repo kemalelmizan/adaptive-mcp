@@ -48,6 +48,12 @@ dependencies, and the store's `readyTasks` ordering), `ActionStep`/`PlanStep`,
 `spec`/`memory`, while the coordinator, the planning pass and the pause policy are
 the host's. **❌** no home yet.
 
+The first host to exercise both halves is `@adaptivemcp/agent`, which is the
+evidence that the split works: it records an `ActionStep` per attempted call,
+persists a `PlanStep` from a `--plan-interval` planning pass that re-plans from
+`getSteps`, and keeps its task list ordered by `readyTasks` — with none of that
+policy in this repo (ROADMAP Phase 9).
+
 Two clarifications, because the names mislead:
 
 - **`orchestration` is not agent orchestration.** Per `AGENTS.md` it owns
