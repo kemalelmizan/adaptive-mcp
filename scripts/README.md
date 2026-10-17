@@ -11,10 +11,10 @@ to `pnpm` / `npm` / `git` and never couple to a specific CI provider.
 | Script                       | Purpose                                                                                                                                                                                                                                                  |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts/build.ts`           | Build the publishable `@adaptivemcp/*` packages. `--check` fails if the build leaves the git tree dirty.                                                                                                                                                 |
-| `scripts/release.ts`         | Version (Changesets) + build + publish the publishable packages to npm. `--dry-run` skips publish; `--no-version` publishes as-is; `--tag` also commits the bump + pushes the tag; `--otp <CODE>` (or `NPM_OTP`) supplies the npm 2FA one-time password. |
+| `scripts/release.ts`         | Version (Changesets) + publish the publishable packages to npm; refuses to tag until npm has every version. `--dry-run` previews; `--no-version` publishes as-is; `--tag` commits the bump + pushes the tag; `--otp <CODE>` supplies the 2FA code.       |
 | `scripts/deprecate.ts`       | Deprecate published versions that still carry `workspace:` dependency specs (uninstallable by consumers). Computes the set from the registry; one `--otp <CODE>` reuses across calls; `--dry-run` lists the plan.                                        |
 | `scripts/check-deps.ts`      | Prove the workspace dependency graph in both directions: no undeclared imports (tests included), no declared-but-unused `@adaptivemcp/*` dependencies. `pnpm deps:check`.                                                                                |
-| `scripts/version-release.ts` | After publish: commit the version bump, create an annotated `vX.Y.Z` tag, and push `--follow-tags`. `--dry-run` previews; `--no-push` keeps it local.                                                                                                    |
+| `scripts/version-release.ts` | After publish: verify every package version is on npm, then commit the version bump, create an annotated `vX.Y.Z` tag, and push `--follow-tags`. `--dry-run` previews; `--no-push` keeps it local; `--skip-verify` tags without the registry check.      |
 | `scripts/maintenance.ts`     | Repo hygiene: `status`, `stale-dist`, `check` (build+lint+test), `outdated`.                                                                                                                                                                             |
 
 ## Publishable packages
@@ -57,6 +57,7 @@ node scripts/release.ts --tag         # publish + commit bump + push tag
 node scripts/release.ts --tag --otp <CODE>  # same, with npm 2FA one-time password
 node scripts/version-release.ts       # commit bump + tag + push (after publish)
 node scripts/version-release.ts --no-push # commit + tag locally, no push
+node scripts/version-release.ts --skip-verify # tag without the registry check
 ```
 
 ## Release flow (coordinated with `docs/ROADMAP.md`)
@@ -68,12 +69,16 @@ node scripts/version-release.ts --no-push # commit + tag locally, no push
    `--no-version` / `--continue` / `--packages`;
 3. `pnpm publish --access public --ignore-scripts --no-git-checks` every
    publishable package whose version is not yet on the registry, in dependency
-   order (`spec` → `memory` → `telemetry` → …).
+   order (`spec` → `memory` → `telemetry` → …);
+4. re-reads the registry for every candidate and refuses to tag while any version
+   is missing. The registry lags a publish by seconds, so this polls instead of
+   reading once: a release is recorded only once npm can actually serve it.
 
 It does **not** build: run `pnpm build:publishable` first (a separate, slow step
 that needs no OTP) so `dist/` already exists. It never commits the version bump or
 pushes tags by default. That is left to `scripts/version-release.ts` (or a
-Changesets release CI workflow). Pass `--tag` to `release.ts` to do both in one
+Changesets release CI workflow), which performs the same registry check before it
+tags. Pass `--tag` to `release.ts` to do both in one
 flow. See `docs/ROADMAP.md` for the full step-by-step publish walkthrough.
 
 > Requires `NPM_TOKEN` (org publish rights) in the environment. If the npm
