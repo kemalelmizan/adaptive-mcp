@@ -117,6 +117,59 @@ CREATE INDEX IF NOT EXISTS idx_suspensions_session ON suspensions(session_id, st
 CREATE INDEX IF NOT EXISTS idx_suspensions_status ON suspensions(status);
 `),
   },
+  {
+    version: 6,
+    name: "add_tasks_and_steps",
+    up: (db) =>
+      db.exec(`
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL,
+  assignee TEXT,
+  parent_id TEXT,
+  result TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id, status);
+
+-- Dependencies are their own table rather than a JSON column so that
+-- "ready to start" is one SQL question that stays correct as statuses move.
+-- The ord column preserves the order the host wrote them in.
+CREATE TABLE IF NOT EXISTS task_dependencies (
+  task_id TEXT NOT NULL,
+  depends_on TEXT NOT NULL,
+  ord INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (task_id, depends_on)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on);
+
+-- Action and plan steps share one table under a kind discriminator: they are
+-- read back together (with tasks) as a single ordered history, which is the
+-- point of typed steps. Kind-specific fields are nullable by design.
+CREATE TABLE IF NOT EXISTS steps (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  summary TEXT,
+  tool_name TEXT,
+  error TEXT,
+  duration_ms REAL,
+  correlation_id TEXT,
+  plan TEXT,
+  reasoning TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_steps_session ON steps(session_id, kind, created_at);
+`),
+  },
 ];
 
 /** Applies every migration in `migrations` that hasn't already been recorded, in version order. */

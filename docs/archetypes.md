@@ -15,40 +15,48 @@ each gap — whether it _could_ be a library at all. It does not decide.
 
 ## Component → package
 
-| Component (see the host-side catalogue)                           | Provided by                                                     | Status         |
-| ----------------------------------------------------------------- | --------------------------------------------------------------- | -------------- |
-| Tool/annotation metadata, event schemas, shared types             | `spec`                                                          | ✅             |
-| Derived `tools-metadata` view + MCP resources                     | `extension`                                                     | ✅             |
-| Execution loop + middleware hooks                                 | `thin-client`, `middleware`                                     | ✅             |
-| Outcome/quality signal from events                                | `evaluation`                                                    | ✅             |
-| Persistence + historical context                                  | `memory`                                                        | ✅             |
-| Traces, events, metrics, execution history                        | `telemetry`                                                     | ✅             |
-| Execution-DAG intelligence (critical path, bottlenecks, cascades) | `graph-analysis`                                                | ✅             |
-| Model selection, budget, fallback                                 | `routing`                                                       | ✅             |
-| Decoding policy (intent → sampling), backend-agnostic             | `routing` (`DecodingAdvisor`/`DecodingResolver`)                | ✅             |
-| Approval decision (allow/deny/require_confirmation)               | `approval`                                                      | ✅             |
-| One-wire-it-up entry point                                        | `runtime`                                                       | ✅             |
-| CLI-binary → MCP server wrapper (the sanctioned shell-out layer)  | `mcp-binary`                                                    | ✅             |
-| OpenCode host adapter                                             | `opencode-plugin`                                               | ✅             |
-| **MCP client / transport / namespacing**                          | _none_ — lives in the host (`agent/src/mcp/`)                   | — host concern |
-| **Model seam** (the completion call itself)                       | _none_ — by design: the host owns its LLM calls                 | — host concern |
-| **Configuration** (flags + config file)                           | _none_ — host concern                                           | — host concern |
-| **Typed memory steps** (task/action/plan records)                 | _none_ — `memory` stores events + tool records                  | ❌             |
-| **Pause / resume** (`interrupt`/`resume` over durable state)      | _none_                                                          | ❌             |
-| **Delegation + sub-agent sessions**                               | _none_                                                          | ❌             |
-| **Shared task list + orchestration modes**                        | _none_ — `orchestration` composes _tool calls_, not agent steps | ❌             |
-| **Pipeline / step model** (condition, loop, parallel, router)     | _none_                                                          | ❌             |
-| **Skills** (`SKILL.md`, progressive disclosure, supply chain)     | _none_                                                          | ❌             |
-| **Planning passes**                                               | _none_                                                          | ❌             |
+| Component (see the host-side catalogue)                           | Provided by                                      | Status         |
+| ----------------------------------------------------------------- | ------------------------------------------------ | -------------- |
+| Tool/annotation metadata, event schemas, shared types             | `spec`                                           | ✅             |
+| Derived `tools-metadata` view + MCP resources                     | `extension`                                      | ✅             |
+| Execution loop + middleware hooks                                 | `thin-client`, `middleware`                      | ✅             |
+| Outcome/quality signal from events                                | `evaluation`                                     | ✅             |
+| Persistence + historical context                                  | `memory`                                         | ✅             |
+| Traces, events, metrics, execution history                        | `telemetry`                                      | ✅             |
+| Execution-DAG intelligence (critical path, bottlenecks, cascades) | `graph-analysis`                                 | ✅             |
+| Model selection, budget, fallback                                 | `routing`                                        | ✅             |
+| Decoding policy (intent → sampling), backend-agnostic             | `routing` (`DecodingAdvisor`/`DecodingResolver`) | ✅             |
+| Approval decision (allow/deny/require_confirmation)               | `approval`                                       | ✅             |
+| One-wire-it-up entry point                                        | `runtime`                                        | ✅             |
+| CLI-binary → MCP server wrapper (the sanctioned shell-out layer)  | `mcp-binary`                                     | ✅             |
+| OpenCode host adapter                                             | `opencode-plugin`                                | ✅             |
+| **MCP client / transport / namespacing**                          | _none_ — lives in the host (`agent/src/mcp/`)    | — host concern |
+| **Model seam** (the completion call itself)                       | _none_ — by design: the host owns its LLM calls  | — host concern |
+| **Configuration** (flags + config file)                           | _none_ — host concern                            | — host concern |
+| **Typed memory steps** (task/action/plan records)                 | `spec` (records) + `memory` (history)            | 🟡             |
+| **Pause / resume** (`interrupt`/`resume` over durable state)      | `spec` (`Suspension`) + `memory`                 | 🟡             |
+| **Delegation + sub-agent sessions**                               | _none_                                           | ❌             |
+| **Shared task list + orchestration modes**                        | `spec` (`Task`) + `memory` (`readyTasks`)        | 🟡             |
+| **Pipeline / step model** (condition, loop, parallel, router)     | _none_                                           | ❌             |
+| **Skills** (`SKILL.md`, progressive disclosure, supply chain)     | _none_                                           | ❌             |
+| **Planning passes**                                               | _none_ for the pass; the record is in `spec`     | ❌             |
+
+Legend for the status column: **✅** provided end to end. **🟡** the host-agnostic
+half is provided and the rest is deliberately the host's — `Task` (its
+dependencies, and the store's `readyTasks` ordering), `ActionStep`/`PlanStep`,
+`Suspension` and the methods that persist and read them back as one history are in
+`spec`/`memory`, while the coordinator, the planning pass and the pause policy are
+the host's. **❌** no home yet.
 
 Two clarifications, because the names mislead:
 
 - **`orchestration` is not agent orchestration.** Per `AGENTS.md` it owns
   "execution composition, retries, planning experiments" at the **tool-call**
   level. The orchestrator archetype (assigning work to other agents, a shared task
-  list with dependencies) has no library.
+  list with dependencies) has no library — only its record does.
 - **`approval` is the decision, not the interaction.** It answers _may I?_; it has
-  no notion of _waiting_ for a human.
+  no notion of _waiting_ for a human. That is `Suspension` (in `spec`), which
+  `approval` produces and knows nothing about.
 
 ## What the framework deliberately does not do
 

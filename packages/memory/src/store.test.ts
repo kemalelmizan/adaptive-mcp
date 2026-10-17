@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { MemoryStore } from "./store.js";
-import { MIGRATIONS } from "./migrations.js";
-import type { ToolExecutionEvent, ExecutionNode, Suspension } from "@adaptivemcp/spec";
+import { MIGRATIONS, runMigrations } from "./migrations.js";
+import type { ToolExecutionEvent, ExecutionNode, Suspension, Task } from "@adaptivemcp/spec";
 
 function makeNode(overrides: Partial<ExecutionNode> = {}): ExecutionNode {
   return {
@@ -406,6 +406,263 @@ describe("@adaptivemcp/memory", () => {
       first.close();
       const second = new MemoryStore({ path });
       expect(second.getSuspensions("sess").map((s) => s.id)).toEqual(["p"]);
+      second.close();
+      rmSync(dir, { recursive: true, force: true });
+    });
+  });
+
+  describe("tasks + typed memory steps", () => {
+    function makeTask(overrides: Partial<Task> = {}): Task {
+      return {
+        id: "t1",
+        sessionId: "s1",
+        kind: "task",
+        title: "Deploy the service",
+        status: "pending",
+        dependencies: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        ...overrides,
+      };
+    }
+
+    it("round-trips a task, keeping dependencies in the order they were written", () => {
+      store.recordTask(
+        makeTask({
+          description: "ship it",
+          assignee: "worker-a",
+          parentId: "epic",
+          dependencies: ["t3", "t2"],
+          notes: "waiting on review",
+        }),
+      );
+
+      expect(store.getTask("t1")).toEqual({
+        id: "t1",
+        sessionId: "s1",
+        kind: "task",
+        title: "Deploy the service",
+        description: "ship it",
+        status: "pending",
+        assignee: "worker-a",
+        dependencies: ["t3", "t2"],
+        parentId: "epic",
+        notes: "waiting on review",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      expect(store.getTask("nope")).toBeUndefined();
+    });
+
+    it("upserts a task rather than appending a second one", () => {
+      store.recordTask(makeTask({ dependencies: ["t9"] }));
+      store.recordTask(makeTask({ dependencies: [] }));
+      expect(store.getTask("t1")?.dependencies).toEqual([]);
+      expect(store.getTasks("s1")).toHaveLength(1);
+    });
+
+    it("updateTask merges a patch and stamps updatedAt, leaving identity alone", () => {
+      store.recordTask(makeTask());
+
+      const updated = store.updateTask("t1", { status: "in_progress", assignee: "worker-b" });
+
+      expect(updated?.status).toBe("in_progress");
+      expect(updated?.assignee).toBe("worker-b");
+      expect(updated?.title).toBe("Deploy the service");
+      expect(updated?.createdAt).toBe("2026-01-01T00:00:00.000Z");
+      expect(updated?.updatedAt).toBeDefined();
+      expect(store.updateTask("nope", { status: "completed" })).toBeUndefined();
+    });
+
+    it("orders a session's tasks oldest first and filters them", () => {
+      store.recordTask(makeTask({ id: "b", createdAt: "2026-01-02T00:00:00.000Z", assignee: "a" }));
+      store.recordTask(makeTask({ id: "a", assignee: "b" }));
+      store.recordTask(
+        makeTask({
+          id: "c",
+          createdAt: "2026-01-03T00:00:00.000Z",
+          status: "completed",
+          assignee: "a",
+        }),
+      );
+
+      expect(store.getTasks("s1").map((t) => t.id)).toEqual(["a", "b", "c"]);
+      expect(store.getTasks("s1", { status: "completed" }).map((t) => t.id)).toEqual(["c"]);
+      expect(store.getTasks("s1", { assignee: "a" }).map((t) => t.id)).toEqual(["b", "c"]);
+      expect(store.getTasks("s1", { parentId: "epic" })).toEqual([]);
+      // Another session's tasks are not this session's.
+      expect(store.getTasks("s2")).toEqual([]);
+    });
+
+    it("offers only tasks whose dependencies are complete", () => {
+      store.recordTask(makeTask({ id: "a" }));
+      store.recordTask(makeTask({ id: "b", dependencies: ["a"] }));
+      store.recordTask(makeTask({ id: "c", dependencies: ["b"] }));
+      store.recordTask(makeTask({ id: "d", dependencies: ["a", "b"] }));
+
+      expect(store.readyTasks("s1").map((t) => t.id)).toEqual(["a"]);
+
+      // Started is not finished: a dependency in progress still blocks.
+      store.updateTask("a", { status: "in_progress" });
+      expect(store.readyTasks("s1")).toEqual([]);
+
+      store.updateTask("a", { status: "completed" });
+      expect(store.readyTasks("s1").map((t) => t.id)).toEqual(["b"]);
+
+      store.updateTask("b", { status: "completed" });
+      expect(store.readyTasks("s1").map((t) => t.id)).toEqual(["c", "d"]);
+    });
+
+    it("treats a dependency that matches no task as unmet, so a typo fails closed", () => {
+      store.recordTask(makeTask({ id: "a", dependencies: ["ghost"] }));
+      expect(store.readyTasks("s1")).toEqual([]);
+    });
+
+    it("does not treat a failed or cancelled dependency as done", () => {
+      store.recordTask(makeTask({ id: "a" }));
+      store.recordTask(makeTask({ id: "b", dependencies: ["a"] }));
+
+      store.updateTask("a", { status: "failed" });
+      expect(store.readyTasks("s1")).toEqual([]);
+
+      store.updateTask("a", { status: "cancelled" });
+      expect(store.readyTasks("s1")).toEqual([]);
+    });
+
+    it("round-trips an action step and a plan step", () => {
+      store.recordStep({
+        id: "st1",
+        sessionId: "s1",
+        kind: "action",
+        summary: "ran deploy_service",
+        toolName: "deploy_service",
+        durationMs: 12.5,
+        correlationId: "node-7",
+        createdAt: "2026-01-01T00:00:01.000Z",
+      });
+      store.recordStep({
+        id: "st2",
+        sessionId: "s1",
+        kind: "plan",
+        steps: ["check the diff", "deploy"],
+        reasoning: "the last step failed",
+        createdAt: "2026-01-01T00:00:02.000Z",
+      });
+
+      // Exact objects, so a kind's fields cannot leak into the other's record.
+      expect(store.getStep("st1")).toEqual({
+        id: "st1",
+        sessionId: "s1",
+        kind: "action",
+        summary: "ran deploy_service",
+        toolName: "deploy_service",
+        durationMs: 12.5,
+        correlationId: "node-7",
+        createdAt: "2026-01-01T00:00:01.000Z",
+      });
+      expect(store.getStep("st2")).toEqual({
+        id: "st2",
+        sessionId: "s1",
+        kind: "plan",
+        steps: ["check the diff", "deploy"],
+        reasoning: "the last step failed",
+        createdAt: "2026-01-01T00:00:02.000Z",
+      });
+      expect(store.getStep("nope")).toBeUndefined();
+    });
+
+    it("reads one session's history back in order, and narrows it by kind", () => {
+      store.recordTask(makeTask({ id: "t1" }));
+      store.recordStep({
+        id: "st1",
+        sessionId: "s1",
+        kind: "plan",
+        steps: ["go"],
+        createdAt: "2026-01-01T00:00:01.000Z",
+      });
+      store.recordStep({
+        id: "st2",
+        sessionId: "s1",
+        kind: "action",
+        summary: "did it",
+        createdAt: "2026-01-01T00:00:02.000Z",
+      });
+      store.recordTask(makeTask({ id: "t2", createdAt: "2026-01-01T00:00:03.000Z" }));
+      store.recordTask(makeTask({ id: "x", sessionId: "s2" }));
+
+      expect(store.getSteps("s1").map((r) => r.id)).toEqual(["t1", "st1", "st2", "t2"]);
+      expect(store.getSteps("s1", { kind: "task" }).map((r) => r.id)).toEqual(["t1", "t2"]);
+      expect(store.getSteps("s1", { kind: "plan" }).map((r) => r.id)).toEqual(["st1"]);
+      expect(store.getSteps("s1", { kind: "action" }).map((r) => r.id)).toEqual(["st2"]);
+      expect(store.getSteps("s2").map((r) => r.id)).toEqual(["x"]);
+    });
+
+    it("breaks ties on id, so a history is stable across reads", () => {
+      store.recordStep({
+        id: "st",
+        sessionId: "s1",
+        kind: "action",
+        summary: "x",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      store.recordTask(makeTask({ id: "b" }));
+      store.recordTask(makeTask({ id: "a" }));
+
+      expect(store.getSteps("s1").map((r) => r.id)).toEqual(["a", "b", "st"]);
+    });
+
+    it("upgrades a store created before these tables existed", () => {
+      const dir = mkdtempSync(join(tmpdir(), "upgrade-"));
+      const path = join(dir, "old.db");
+
+      // A database as an earlier release left it: every migration but this one.
+      const old = new DatabaseSync(path);
+      runMigrations(
+        old,
+        MIGRATIONS.filter((migration) => migration.version < 6),
+      );
+      const applied = old
+        .prepare(`SELECT max(version) AS version FROM schema_migrations`)
+        .get() as {
+        version: number;
+      };
+      expect(applied.version).toBe(5);
+      old.close();
+
+      // Opening it with today's code applies the rest, and the new tables work —
+      // which is what an existing agent's database will do on upgrade.
+      const upgraded = new MemoryStore({ path });
+      upgraded.recordTask(makeTask({ id: "t1", sessionId: "sess" }));
+      upgraded.recordStep({
+        id: "st1",
+        sessionId: "sess",
+        kind: "plan",
+        steps: ["go"],
+        createdAt: "2026-01-01T00:00:01.000Z",
+      });
+
+      expect(upgraded.getTask("t1")?.title).toBe("Deploy the service");
+      expect(upgraded.getSteps("sess").map((r) => r.id)).toEqual(["t1", "st1"]);
+      upgraded.close();
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("survives a close/reopen — a task list and its history are durable state", () => {
+      const dir = mkdtempSync(join(tmpdir(), "tasks-"));
+      const path = join(dir, "t.db");
+      const first = new MemoryStore({ path });
+      first.recordTask(makeTask({ id: "t1", sessionId: "sess", dependencies: ["t0"] }));
+      first.recordStep({
+        id: "st1",
+        sessionId: "sess",
+        kind: "plan",
+        steps: ["a", "b"],
+        createdAt: "2026-01-01T00:00:01.000Z",
+      });
+      first.close();
+
+      const second = new MemoryStore({ path });
+      expect(second.getTask("t1")?.title).toBe("Deploy the service");
+      expect(second.getTask("t1")?.dependencies).toEqual(["t0"]);
+      expect(second.getStep("st1")).toMatchObject({ kind: "plan", steps: ["a", "b"] });
       second.close();
       rmSync(dir, { recursive: true, force: true });
     });

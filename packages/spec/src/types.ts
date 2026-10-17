@@ -7,6 +7,15 @@
  */
 
 import type { Suspension, SuspensionResolution, SuspensionStatus } from "./suspension.js";
+import type {
+  ActionStep,
+  PlanStep,
+  StepFilter,
+  StepRecord,
+  Task,
+  TaskFilter,
+  TaskPatch,
+} from "./steps.js";
 
 export type ToolStatus = "started" | "completed" | "failed" | "cancelled";
 
@@ -533,4 +542,39 @@ export interface Store {
    * the node it resumed into, so the same answer can arrive twice).
    */
   resolveSuspension?(id: string, resolution: SuspensionResolution): Suspension | undefined;
+
+  // Task list + typed memory steps (optional — the durable half of ADR-004's
+  // shared task list and planning steps; the coordinator and the planning pass
+  // are the host's).
+
+  /** Persist a task (an upsert; `updateTask` is the transition helper). */
+  recordTask?(task: Task): Task;
+  /** Read one task by id. */
+  getTask?(id: string): Task | undefined;
+  /** A session's tasks, oldest first; filtered when given. */
+  getTasks?(sessionId: string, filter?: TaskFilter): Task[];
+  /**
+   * Merge a partial update into a task and stamp `updatedAt`. Returns the
+   * updated record, or `undefined` for an unknown id. Moving `status` is
+   * allowed from any state: **transitions are the host's policy**, not the
+   * store's.
+   */
+  updateTask?(id: string, patch: TaskPatch): Task | undefined;
+  /**
+   * Tasks that are ready to start: `pending` ones whose every dependency is
+   * `completed`, oldest first. This is the dependency-ordering read — a
+   * dependency that matches no task blocks, rather than silently unblocking.
+   */
+  readyTasks?(sessionId: string): Task[];
+
+  /** Append a typed memory step — an action or a plan. */
+  recordStep?<T extends ActionStep | PlanStep>(step: T): T;
+  /** Read one step by id. */
+  getStep?(id: string): StepRecord | undefined;
+  /**
+   * A session's history in order: tasks, action steps and plan steps merged,
+   * oldest first — so a host can read back what was intended, planned and done
+   * as one sequence. Narrowed by `kind` when given.
+   */
+  getSteps?(sessionId: string, filter?: StepFilter): StepRecord[];
 }

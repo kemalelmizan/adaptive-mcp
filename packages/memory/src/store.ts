@@ -1,13 +1,21 @@
 import { createRequire } from "node:module";
 import type { DatabaseSyncOptions } from "node:sqlite";
 import type {
+  ActionStep,
   Annotation,
   Insight,
   MetricCell,
   MetricDimensions,
+  PlanStep,
   Recommendation,
   RecommendationType,
+  StepFilter,
+  StepRecord,
   Store,
+  Task,
+  TaskFilter,
+  TaskPatch,
+  TaskStatus,
   ToolExecutionEvent,
   ToolRecord,
   ToolStats,
@@ -652,6 +660,255 @@ export class MemoryStore implements Store {
       resolvedAt: new Date().toISOString(),
     });
   }
+
+  // Tasks + typed memory steps — the durable half of ADR-004's shared task list
+  // and planning steps. The coordinator and the planning pass are the host's;
+  // this stores what they decided.
+
+  /** Persist a task (an upsert), replacing its dependency list. */
+  recordTask(task: Task): Task {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO tasks (id, session_id, title, description, status, assignee, parent_id, result, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        task.id,
+        task.sessionId,
+        task.title,
+        task.description ?? null,
+        task.status,
+        task.assignee ?? null,
+        task.parentId ?? null,
+        task.result ?? null,
+        task.notes ?? null,
+        task.createdAt,
+        task.updatedAt ?? null,
+      );
+    this.db.prepare(`DELETE FROM task_dependencies WHERE task_id = ?`).run(task.id);
+    const insertDependency = this.db.prepare(
+      `INSERT OR REPLACE INTO task_dependencies (task_id, depends_on, ord) VALUES (?, ?, ?)`,
+    );
+    task.dependencies.forEach((dependsOn, ord) => insertDependency.run(task.id, dependsOn, ord));
+    return task;
+  }
+
+  /** Read one task by id. */
+  getTask(id: string): Task | undefined {
+    const row = this.db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id) as unknown as
+      TaskRow | undefined;
+    return row ? this.tasksFromRows([row])[0] : undefined;
+  }
+
+  /** A session's tasks, oldest first; filtered when given. */
+  getTasks(sessionId: string, filter: TaskFilter = {}): Task[] {
+    const clauses = ["session_id = ?"];
+    const params: string[] = [sessionId];
+    if (filter.status) {
+      clauses.push("status = ?");
+      params.push(filter.status);
+    }
+    if (filter.assignee) {
+      clauses.push("assignee = ?");
+      params.push(filter.assignee);
+    }
+    if (filter.parentId) {
+      clauses.push("parent_id = ?");
+      params.push(filter.parentId);
+    }
+    const rows = this.db
+      .prepare(`SELECT * FROM tasks WHERE ${clauses.join(" AND ")} ORDER BY created_at ASC, id ASC`)
+      .all(...params) as unknown as TaskRow[];
+    return this.tasksFromRows(rows);
+  }
+
+  /** Merge a partial update into a task and stamp `updatedAt`. */
+  updateTask(id: string, patch: TaskPatch): Task | undefined {
+    const existing = this.getTask(id);
+    if (!existing) return undefined;
+    // Transitions are deliberately not policed here: a host may skip states
+    // (`pending` → `cancelled`), reopen one, or assign and complete in one step.
+    return this.recordTask({ ...existing, ...patch, updatedAt: new Date().toISOString() });
+  }
+
+  /**
+   * `pending` tasks whose every dependency is `completed`, oldest first. A
+   * dependency id that matches no task counts as unmet — a typo must fail
+   * closed, not silently start work.
+   */
+  readyTasks(sessionId: string): Task[] {
+    const rows = this.db
+      .prepare(
+        `SELECT t.* FROM tasks t
+         WHERE t.session_id = ?
+           AND t.status = 'pending'
+           AND NOT EXISTS (
+             SELECT 1 FROM task_dependencies d
+             LEFT JOIN tasks dep ON dep.id = d.depends_on
+             WHERE d.task_id = t.id AND (dep.id IS NULL OR dep.status <> 'completed')
+           )
+         ORDER BY t.created_at ASC, t.id ASC`,
+      )
+      .all(sessionId) as unknown as TaskRow[];
+    return this.tasksFromRows(rows);
+  }
+
+  /** Append a typed memory step — an action or a plan. */
+  recordStep<T extends ActionStep | PlanStep>(step: T): T {
+    // `step.kind` cannot narrow a generic `T`, so the check is made explicit.
+    const action = step.kind === "action" ? (step as ActionStep) : undefined;
+    const plan = step.kind === "plan" ? (step as PlanStep) : undefined;
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO steps (id, session_id, kind, summary, tool_name, error, duration_ms, correlation_id, plan, reasoning, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        step.id,
+        step.sessionId,
+        step.kind,
+        action?.summary ?? null,
+        action?.toolName ?? null,
+        action?.error ?? null,
+        action?.durationMs ?? null,
+        action?.correlationId ?? null,
+        plan ? JSON.stringify(plan.steps) : null,
+        plan?.reasoning ?? null,
+        step.createdAt,
+      );
+    return step;
+  }
+
+  /** Read one step by id. */
+  getStep(id: string): StepRecord | undefined {
+    const row = this.db.prepare(`SELECT * FROM steps WHERE id = ?`).get(id) as unknown as
+      StepRow | undefined;
+    return row ? deserializeStep(row) : undefined;
+  }
+
+  /**
+   * A session's history in order: tasks, action steps and plan steps merged,
+   * oldest first. Ties break on id so the order is stable across reads.
+   */
+  getSteps(sessionId: string, filter: StepFilter = {}): StepRecord[] {
+    const records: StepRecord[] = [];
+    if (filter.kind === undefined || filter.kind === "task") {
+      records.push(...this.getTasks(sessionId));
+    }
+    if (filter.kind === undefined || filter.kind !== "task") {
+      const kind = filter.kind;
+      const rows = (kind
+        ? this.db
+            .prepare(
+              `SELECT * FROM steps WHERE session_id = ? AND kind = ? ORDER BY created_at ASC, id ASC`,
+            )
+            .all(sessionId, kind)
+        : this.db
+            .prepare(`SELECT * FROM steps WHERE session_id = ? ORDER BY created_at ASC, id ASC`)
+            .all(sessionId)) as unknown as StepRow[];
+      records.push(...rows.map(deserializeStep));
+    }
+    return records.sort((a, b) =>
+      a.createdAt === b.createdAt ? a.id.localeCompare(b.id) : a.createdAt < b.createdAt ? -1 : 1,
+    );
+  }
+
+  /** Load the dependency lists for a batch of tasks in one query. */
+  private taskDependencies(taskIds: string[]): Map<string, string[]> {
+    const byTask = new Map<string, string[]>();
+    if (taskIds.length === 0) return byTask;
+    const placeholders = taskIds.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(
+        `SELECT task_id, depends_on FROM task_dependencies WHERE task_id IN (${placeholders}) ORDER BY task_id ASC, ord ASC`,
+      )
+      .all(...taskIds) as unknown as { task_id: string; depends_on: string }[];
+    for (const row of rows) {
+      byTask.set(row.task_id, [...(byTask.get(row.task_id) ?? []), row.depends_on]);
+    }
+    return byTask;
+  }
+
+  private tasksFromRows(rows: TaskRow[]): Task[] {
+    const dependencies = this.taskDependencies(rows.map((row) => row.id));
+    return rows.map((row) => taskFromRow(row, dependencies.get(row.id) ?? []));
+  }
+}
+
+interface TaskRow {
+  id: string;
+  session_id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  assignee: string | null;
+  parent_id: string | null;
+  result: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+interface StepRow {
+  id: string;
+  session_id: string;
+  kind: string;
+  summary: string | null;
+  tool_name: string | null;
+  error: string | null;
+  duration_ms: number | null;
+  correlation_id: string | null;
+  plan: string | null;
+  reasoning: string | null;
+  created_at: string;
+}
+
+function taskFromRow(row: TaskRow, dependencies: string[]): Task {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    kind: "task",
+    title: row.title,
+    description: row.description ?? undefined,
+    status: row.status as TaskStatus,
+    assignee: row.assignee ?? undefined,
+    dependencies,
+    parentId: row.parent_id ?? undefined,
+    result: row.result ?? undefined,
+    notes: row.notes ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? undefined,
+  };
+}
+
+/**
+ * One row of `steps` as its record. Anything that is not a plan is read back as
+ * an action step — the column is written only by `recordStep`, so an unexpected
+ * `kind` means a foreign writer, and losing the step is worse than mislabelling
+ * it.
+ */
+function deserializeStep(row: StepRow): StepRecord {
+  if (row.kind === "plan") {
+    return {
+      id: row.id,
+      sessionId: row.session_id,
+      kind: "plan",
+      steps: row.plan ? (JSON.parse(row.plan) as string[]) : [],
+      reasoning: row.reasoning ?? undefined,
+      createdAt: row.created_at,
+    };
+  }
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    kind: "action",
+    summary: row.summary ?? "",
+    toolName: row.tool_name ?? undefined,
+    error: row.error ?? undefined,
+    durationMs: row.duration_ms ?? undefined,
+    correlationId: row.correlation_id ?? undefined,
+    createdAt: row.created_at,
+  };
 }
 
 interface SuspensionRow {
