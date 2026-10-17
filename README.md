@@ -10,7 +10,7 @@ govern themselves from real signal. The first-party host that consumes these
 libraries is the [Adaptive MCP agent](https://github.com/adaptivemcp/agent).
 
 > I introduced this project in the talk session
-> _"Self-Improving MCP Agents"_ at the [MCP Dev Summit in Seoul (2026)](https://events.linuxfoundation.org/mcp-dev-summit-seoul/).
+> _"[Self-Improving MCP Agents](https://www.youtube.com/watch?v=8quUT1Yn4eg)"_ at the [MCP Dev Summit in Seoul (2026)](https://events.linuxfoundation.org/mcp-dev-summit-seoul/).
 > [Check session details & schedule](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
 
 ## Quick start
@@ -454,7 +454,7 @@ and tested but consumed separately, not through `AdaptiveRuntime` itself. The
 `docs/ROADMAP.md` for the phased status and `examples/README.md` for the
 scenario walkthrough.
 
-This project was introduced publicly in the talk _"Self-Improving MCP Agents"_
+This project was introduced publicly in the talk _"[Self-Improving MCP Agents](https://www.youtube.com/watch?v=8quUT1Yn4eg)"_
 at the [MCP Dev Summit Seoul 2026](https://mcpseoul2026.sched.com/event/2PYdz/self-improving-mcp-agents-kemal-elmizan-goto-company).
 
 ### What's next
