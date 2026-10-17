@@ -107,6 +107,20 @@ const CLAIMS: Claim[] = [
     minStatus: "done",
   },
   {
+    id: "8d",
+    capability: "the decoding actually applied is recorded on the tool-execution event",
+    file: "packages/spec/src/types.ts",
+    pattern: /decoding\?: ToolDecoding/,
+    minStatus: "done",
+  },
+  {
+    id: "8e",
+    capability: "cross-execution decoding analysis (retry rate / latency / suggested profile)",
+    file: "packages/routing/src/decoding-analyzer.ts",
+    pattern: /class DecodingAnalyzer/,
+    minStatus: "done",
+  },
+  {
     id: "9a",
     capability: "shared task list with dependency ordering",
     file: "packages/memory/src/store.ts",
