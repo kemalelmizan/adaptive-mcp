@@ -1,5 +1,16 @@
 # @adaptivemcp/thin-client
 
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [301af23]
+  - @adaptivemcp/spec@0.6.0
+  - @adaptivemcp/approval@0.2.6
+  - @adaptivemcp/middleware@0.1.4
+  - @adaptivemcp/orchestration@0.2.6
+  - @adaptivemcp/routing@0.4.2
+
 ## 0.5.0
 
 ### Minor Changes

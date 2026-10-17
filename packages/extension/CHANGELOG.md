@@ -1,5 +1,12 @@
 # @adaptivemcp/extension
 
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies [301af23]
+  - @adaptivemcp/spec@0.6.0
+
 ## 0.5.1
 
 ### Patch Changes

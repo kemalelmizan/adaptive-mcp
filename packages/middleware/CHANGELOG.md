@@ -1,5 +1,12 @@
 # @adaptivemcp/middleware
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [301af23]
+  - @adaptivemcp/spec@0.6.0
+
 ## 0.1.3
 
 ### Patch Changes

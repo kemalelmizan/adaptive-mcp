@@ -1,5 +1,14 @@
 # @adaptivemcp/evaluation
 
+## 0.4.2
+
+### Patch Changes
+
+- Updated dependencies [301af23]
+  - @adaptivemcp/spec@0.6.0
+  - @adaptivemcp/memory@0.6.0
+  - @adaptivemcp/graph-analysis@0.2.3
+
 ## 0.4.1
 
 ### Patch Changes

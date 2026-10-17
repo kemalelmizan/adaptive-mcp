@@ -1,5 +1,19 @@
 # @adaptivemcp/opencode-plugin
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [301af23]
+  - @adaptivemcp/memory@0.6.0
+  - @adaptivemcp/approval@0.2.6
+  - @adaptivemcp/evaluation@0.4.2
+  - @adaptivemcp/extension@0.5.2
+  - @adaptivemcp/middleware@0.1.4
+  - @adaptivemcp/orchestration@0.2.6
+  - @adaptivemcp/routing@0.4.2
+  - @adaptivemcp/telemetry@0.1.9
+
 ## 0.3.0
 
 ### Minor Changes
