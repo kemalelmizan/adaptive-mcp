@@ -8,6 +8,7 @@
 
 import { execFile, execFileSync, type ExecFileSyncOptions } from "node:child_process";
 import { promisify } from "node:util";
+import { setTimeout as delay } from "node:timers/promises";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,6 +77,80 @@ export async function runAsync(
     maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024,
   });
   return stdout;
+}
+
+/** The current version of a `@adaptivemcp/*` package, from its package.json. */
+export function packageVersion(pkg: string): string {
+  return readPackageJson(join("packages", pkg.replace("@adaptivemcp/", ""))).version;
+}
+
+/**
+ * `spec` → `@adaptivemcp/spec`. `--packages` values are written bare, and a
+ * bare name on the registry is a *different* package (`spec` exists on npm), so
+ * every registry query goes through here.
+ */
+function qualify(pkg: string): string {
+  return pkg.startsWith("@") ? pkg : `@adaptivemcp/${pkg}`;
+}
+
+/**
+ * True when `pkg@version` exists on the registry.
+ *
+ * Every failure to read the registry counts as "not published", which is the
+ * safe direction: a false "not published" only costs a redundant publish (npm
+ * rejects the duplicate, and `release.ts` treats that conflict as
+ * already-published), whereas a false "published" silently skips a package.
+ * `--prefer-online` revalidates npm's cached packument, so a version published
+ * a moment ago is seen as soon as the registry serves it.
+ */
+export async function isPublished(pkg: string, version: string): Promise<boolean> {
+  try {
+    const out = (
+      await runAsync("npm", ["view", "--prefer-online", `${qualify(pkg)}@${version}`, "version"])
+    ).trim();
+    return out === version;
+  } catch {
+    return false;
+  }
+}
+
+export interface MissingPackage {
+  pkg: string;
+  version: string;
+}
+
+/** The packages whose current version is not on the registry yet. */
+export async function findUnpublished(pkgs: readonly string[]): Promise<MissingPackage[]> {
+  const checks = await Promise.all(
+    pkgs.map(async (pkg) => {
+      const version = packageVersion(pkg);
+      return { pkg, version, published: await isPublished(pkg, version) };
+    }),
+  );
+  return checks.filter((c) => !c.published).map(({ pkg, version }) => ({ pkg, version }));
+}
+
+/**
+ * Wait until every package's current version is visible on the registry, and
+ * return whatever is still missing once the deadline passes.
+ *
+ * The registry is eventually consistent: for seconds after a successful publish
+ * `npm view` can still 404 (see docs/RELEASE.md). A single read would therefore
+ * report false gaps, so poll the ones that are still missing instead.
+ */
+export async function waitForPublished(
+  pkgs: readonly string[],
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<MissingPackage[]> {
+  const timeoutMs = opts.timeoutMs ?? 60_000;
+  const intervalMs = opts.intervalMs ?? 3_000;
+  const deadline = Date.now() + timeoutMs;
+  let missing = await findUnpublished(pkgs);
+  while (missing.length > 0 && Date.now() < deadline) {
+    await delay(intervalMs);
+    missing = await findUnpublished(missing.map((m) => m.pkg));
+  }
+  return missing;
 }
 
 /** Run a pnpm workspace command from the repo root. */

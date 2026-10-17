@@ -105,12 +105,15 @@ Build + publish first, **inspect npm**, then record the release separately:
 ```bash
 pnpm build:publishable                 # SEPARATE build step (no OTP)
 node scripts/release.ts --otp <CODE>     # version + publish only (changed packages)
-# …verify packages are live on npmjs.com/org/adaptivemcp…
-node scripts/version-release.ts          # commit bump + tag + push
+node scripts/version-release.ts          # check npm, then commit bump + tag + push
 ```
 
 `release.ts` (without `--tag`) deliberately does **not** touch git. This is the
 safer path if you want to confirm the publish succeeded before creating history.
+
+`version-release.ts` refuses to tag while any package in scope is missing from the
+registry (#55), so the split flow cannot record a release npm cannot serve.
+`--skip-verify` tags anyway, for when the registry itself cannot be read.
 
 > Either flow is fine. Flow A is what we used for v0.2.1.
 
@@ -276,8 +279,10 @@ NPM_OTP=123456 node scripts/release.ts --tag     # env var
   `npm view` can still return the previous `latest` (or 404 for a brand-new
   package) for seconds to minutes. Do not treat that as a failure — `release.ts`
   treats the resulting `EPUBLISHCONFLICT` as "already published" (skipped), so a
-  lagging read can never cause a false failure or a skipped tag. When verifying
-  by hand, wait a minute and re-check.
+  lagging read can never cause a false failure or a skipped tag. `release.ts`
+  polls the registry after the publish loop and `version-release.ts` polls before
+  it tags, so a lagging read delays the release by seconds instead of recording a
+  release for a package that is missing.
 - Alternative to OTP: use an npm **automation/CI token** (bypasses 2FA) in
   `.env` as `NPM_TOKEN`. Note npm is deprecating 2FA-bypass tokens (announced
   for 2027), so OTP is the durable path.
@@ -441,6 +446,7 @@ node scripts/release.ts --packages extension,runtime --otp <CODE>
 | `--packages a,b` | `version-release.ts` | Scope the release version/tag to these packages (set automatically by `--tag`). |
 | `--no-push` | `version-release.ts` | Commit + tag locally, don't push. |
 | `--dry-run` | `version-release.ts` | Preview git ops, no changes. |
+| `--skip-verify` | `version-release.ts` | Tag without checking that every package is on npm (only for when the registry cannot be read). |
 
 > **Build is never a flag** — it's the separate `pnpm build:publishable` step
 > you run before `release.ts`. The release script has no build flag by design.
@@ -451,12 +457,12 @@ node scripts/release.ts --packages extension,runtime --otp <CODE>
 | --- | --- | --- |
 | `[release] working tree is dirty` | Uncommitted changes (often a prior bump) | Commit or stash, then re-run. |
 | `npm error code EOTP` | 2FA required, no OTP supplied | Re-run with `--otp <CODE>` (fresh code). Build is separate, so the OTP only gates publish. |
-| Publish failed partway (some packages missing on npm) | OTP expired mid-run (the run waits for all and exits non-zero without tagging) | `node scripts/release.ts --continue --otp <NEW_CODE>`; add `--tag` once every package is live. |
+| Publish failed partway (some packages missing on npm) | OTP expired mid-run (the run waits for all and exits non-zero without tagging) | `node scripts/release.ts --continue --otp <NEW_CODE>`. Both scripts verify the registry before tagging, so the tag waits until every package is live. |
 | A just-published version still shows as missing/old in `npm view` | Registry read propagation lag (eventual consistency) | Wait a minute and re-check. `release.ts` treats `EPUBLISHCONFLICT` as already-published, so it never false-fails on a lagging read. |
 | `cannot publish over the previously published version` | Should no longer occur | `release.ts` now skips already-published versions automatically. If you still see it, check `NPM_TOKEN`/registry and the package name. |
 | `npm publish` ships stale/old `dist/` | Forgot the separate build step | Run `pnpm build:publishable` before `release.ts`. `dist/` is gitignored, so the release does NOT rebuild. |
 | `release.ts` published more packages than expected | Cascaded internal dependents bumped by Changesets (`updateInternalDependencies`) | Expected: every publishable package whose version changed is published, including dependents and first-time publishes. To publish only specific packages, use `--packages a,b`. |
 | `release.ts` published nothing | No pending changesets | Author a changeset, or pass `--no-version` to republish all publishable packages. |
 | npm page shows no README | `README.md` missing from `files` | Add `"README.md"` to the package's `files` allowlist, rebuild, republish. |
-| Tag exists but version missing on npm | Pushed before publish finished | Publish succeeded? If not, publish then re-tag (delete + recreate tag). |
+| Tag exists but version missing on npm | Tagged without checking the registry (possible before #55) | Confirm with `npm view <pkg>@<version>`; publish the missing versions (`node scripts/release.ts --continue --otp <CODE>`). If they match the tag afterwards, keep the tag — it names the release, not the publish time. |
 | `pnpm: command not found` / wrong version | pnpm not pinned | `eval "$(fnm env)" && fnm use 26`; use the pinned pnpm 11+. |

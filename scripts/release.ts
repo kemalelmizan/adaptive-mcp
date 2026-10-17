@@ -59,6 +59,9 @@ import {
   npmRegistry,
   changesetStatus,
   readPackageJson,
+  packageVersion,
+  isPublished,
+  waitForPublished,
 } from "./lib/workspace.ts";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -78,23 +81,6 @@ const PUBLISHABLE = PUBLISHABLE_PACKAGES as readonly string[];
 
 function packageDir(pkg: string): string {
   return join(REPO_ROOT, "packages", pkg.replace("@adaptivemcp/", ""));
-}
-
-function packageVersion(pkg: string): string {
-  const json = JSON.parse(readFileSync(join(packageDir(pkg), "package.json"), "utf8")) as {
-    version: string;
-  };
-  return json.version;
-}
-
-/** True when `pkg@version` already exists on the registry (resume-safe skip). */
-async function isPublished(pkg: string, version: string): Promise<boolean> {
-  try {
-    const out = (await runAsync("npm", ["view", `${pkg}@${version}`, "version"])).trim();
-    return out === version;
-  } catch {
-    return false; // 404 / network error → treat as not published
-  }
 }
 
 /**
@@ -199,8 +185,10 @@ async function publishOne(pkg: string): Promise<PublishResult> {
     await runAsync("pnpm", args, { cwd: packageDir(pkg) });
     return { pkg, version, status: "published" };
   } catch (error) {
-    const e = error as { stderr?: string; message?: string };
-    const raw = `${e.stderr ?? ""}\n${e.message ?? ""}`;
+    // pnpm reports its own errors on stdout (an OTP rejection, for example), so
+    // the cause is as likely to be in `stdout` as in `stderr`; keep both.
+    const e = error as { stderr?: string; stdout?: string; message?: string };
+    const raw = `${e.stderr ?? ""}\n${e.stdout ?? ""}\n${e.message ?? ""}`;
     // The registry is eventually consistent: a just-published version can read
     // as missing (isPublished false), so we attempt a publish that npm rejects
     // as a conflict. That is NOT a failure — the version is already on npm.
@@ -308,6 +296,22 @@ async function main(): Promise<void> {
     console.error("[release]   node scripts/release.ts --continue --otp <NEW_CODE>");
     process.exit(1);
   }
+
+  // Verify the outcome, not the intent. "published" is pnpm's report, and the
+  // tag this script is about to create is a claim about npm: a release recorded
+  // as done while a package is missing from the registry cannot be installed by
+  // anyone. v0.6.0 shipped `spec` but not `memory` and was tagged anyway, so the
+  // publish loop's own verdict is no longer taken as proof. The registry lags a
+  // publish by seconds, hence the poll rather than a single read.
+  const missing = await waitForPublished(candidates);
+  if (missing.length > 0) {
+    console.error("[release] these versions are still not on the registry:");
+    for (const m of missing) console.error(`[release]   ${m.pkg}@${m.version}`);
+    console.error("[release] not tagging. Re-check the registry, then resume with:");
+    console.error("[release]   node scripts/release.ts --continue --otp <NEW_CODE>");
+    process.exit(1);
+  }
+  console.log(`[release] verified ${candidates.length} version(s) on the registry`);
 
   console.log("[release] done.");
   if (TAG) {
