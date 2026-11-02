@@ -31,6 +31,27 @@ function record(store: MemoryStore, toolName: string, opts: { calls: number; fai
   }
 }
 
+/** Record `calls` events for one model, so per-model cells exist. */
+function recordModel(
+  store: MemoryStore,
+  toolName: string,
+  model: string,
+  opts: { calls: number; fails?: number; durationMs: number; cost?: number },
+): void {
+  for (let i = 0; i < opts.calls; i++) {
+    store.recordExecution({
+      id: `${toolName}-${model}-${i}`,
+      toolName,
+      serverName: "srv",
+      timestamp: new Date().toISOString(),
+      durationMs: opts.durationMs,
+      status: i < (opts.fails ?? 0) ? "failed" : "completed",
+      model,
+      cost: { amount: opts.cost ?? 0, currency: "USD" },
+    });
+  }
+}
+
 describe("@adaptivemcp/routing", () => {
   let store: MemoryStore;
   let router: Router;
@@ -71,6 +92,49 @@ describe("@adaptivemcp/routing", () => {
     router.routeTool("deploy_service");
     const budget = store.getTool("deploy_service")?.recommendations.find((r) => r.type === "routing");
     expect(budget?.payload).toMatchObject({ status: "approaching_budget" });
+  });
+
+  it("prefers the model with the best observed record over the static heuristic", () => {
+    recordModel(store, "search_customer", "local/qwen3-8b", { calls: 12, durationMs: 100 });
+    recordModel(store, "search_customer", "cloud/large", { calls: 12, durationMs: 900 });
+    router = new Router({ memory: store, minInvocations: 10 });
+
+    router.routeTool("search_customer", "srv");
+
+    const rec = store
+      .getTool("search_customer", "srv")
+      ?.recommendations.find((r) => r.type === "model");
+    expect(rec?.payload).toEqual({ model: "local/qwen3-8b" });
+    expect(rec?.rationale).toContain("12 calls");
+    expect(rec?.rationale).toContain("local/qwen3-8b");
+  });
+
+  it("prefers reliability over speed", () => {
+    recordModel(store, "search_customer", "local/fast", { calls: 12, fails: 3, durationMs: 50 });
+    recordModel(store, "search_customer", "cloud/slow", { calls: 12, durationMs: 900 });
+    router = new Router({ memory: store, minInvocations: 10 });
+
+    router.routeTool("search_customer", "srv");
+
+    const rec = store
+      .getTool("search_customer", "srv")
+      ?.recommendations.find((r) => r.type === "model");
+    expect(rec?.payload).toEqual({ model: "cloud/slow" });
+  });
+
+  it("falls back to the cost/latency heuristic when no model has enough samples", () => {
+    for (const model of ["a", "b", "c", "d"]) {
+      recordModel(store, "search_customer", model, { calls: 3, durationMs: 50 });
+    }
+    router = new Router({ memory: store, minInvocations: 10, minModelInvocations: 5 });
+
+    router.routeTool("search_customer", "srv");
+
+    const rec = store
+      .getTool("search_customer", "srv")
+      ?.recommendations.find((r) => r.type === "model");
+    // 12 calls in total (enough for the tool), 3 per model (not enough to choose by).
+    expect(rec?.payload).toEqual({ model: "gpt-5-mini" });
   });
 
   it("emits an over_budget warning when the limit is exceeded", () => {

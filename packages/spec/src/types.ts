@@ -282,6 +282,22 @@ export interface ToolStats {
 }
 
 /**
+ * One model's observed performance on one tool, derived from the per-model metric
+ * cells (`MetricDimensions.model`). A router uses it to prefer a model that has
+ * actually worked on this tool over one whose static weights merely looked good.
+ */
+export interface ModelStats {
+  model: string;
+  invocations: number;
+  failures: number;
+  failureRate: number;
+  avgDurationMs: number | null;
+  /** Total recorded cost for this model on this tool, when the host reports cost. */
+  totalCost: number;
+  lastObservedAt: string | null;
+}
+
+/**
  * A bounded dimension tuple for a metric cell. Keys with undefined values are
  * omitted. Kept open-ended (`[key]`) so new dimensions don't need a migration;
  * cardinality is bounded by the host (models from its catalog, 3 decoding
@@ -501,6 +517,16 @@ export interface Store {
    * callers should fall back to sample-level data.
    */
   metricCells?(options?: { toolName?: string; serverName?: string }): MetricCell[];
+
+  /**
+   * Per-model performance for a tool, derived from its metric cells. This is the
+   * evidence a router needs to prefer a model because it has actually worked on
+   * this tool, rather than because a static cost/latency weight looked good.
+   *
+   * Optional, like `metricCells`: a backend that keeps no dimensional rollups
+   * simply omits it and callers fall back to the tool-level heuristic.
+   */
+  modelStats?(toolName: string, serverName?: string): ModelStats[];
 
   // Graph methods (optional - only implemented when graph tracking is enabled)
   /** Record an execution node in the graph. */
