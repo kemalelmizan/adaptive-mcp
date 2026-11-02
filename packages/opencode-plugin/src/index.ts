@@ -67,6 +67,7 @@ import type {
   OpenCodeToolExecuteBeforeInput,
   OpenCodeToolExecuteBeforeOutput,
   OpenCodeV2Cleanup,
+  OpenCodeV2Event,
   OpenCodeV2Registration,
   OpenCodeV2SetupContext,
   OpenCodeV2ToolExecuteAfterEvent,
@@ -77,6 +78,31 @@ import type {
 interface PendingCall {
   startedAt: number;
   sessionId?: string;
+  /** The model that was serving the session when the call started, if known. */
+  model?: string;
+}
+
+/**
+ * The model a host event refers to, as `provider/model` when a provider is known.
+ *
+ * V2 reports model selection as an event rather than a hook, and the payload's
+ * exact shape is not part of a published type, so both a nested
+ * `{ model: { providerID, modelID } }` and the flat ids are accepted — a missing
+ * model must not cost us the attribution, and a wrong one is worse than none.
+ */
+function modelFromEvent(properties: unknown): string | undefined {
+  if (typeof properties !== "object" || properties === null) return undefined;
+  const raw = properties as Record<string, unknown>;
+  const nested =
+    typeof raw.model === "object" && raw.model !== null
+      ? (raw.model as Record<string, unknown>)
+      : raw;
+  const text = (value: unknown): string | undefined =>
+    typeof value === "string" && value ? value : undefined;
+  const modelID = text(nested.modelID) ?? text(nested.id) ?? text(raw.modelID);
+  if (!modelID) return undefined;
+  const providerID = text(nested.providerID) ?? text(raw.providerID);
+  return providerID ? `${providerID}/${modelID}` : modelID;
 }
 
 /**
@@ -107,8 +133,12 @@ export class AdaptiveMcpPlugin {
 
   private readonly persistDebounceMs: number;
   private readonly exitPolicy: "off" | "non-zero" | "gte2";
-  private readonly pending = new Map<string, PendingCall>();
+  private pending = new Map<string, PendingCall>();
   private sessionId?: string;
+  /** Model reported for each session, as `provider/model` (see `modelFor`). */
+  private readonly sessionModels = new Map<string, string>();
+  /** Stops the V2 event subscription on dispose. */
+  private events?: AbortController;
   private timer?: ReturnType<typeof setTimeout>;
   private disposed = false;
   /** V2 setup context, retained to read the host's MCP server list. */
@@ -148,9 +178,32 @@ export class AdaptiveMcpPlugin {
     return {
       "tool.execute.before": (input, output) => this.onToolBefore(input, output),
       "tool.execute.after": (input, output) => this.onToolAfter(input, output),
+      // V1 reports the serving model per chat turn; recording it is what makes
+      // per-model learning possible at all.
+      "chat.params": async (input) => this.setModel(input.sessionID, input.model),
       event: (input) => this.onEvent(input.event),
       dispose: () => this.dispose(),
     };
+  }
+
+  /**
+   * The model last reported for a session, as `provider/model` — what every tool
+   * call from that session is attributed to. `undefined` when the host has not
+   * said (V2 before 2.0.26 has no model signal at all).
+   */
+  modelFor(sessionId: string = this.sessionId ?? ""): string | undefined {
+    return this.sessionModels.get(sessionId);
+  }
+
+  private setModel(sessionId: string, model: unknown): void {
+    if (!sessionId) return;
+    const formatted =
+      typeof model === "object" && model !== null
+        ? modelFromEvent({ model })
+        : typeof model === "string"
+          ? model
+          : undefined;
+    if (formatted) this.sessionModels.set(sessionId, formatted);
   }
 
   /**
@@ -180,6 +233,14 @@ export class AdaptiveMcpPlugin {
     registrations.push(await ctx.tool.hook("execute.before", (event) => this.onV2Before(event)));
     registrations.push(await ctx.tool.hook("execute.after", (event) => this.onV2After(event)));
     this.registeredV2 = true;
+    // V2 has no `chat.params`: the serving model arrives as an event. Without this
+    // subscription a tool call is attributable to a session but not a model, and
+    // per-model learning has nothing to learn from.
+    if (ctx.event && typeof ctx.event.subscribe === "function") {
+      const controller = new AbortController();
+      this.events = controller;
+      void this.consumeEvents(ctx.event.subscribe({ signal: controller.signal }));
+    }
     return async () => {
       for (const registration of registrations) {
         await registration.dispose();
@@ -189,10 +250,26 @@ export class AdaptiveMcpPlugin {
     };
   }
 
+  /** Track the serving model from V2's event stream until the host unloads. */
+  private async consumeEvents(events: AsyncIterable<OpenCodeV2Event>): Promise<void> {
+    try {
+      for await (const event of events) {
+        if (this.disposed) return;
+        if (event?.type !== "session.model.selected") continue;
+        const properties = event.properties as Record<string, unknown> | undefined;
+        const sessionId = properties?.sessionID;
+        const model = modelFromEvent(properties);
+        if (typeof sessionId === "string" && sessionId && model) {
+          this.sessionModels.set(sessionId, model);
+        }
+      }
+    } catch {
+      // The host ends the stream when it unloads; there is nothing to recover.
+    }
+  }
+
   private async onV2Before(event: OpenCodeV2ToolExecuteBeforeEvent): Promise<void> {
     if (this.disposed) return;
-    // V2 carries sessionID on every tool event — track it so currentSessionId()
-    // reflects the active session without a ctx.event subscription.
     if (typeof event.sessionID === "string" && event.sessionID) {
       this.sessionId = event.sessionID;
     }
@@ -214,7 +291,7 @@ export class AdaptiveMcpPlugin {
           : `tool ${event.tool} failed`;
       const { toolName, serverName } = await this.resolveTool(event.tool);
       this.telemetry.fail(
-        { toolName, serverName, sessionId },
+        { toolName, serverName, sessionId, model: this.modelFor(sessionId ?? "") },
         { message },
         { durationMs: call ? Date.now() - call.startedAt : undefined },
       );
@@ -293,6 +370,7 @@ export class AdaptiveMcpPlugin {
     this.pending.set(input.callID, {
       startedAt: Date.now(),
       sessionId: input.sessionID || this.sessionId,
+      model: this.modelFor(input.sessionID || this.sessionId || ""),
     });
     await this.middleware.runBefore({ toolName: input.tool, input: output.args });
   }
@@ -307,12 +385,15 @@ export class AdaptiveMcpPlugin {
     const sessionId = input.sessionID || call?.sessionId || this.sessionId;
     const { toolName, serverName } = await this.resolveTool(input.tool);
     const durationMs = call ? Date.now() - call.startedAt : undefined;
+    // The model at the time of the call, not whatever the session uses by the time
+    // the result lands: a mid-turn switch must not relabel earlier calls.
+    const model = call?.model ?? this.modelFor(sessionId ?? "");
     const outputRecord = { title: output.title, output: output.output, metadata: output.metadata };
     const failure = this.exitFailure(output.metadata);
     if (failure) {
       // The host reported "completed", but the call exited non-zero — a real
       // failure the learned failure rate must see (see `treatNonZeroExitAsFailure`).
-      this.telemetry.fail({ toolName, serverName, sessionId }, failure, {
+      this.telemetry.fail({ toolName, serverName, sessionId, model }, failure, {
         durationMs,
         output: outputRecord,
       });
@@ -324,7 +405,7 @@ export class AdaptiveMcpPlugin {
       return;
     }
     this.telemetry.complete(
-      { toolName, serverName, sessionId },
+      { toolName, serverName, sessionId, model },
       { durationMs, output: outputRecord },
     );
     await this.middleware.runAfter(
@@ -397,9 +478,15 @@ export class AdaptiveMcpPlugin {
     error: { message: string; code?: string },
     opts: { sessionId?: string; durationMs?: number } = {},
   ): void {
-    this.telemetry.fail({ toolName, sessionId: opts.sessionId ?? this.sessionId }, error, {
-      durationMs: opts.durationMs,
-    });
+    this.telemetry.fail(
+      {
+        toolName,
+        sessionId: opts.sessionId ?? this.sessionId,
+        model: this.modelFor(opts.sessionId ?? this.sessionId ?? ""),
+      },
+      error,
+      { durationMs: opts.durationMs },
+    );
     this.schedulePersist();
   }
 
@@ -418,6 +505,8 @@ export class AdaptiveMcpPlugin {
     if (this.disposed) return;
     this.persist();
     this.disposed = true;
+    this.events?.abort();
+    this.events = undefined;
     this.cancelPersist();
     this.memory.close();
   }

@@ -48,6 +48,11 @@ export type OpenCodePluginInput = {
 export interface OpenCodeHooks {
   dispose?: () => Promise<void>;
   event?: (input: { event: OpenCodeEvent }) => Promise<void>;
+  /**
+   * V1 only: the model about to serve a chat turn. V2 exposes the same fact as a
+   * `session.model.selected` event instead (see `OpenCodeV2Event`).
+   */
+  "chat.params"?: (input: OpenCodeChatParamsInput, output: unknown) => Promise<void>;
   "tool.execute.before"?: (
     input: OpenCodeToolExecuteBeforeInput,
     output: OpenCodeToolExecuteBeforeOutput,
@@ -62,6 +67,16 @@ export type OpenCodePlugin = (
   input: OpenCodePluginInput,
   options?: Record<string, unknown>,
 ) => Promise<OpenCodeHooks>;
+
+/**
+ * V1's `chat.params` input, structurally. Builds differ in which id they carry —
+ * some send `{ providerID, modelID }`, others a `Model` with `{ id }` — so all
+ * three are accepted.
+ */
+export interface OpenCodeChatParamsInput {
+  sessionID: string;
+  model?: { id?: string; providerID?: string; modelID?: string };
+}
 
 /* ------------------------------------------------------------------ *
  * OpenCode V2 (structural mirrors)

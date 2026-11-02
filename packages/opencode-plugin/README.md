@@ -27,8 +27,7 @@ effects.
 ### What each hook does
 
 - `execute.before` → `MiddlewareChain.runBefore` + session-id tracking (V2
-  carries `sessionID` on every tool event, so no `ctx.event` subscription is
-  needed).
+  carries `sessionID` on every tool event).
 - `execute.after` (completed) → `TelemetryRecorder.complete` +
   `MiddlewareChain.runAfter({ ok: true })`.
 - `execute.after` (`status: "error"`) → `TelemetryRecorder.fail` +
@@ -40,6 +39,23 @@ effects.
 
 `runError` is never invoked: the middleware chain classifies failures through
 `runAfter({ ok: false })`, mirroring `@adaptivemcp/thin-client`.
+
+### Model attribution
+
+Every call is recorded against the model that was serving the session, as
+`provider/model`, so learned statistics can compare models at all. The signal differs
+by host generation:
+
+- **V1** reports it on `chat.params`, per chat turn.
+- **V2** has no chat hook, so the adapter subscribes to `ctx.event` and follows
+  `session.model.selected` (present in v2.0.32). The payload shape is not a published
+  type, so both a nested `{ model: { providerID, modelID } }` and flat ids are
+  accepted — a missing model must not cost the attribution, and a wrong one is worse
+  than none.
+
+The model is captured when a call **starts**, so a mid-turn switch does not relabel
+earlier calls, and `modelFor(sessionId)` exposes what was learned. If the host reports
+no model, the call is recorded without one rather than with a guess.
 
 ## Install / configure
 

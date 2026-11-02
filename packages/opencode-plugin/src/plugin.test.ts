@@ -17,6 +17,7 @@ import type {
   OpenCodeV2SetupContext,
   OpenCodeV2ToolExecuteAfterEvent,
   OpenCodeV2ToolExecuteBeforeEvent,
+  OpenCodeV2Event,
   OpenCodeV2ToolHookContext,
 } from "./types.js";
 
@@ -59,8 +60,61 @@ function captureMiddleware(): Middleware & {
   };
 }
 
+/** A controllable V2 event stream: push an event, let the plugin consume it. */
+interface EventStream extends AsyncIterable<OpenCodeV2Event> {
+  push(event: OpenCodeV2Event): void;
+  close(): void;
+  subscribe(options?: { signal?: AbortSignal }): AsyncIterable<OpenCodeV2Event>;
+}
+
+function eventStream(): EventStream {
+  const queue: OpenCodeV2Event[] = [];
+  let pending: ((result: IteratorResult<OpenCodeV2Event>) => void) | undefined;
+  let closed = false;
+
+  const finish = (): void => {
+    closed = true;
+    const resolve = pending;
+    pending = undefined;
+    resolve?.({ value: undefined as never, done: true });
+  };
+
+  const stream: EventStream = {
+    push(event) {
+      if (closed) return;
+      if (pending) {
+        const resolve = pending;
+        pending = undefined;
+        resolve({ value: event, done: false });
+      } else {
+        queue.push(event);
+      }
+    },
+    close: finish,
+    subscribe(options = {}) {
+      options.signal?.addEventListener("abort", finish);
+      return stream as AsyncIterable<OpenCodeV2Event>;
+    },
+    async *[Symbol.asyncIterator]() {
+      while (!closed) {
+        const queued = queue.shift();
+        if (queued) {
+          yield queued;
+          continue;
+        }
+        const next = await new Promise<IteratorResult<OpenCodeV2Event>>((resolve) => {
+          pending = resolve;
+        });
+        if (next.done) return;
+        yield next.value;
+      }
+    },
+  };
+  return stream;
+}
+
 /** A fake OpenCode **V2** setup context capturing registered tool hooks. */
-function v2Harness(options?: Record<string, unknown>) {
+function v2Harness(options?: Record<string, unknown>, events?: EventStream) {
   const hooks = new Map<string, (event: unknown) => void | Promise<void>>();
   const registrations: Array<{ disposed: boolean }> = [];
   const tool = {
@@ -80,6 +134,7 @@ function v2Harness(options?: Record<string, unknown>) {
   const ctx = {
     options,
     tool: tool as unknown as OpenCodeV2ToolHookContext,
+    ...(events ? { event: events } : {}),
   } satisfies OpenCodeV2SetupContext;
   return {
     ctx,
@@ -138,6 +193,7 @@ describe("@adaptivemcp/opencode-plugin (OpenCode V1)", () => {
   it("exposes exactly the real OpenCode V1 hooks", () => {
     const hooks = plugin.hooks();
     expect(Object.keys(hooks).sort()).toEqual([
+      "chat.params",
       "dispose",
       "event",
       "tool.execute.after",
@@ -145,6 +201,26 @@ describe("@adaptivemcp/opencode-plugin (OpenCode V1)", () => {
     ]);
     expect(hooks["tool.execute.before"]).toBeTypeOf("function");
     expect(hooks["tool.execute.after"]).toBeTypeOf("function");
+  });
+
+  it("attributes a call to the model V1 reports on chat.params", async () => {
+    const hooks = plugin.hooks();
+    await hooks["chat.params"]!(
+      { sessionID: "s1", model: { providerID: "local", modelID: "qwen3-8b" } },
+      {},
+    );
+    const complete = vi.spyOn(plugin.telemetry, "complete");
+
+    const b = before("deploy_service", "c1");
+    await hooks["tool.execute.before"]!(b.input, b.output);
+    const a = after("deploy_service", "c1");
+    await hooks["tool.execute.after"]!(a.input, a.output);
+
+    expect(plugin.modelFor("s1")).toBe("local/qwen3-8b");
+    expect(complete.mock.calls[0]?.[0]).toMatchObject({
+      toolName: "deploy_service",
+      model: "local/qwen3-8b",
+    });
   });
 
   it("records one completed execution (not an extra 'started') from before+after", async () => {
@@ -260,6 +336,51 @@ describe("@adaptivemcp/opencode-plugin (OpenCode V2)", () => {
 
     await cleanup();
     expect(h.registrations.every((r) => r.disposed)).toBe(true);
+  });
+
+  it("attributes a tool call to the model the host selected (V2 event)", async () => {
+    const events = eventStream();
+    const h = v2Harness(undefined, events);
+    const cleanup = await plugin.setup(h.ctx);
+    const complete = vi.spyOn(plugin.telemetry, "complete");
+
+    events.push({
+      type: "session.model.selected",
+      properties: { sessionID: "s1", model: { providerID: "local", modelID: "qwen3-coder-30b" } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(plugin.modelFor("s1")).toBe("local/qwen3-coder-30b");
+
+    await h.fire("execute.before", v2Before("deploy_service", "c1"));
+    await h.fire("execute.after", v2AfterCompleted("deploy_service", "c1"));
+
+    expect(complete.mock.calls[0]?.[0]).toMatchObject({
+      toolName: "deploy_service",
+      model: "local/qwen3-coder-30b",
+    });
+
+    events.close();
+    await cleanup();
+  });
+
+  it("accepts a flat model payload, and ignores an event with no model", async () => {
+    const events = eventStream();
+    const h = v2Harness(undefined, events);
+    const cleanup = await plugin.setup(h.ctx);
+
+    events.push({
+      type: "session.model.selected",
+      properties: { sessionID: "s2", providerID: "local-fast", modelID: "qwen3-8b" },
+    });
+    events.push({ type: "session.model.selected", properties: { sessionID: "s3" } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(plugin.modelFor("s2")).toBe("local-fast/qwen3-8b");
+    expect(plugin.modelFor("s3")).toBeUndefined();
+
+    events.close();
+    await cleanup();
   });
 
   it("throws a clear error when the host context has no tool.hook API", async () => {
