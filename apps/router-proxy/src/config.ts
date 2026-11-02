@@ -8,6 +8,25 @@
  */
 import { readFileSync } from "node:fs";
 
+/** How to run a backend the proxy may start and stop on its own. */
+export interface ManageSpec {
+  command: string;
+  args?: string[];
+  /**
+   * Extra environment for the process. A `null` **removes** an inherited variable —
+   * a stray `LLAMA_API_KEY` in the proxy's environment otherwise makes the server
+   * demand auth the host never sends.
+   */
+  env?: Record<string, string | null>;
+  /** Where to probe readiness; defaults to the origin of the backend's `baseURL`. */
+  baseURL?: string;
+  readyPath?: string;
+  /** How long a cold start may take before it is abandoned (default 180s). */
+  startTimeoutMs?: number;
+  /** Stop after this long without a request; `0` keeps it running (default 600s). */
+  idleTimeoutMs?: number;
+}
+
 export interface BackendConfig {
   /** OpenAI-compatible base URL, including `/v1`. */
   baseURL: string;
@@ -28,6 +47,8 @@ export interface BackendConfig {
   chatTemplateKwargs?: Record<string, unknown>;
   /** Backends to try, in order, if this one fails before anything is streamed. */
   fallback?: string[];
+  /** Present when this proxy may start and stop the backend itself. */
+  manage?: ManageSpec;
 }
 
 /** What a host-facing model id resolves to. */
@@ -87,12 +108,53 @@ export function parseConfig(raw: unknown, source = "config"): RouteConfig {
     ) {
       fail(source, `backends.${name}.fallback must be a list of backend names`);
     }
+    let manage: ManageSpec | undefined;
+    if (value.manage !== undefined) {
+      if (!isObject(value.manage)) fail(source, `backends.${name}.manage must be an object`);
+      const spec = value.manage;
+      if (typeof spec.command !== "string" || !spec.command) {
+        fail(source, `backends.${name}.manage.command must be a non-empty string`);
+      }
+      if (spec.args !== undefined && (!Array.isArray(spec.args) || !spec.args.every((a) => typeof a === "string"))) {
+        fail(source, `backends.${name}.manage.args must be a list of strings`);
+      }
+      if (spec.env !== undefined) {
+        if (
+          !isObject(spec.env) ||
+          !Object.values(spec.env).every((entry) => typeof entry === "string" || entry === null)
+        ) {
+          fail(source, `backends.${name}.manage.env must map names to strings (or null to unset)`);
+        }
+      }
+      if (spec.baseURL !== undefined && (typeof spec.baseURL !== "string" || !/^https?:\/\//.test(spec.baseURL))) {
+        fail(source, `backends.${name}.manage.baseURL must be an http(s) URL`);
+      }
+      if (spec.readyPath !== undefined && typeof spec.readyPath !== "string") {
+        fail(source, `backends.${name}.manage.readyPath must be a string`);
+      }
+      for (const key of ["startTimeoutMs", "idleTimeoutMs"] as const) {
+        const timeout = spec[key];
+        if (timeout !== undefined && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 0)) {
+          fail(source, `backends.${name}.manage.${key} must be a non-negative number`);
+        }
+      }
+      manage = {
+        command: spec.command,
+        args: spec.args as string[] | undefined,
+        env: spec.env as Record<string, string | null> | undefined,
+        baseURL: spec.baseURL as string | undefined,
+        readyPath: spec.readyPath as string | undefined,
+        startTimeoutMs: spec.startTimeoutMs as number | undefined,
+        idleTimeoutMs: spec.idleTimeoutMs as number | undefined,
+      };
+    }
     backends[name] = {
       baseURL: value.baseURL.replace(/\/+$/, ""),
       model: value.model,
       apiKeyEnv: value.apiKeyEnv as string | undefined,
       chatTemplateKwargs: value.chatTemplateKwargs as Record<string, unknown> | undefined,
       fallback: fallback as string[] | undefined,
+      manage,
     };
   }
 

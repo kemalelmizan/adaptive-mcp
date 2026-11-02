@@ -1,19 +1,28 @@
 /**
- * The HTTP surface: `GET /health`, `GET /v1/models`, `POST /v1/chat/completions`.
+ * The HTTP surface: `GET /health`, `GET /v1/models`, `GET /v1/backends`,
+ * `POST /v1/chat/completions`.
  *
  * It exists so a host can be pointed at a **virtual model** and stop caring where
  * the request goes. The routing decision is delegated to a `RoutePolicy`, and the
  * chosen backend is reported in `x-adaptive-route` — a route you cannot see is a
  * route you cannot debug.
+ *
+ * A backend with a `manage` spec is also started on demand and stopped when idle:
+ * the proxy is the only thing that knows a backend is about to be used, so it is
+ * the right owner of the process (see `lifecycle.ts`).
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import type { RouteConfig } from "./config.js";
 import { forwardChat, type UpstreamResponse } from "./forward.js";
+import { BackendLifecycle, type LifecycleDeps } from "./lifecycle.js";
 import { explicitPolicy, type ChatRequestBody, type RoutePolicy } from "./policy.js";
 
 /** Requests are conversations; a megabyte of JSON is already enormous. */
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
+
+/** How often idle backends are considered for a stop. */
+const SWEEP_MS = 15_000;
 
 export interface AppOptions {
   /** Injected in tests; defaults to a plain backend-per-model policy. */
@@ -22,12 +31,31 @@ export interface AppOptions {
   fetch?: typeof fetch;
   /** Where one line per request goes. Defaults to stderr. */
   log?: (line: string) => void;
+  /** Injected in tests: spawn/probe/clock for managed backends. */
+  lifecycle?: LifecycleDeps;
 }
 
 export function createApp(config: RouteConfig, options: AppOptions = {}): Server {
   const policy = options.policy ?? explicitPolicy;
   const log = options.log ?? ((line: string) => console.error(line));
   const doFetch = options.fetch;
+
+  // Only backends that say how to run themselves get a lifecycle. Everything else
+  // is presumed to be someone else's process and is never killed by this proxy.
+  const lifecycles = new Map<string, BackendLifecycle>(
+    Object.entries(config.backends)
+      .filter(([, backend]) => backend.manage)
+      .map(([name, backend]) => [name, new BackendLifecycle(name, backend, options.lifecycle)]),
+  );
+
+  const sweep = setInterval(() => {
+    for (const lifecycle of lifecycles.values()) {
+      void lifecycle.sweep().catch((error: unknown) => {
+        log(`[router-proxy] could not stop ${lifecycle.name}: ${String(error)}`);
+      });
+    }
+  }, SWEEP_MS);
+  sweep.unref();
 
   function json(res: ServerResponse, status: number, payload: unknown): void {
     const text = JSON.stringify(payload);
@@ -82,11 +110,32 @@ export function createApp(config: RouteConfig, options: AppOptions = {}): Server
     for (const [index, name] of chain.entries()) {
       const backend = config.backends[name];
       if (!backend) continue;
+      const last = index === chain.length - 1;
+
+      // A cold backend is started before the request is forwarded, so the host
+      // sees one slow turn rather than a connection error.
+      const lifecycle = lifecycles.get(name);
+      if (lifecycle) {
+        try {
+          await lifecycle.ensureRunning();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          log(`[router-proxy] ${name} is unavailable: ${message}`);
+          if (last) {
+            json(res, 502, {
+              error: { message: `backend ${name} is unavailable: ${message}`, type: "router_error" },
+            });
+            return;
+          }
+          continue;
+        }
+        lifecycle.touch();
+      }
+
       const attempt = await forwardChat(backend, body as Record<string, unknown>, {
         fetch: doFetch,
         authorization: req.headers.authorization,
       });
-      const last = index === chain.length - 1;
       if (attempt.status >= 500 && !last) {
         await attempt.body?.cancel().catch(() => undefined);
         log(`[router-proxy] ${name} answered ${attempt.status}; trying ${chain[index + 1]}`);
@@ -130,7 +179,7 @@ export function createApp(config: RouteConfig, options: AppOptions = {}): Server
     stream.pipe(res);
   }
 
-  return createServer((req, res) => {
+  const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
 
     const handle = async (): Promise<void> => {
@@ -147,6 +196,25 @@ export function createApp(config: RouteConfig, options: AppOptions = {}): Server
             owned_by: "adaptivemcp",
           })),
         });
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/v1/backends") {
+        // The lifecycle is visible: whether it is running, whether *we* started it,
+        // and when it last served a request is the whole point of managing it. A
+        // backend we have not started is asked directly, so a server someone else
+        // is running does not read as "stopped".
+        const data = await Promise.all(
+          Object.entries(config.backends).map(async ([name, backend]) => {
+            const lifecycle = lifecycles.get(name);
+            const status = lifecycle?.status() ?? { name, state: "external" as const, owned: false };
+            const state =
+              status.state === "stopped" && lifecycle && (await lifecycle.reachable())
+                ? "external"
+                : status.state;
+            return { ...status, state, model: backend.model, managed: Boolean(backend.manage) };
+          }),
+        );
+        json(res, 200, { object: "list", data });
         return;
       }
       if (req.method === "POST" && url.pathname === "/v1/chat/completions") {
@@ -169,4 +237,13 @@ export function createApp(config: RouteConfig, options: AppOptions = {}): Server
       }
     });
   });
+
+  server.on("close", () => {
+    clearInterval(sweep);
+    // Shutdown stops what this proxy started; anything it merely borrowed is left
+    // alone, because killing someone else's model server is not this process's call.
+    for (const lifecycle of lifecycles.values()) void lifecycle.close();
+  });
+
+  return server;
 }

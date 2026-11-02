@@ -8,12 +8,78 @@
     },
     "coder": {
       "baseURL": "http://127.0.0.1:8080/v1",
-      "model": "qwen3-coder-30b"
+      "model": "qwen3-coder-30b",
+      "manage": {
+        "command": "/usr/bin/llama-server",
+        "args": [
+          "-m",
+          "/home/kemal/models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "8080",
+          "--fit",
+          "on",
+          "--fit-target",
+          "256",
+          "--ctx-size",
+          "24576",
+          "--cache-type-k",
+          "q8_0",
+          "--cache-type-v",
+          "q8_0",
+          "--parallel",
+          "1",
+          "--jinja",
+          "--temp",
+          "0.3",
+          "-b",
+          "8192",
+          "-ub",
+          "4096",
+          "--load-mode",
+          "none",
+          "-fa",
+          "on"
+        ],
+        "env": { "LLAMA_API_KEY": null },
+        "readyPath": "/health",
+        "startTimeoutMs": 600000,
+        "idleTimeoutMs": 900000
+      }
     },
     "fast": {
       "baseURL": "http://127.0.0.1:8082/v1",
       "model": "qwen3-8b",
-      "chatTemplateKwargs": { "enable_thinking": false }
+      "chatTemplateKwargs": { "enable_thinking": false },
+      "manage": {
+        "command": "/usr/bin/llama-server",
+        "args": [
+          "-m",
+          "/home/kemal/models/Qwen3-8B-Q4_K_M.gguf",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "8082",
+          "--ctx-size",
+          "16384",
+          "--parallel",
+          "1",
+          "--jinja",
+          "--temp",
+          "0.3",
+          "-b",
+          "4096",
+          "-ub",
+          "4096",
+          "-fa",
+          "on"
+        ],
+        "env": { "CUDA_VISIBLE_DEVICES": "", "LLAMA_API_KEY": null },
+        "readyPath": "/health",
+        "startTimeoutMs": 600000,
+        "idleTimeoutMs": 900000
+      }
     }
   },
   "models": {

@@ -81,6 +81,46 @@ describe("router config", () => {
     expect(() => loadConfig(broken)).toThrow(/could not parse router config/);
   });
 
+  it("reads a manage spec, including an env var that is unset", () => {
+    const document = valid() as {
+      backends: Record<string, unknown>;
+      models: Record<string, unknown>;
+    };
+    document.backends.fast = {
+      baseURL: "http://127.0.0.1:8082/v1",
+      model: "qwen3-8b",
+      manage: {
+        command: "llama-server",
+        args: ["-m", "model.gguf"],
+        env: { CUDA_VISIBLE_DEVICES: "", LLAMA_API_KEY: null },
+        startTimeoutMs: 600_000,
+        idleTimeoutMs: 0,
+      },
+    };
+    document.models.fast = { backend: "fast" };
+
+    expect(parseConfig(document).backends.fast?.manage).toMatchObject({
+      command: "llama-server",
+      env: { CUDA_VISIBLE_DEVICES: "", LLAMA_API_KEY: null },
+      startTimeoutMs: 600_000,
+      idleTimeoutMs: 0,
+    });
+  });
+
+  it("rejects a manage spec with no command, or a negative timeout", () => {
+    const noCommand = valid() as { backends: Record<string, { manage?: unknown }> };
+    noCommand.backends.coder!.manage = { args: [] };
+    expect(() => parseConfig(noCommand)).toThrow(/manage\.command/);
+
+    const negative = valid() as { backends: Record<string, { manage?: unknown }> };
+    negative.backends.coder!.manage = { command: "llama-server", idleTimeoutMs: -1 };
+    expect(() => parseConfig(negative)).toThrow(/idleTimeoutMs/);
+
+    const badEnv = valid() as { backends: Record<string, { manage?: unknown }> };
+    badEnv.backends.coder!.manage = { command: "llama-server", env: { A: 1 } };
+    expect(() => parseConfig(badEnv)).toThrow(/manage\.env/);
+  });
+
   it("loads a file that passes validation", () => {
     dir = mkdtempSync(join(tmpdir(), "router-config-"));
     const path = join(dir, "ok.json");

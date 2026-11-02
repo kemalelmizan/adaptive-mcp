@@ -1,7 +1,34 @@
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
 import { parseConfig } from "./config.js";
 import { createApp } from "./app.js";
+
+/** A port nobody is listening on (bind, read, release). */
+async function freePort(): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const { port } = probe.address() as AddressInfo;
+  await new Promise<void>((resolve) => probe.close(() => resolve()));
+  return port;
+}
+
+async function listening(url: string): Promise<boolean> {
+  try {
+    return (await fetch(url, { signal: AbortSignal.timeout(500) })).status < 500;
+  } catch {
+    return false;
+  }
+}
+
+async function eventually(check: () => Promise<boolean>, timeoutMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await check()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return false;
+}
 
 interface Recorded {
   method?: string;
@@ -240,4 +267,71 @@ describe("router proxy", () => {
     const missing = await fetch(`${proxy.url}/v1/nope`);
     expect(missing.status).toBe(404);
   });
+
+  it("starts a managed backend on demand, reports it, and stops it on shutdown", async () => {
+    // A real child process in place of a model server: the point is the lifecycle,
+    // not the weights.
+    const port = await freePort();
+    const script = `
+      const http = require("node:http");
+      const server = http.createServer((req, res) => {
+        if (req.url === "/health") { res.writeHead(200); res.end("ok"); return; }
+        let body = "";
+        req.on("data", (chunk) => (body += chunk));
+        req.on("end", () => {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ choices: [{ message: { content: "cold-started" } }], saw: JSON.parse(body).model }));
+        });
+      });
+      server.listen(${port}, "127.0.0.1");
+    `;
+    const managed = parseConfig({
+      listen: { host: "127.0.0.1", port: 8083 },
+      backends: {
+        local: {
+          baseURL: `http://127.0.0.1:${port}/v1`,
+          model: "fake-local",
+          manage: {
+            command: process.execPath,
+            args: ["-e", script],
+            readyPath: "/health",
+            idleTimeoutMs: 0,
+          },
+        },
+      },
+      models: { local: { backend: "local" } },
+      defaultBackend: "local",
+    });
+    const proxy = await startProxy(managed);
+    proxies.push(proxy);
+
+    expect(await listening(`http://127.0.0.1:${port}/health`)).toBe(false);
+
+    const response = await fetch(`${proxy.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "local", messages: [] }),
+    });
+
+    const text = await response.text();
+    expect(response.status, text).toBe(200);
+    expect(response.headers.get("x-adaptive-route")).toBe("local");
+    expect(
+      (JSON.parse(text) as { choices: Array<{ message: { content: string } }> }).choices[0]?.message
+        .content,
+    ).toBe("cold-started");
+
+    const backends = (await (await fetch(`${proxy.url}/v1/backends`)).json()) as {
+      data: Array<{ state: string; owned: boolean; pid?: number }>;
+    };
+    expect(backends.data[0]).toMatchObject({ state: "running", owned: true });
+    expect(backends.data[0]?.pid).toBeTypeOf("number");
+
+    // Shutdown stops what the proxy started: a model that outlives the router is a
+    // resource leak the whole feature exists to prevent.
+    await proxy.close();
+    expect(await eventually(async () => !(await listening(`http://127.0.0.1:${port}/health`)))).toBe(
+      true,
+    );
+  }, 30_000);
 });
