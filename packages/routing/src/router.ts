@@ -1,4 +1,4 @@
-import type { Store, ToolRecord } from "@adaptivemcp/spec";
+import type { ModelStats, Store, ToolRecord } from "@adaptivemcp/spec";
 import type { GraphAnalyzer } from "@adaptivemcp/graph-analysis";
 
 export type WorkflowPosition = "critical_path" | "leaf" | "normal";
@@ -34,6 +34,11 @@ export interface RoutingOptions {
   budget?: BudgetPolicy;
   /** Minimum invocations before routing trusts observed stats. */
   minInvocations?: number;
+  /**
+   * Minimum calls a *model* must have on a tool before its record is used to
+   * prefer it (default 5). Below that, the static cost/latency heuristic decides.
+   */
+  minModelInvocations?: number;
 }
 
 /**
@@ -52,6 +57,7 @@ export class Router {
   private models: ModelOption[];
   private budget: BudgetPolicy;
   private minInvocations: number;
+  private minModelInvocations: number;
 
   constructor(options: RoutingOptions) {
     this.memory = options.memory;
@@ -61,6 +67,7 @@ export class Router {
     ];
     this.budget = options.budget ?? {};
     this.minInvocations = options.minInvocations ?? 10;
+    this.minModelInvocations = options.minModelInvocations ?? 5;
   }
 
   /** Evaluate every known tool and persist routing recommendations. */
@@ -79,8 +86,27 @@ export class Router {
     this.memory.clearRecommendations(toolName, "model", serverName);
     this.memory.clearRecommendations(toolName, "routing", serverName);
 
-    const model = this.selectModel(record);
-    if (model) {
+    // Evidence first: a model that has actually served this tool without failing is
+    // better evidence than a static cost weight. Only when no model has enough
+    // samples does the heuristic decide.
+    const observed = this.observedModel(toolName, serverName);
+    const model = observed ? undefined : this.selectModel(record);
+    if (observed) {
+      const avg =
+        observed.avgDurationMs === null ? "unknown" : `${Math.round(observed.avgDurationMs)}ms`;
+      this.memory.addRecommendation({
+        toolName,
+        serverName,
+        type: "model",
+        payload: { model: observed.model },
+        rationale:
+          `Observed on this tool: ${observed.invocations} calls with ${observed.model}, ` +
+          `${(observed.failureRate * 100).toFixed(0)}% failed, avg ${avg} — the best record ` +
+          `among models with enough samples.`,
+        confidence: confidenceFor(observed.invocations),
+        generatedAt: new Date().toISOString(),
+      });
+    } else if (model) {
       const avg = Math.round(record.stats.avgDurationMs ?? 0);
       const rationale =
         avg >= 500
@@ -143,6 +169,25 @@ export class Router {
   }
 
   /** Choose the cheapest model whose latency weight is acceptable for the tool. */
+  /**
+   * The model with the best record on this tool, when one has enough samples.
+   * Reliability first (failure rate), then latency, then cost: a model that fails
+   * less is worth waiting for, and among equals the cheaper one wins.
+   */
+  private observedModel(toolName: string, serverName?: string): ModelStats | undefined {
+    const stats = this.memory.modelStats?.(toolName, serverName) ?? [];
+    const candidates = stats.filter((entry) => entry.invocations >= this.minModelInvocations);
+    if (candidates.length === 0) return undefined;
+    candidates.sort(
+      (a, b) =>
+        a.failureRate - b.failureRate ||
+        (a.avgDurationMs ?? Number.POSITIVE_INFINITY) -
+          (b.avgDurationMs ?? Number.POSITIVE_INFINITY) ||
+        a.totalCost - b.totalCost,
+    );
+    return candidates[0];
+  }
+
   private selectModel(record: ToolRecord): ModelOption | undefined {
     const avg = record.stats.avgDurationMs ?? 0;
     // Fast tools (<500ms) can use the cheapest model; slower tools may need a

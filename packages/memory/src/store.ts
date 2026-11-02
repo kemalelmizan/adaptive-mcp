@@ -6,6 +6,7 @@ import type {
   Insight,
   MetricCell,
   MetricDimensions,
+  ModelStats,
   PlanStep,
   Recommendation,
   RecommendationType,
@@ -337,6 +338,19 @@ export class MemoryStore implements Store {
       .prepare(`SELECT * FROM metric_cells${where} ORDER BY tool_name, server_name, dims_key`)
       .all(...params) as unknown as MetricCellRow[];
     return rows.map(deserializeMetricCell);
+  }
+
+  /**
+   * Per-model performance for a tool, read from its per-model metric cells.
+   *
+   * Without a `serverName`, the same tool name across servers is summed. That is
+   * the honest reading of "this tool" when the store was not told which server —
+   * unlike `getTool`, which resolves the ambiguity by recency.
+   */
+  modelStats(toolName: string, serverName?: string): ModelStats[] {
+    return modelStatsFromCells(
+      this.metricCells(serverName === undefined ? { toolName } : { toolName, serverName }),
+    );
   }
 
   /** Pre-aggregate an event into the bounded set of metric cells it belongs to. */
@@ -1106,6 +1120,66 @@ function dimsKey(dims: MetricDimensions): string {
       .sort()
       .map((key) => [key, dims[key]]),
   );
+}
+
+/**
+ * Read per-model performance out of a tool's metric cells.
+ *
+ * Only the `{ model }` lifetime cell counts. The `{}` cell has no model, and a
+ * `{ model, decodingProfile, … }` cell is a *slice of the same calls*, so adding it
+ * would double-count them. The `other` bucket is the cardinality overflow, not a
+ * model anyone can choose.
+ */
+export function modelStatsFromCells(cells: MetricCell[]): ModelStats[] {
+  // Cells for the same model can come from different servers when no server was
+  // named; they are summed rather than overwritten.
+  const byModel = new Map<
+    string,
+    {
+      invocations: number;
+      failures: number;
+      durationSum: number;
+      durationCount: number;
+      totalCost: number;
+      lastObservedAt: string | null;
+    }
+  >();
+  for (const cell of cells) {
+    const model = cell.dimensions.model;
+    if (!model || model === "other") continue;
+    if (cell.window !== "all") continue;
+    if (Object.keys(cell.dimensions).length !== 1) continue;
+    const current = byModel.get(model) ?? {
+      invocations: 0,
+      failures: 0,
+      durationSum: 0,
+      durationCount: 0,
+      totalCost: 0,
+      lastObservedAt: null,
+    };
+    byModel.set(model, {
+      invocations: current.invocations + cell.invocations,
+      failures: current.failures + cell.failures,
+      durationSum: current.durationSum + cell.durationSum,
+      durationCount: current.durationCount + cell.durationCount,
+      totalCost: current.totalCost + cell.costSum,
+      lastObservedAt:
+        current.lastObservedAt === null || cell.lastSeen > current.lastObservedAt
+          ? cell.lastSeen
+          : current.lastObservedAt,
+    });
+  }
+  return [...byModel.entries()]
+    .map(([model, sums]) => ({
+      model,
+      invocations: sums.invocations,
+      failures: sums.failures,
+      failureRate: sums.invocations > 0 ? sums.failures / sums.invocations : 0,
+      avgDurationMs: sums.durationCount > 0 ? sums.durationSum / sums.durationCount : null,
+      totalCost: sums.totalCost,
+      lastObservedAt: sums.lastObservedAt,
+    }))
+    .sort((a, b) => a.model.localeCompare(b.model));
 }
 
 /** Hourly retention-window key for an ISO timestamp (UTC). */
