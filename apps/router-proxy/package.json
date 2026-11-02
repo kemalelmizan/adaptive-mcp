@@ -1,0 +1,17 @@
+{
+  "name": "@adaptivemcp/router-proxy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "An OpenAI-compatible router in front of a host: virtual models, a pluggable routing policy, and faithful streaming passthrough.",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "node --watch dist/index.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
