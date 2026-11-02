@@ -1,0 +1,26 @@
+{
+  "listen": { "host": "127.0.0.1", "port": 8083 },
+  "backends": {
+    "cloud": {
+      "baseURL": "https://opencode.ai/zen/v1",
+      "model": "deepseek-v4.1-flash",
+      "fallback": ["coder"]
+    },
+    "coder": {
+      "baseURL": "http://127.0.0.1:8080/v1",
+      "model": "qwen3-coder-30b"
+    },
+    "fast": {
+      "baseURL": "http://127.0.0.1:8082/v1",
+      "model": "qwen3-8b",
+      "chatTemplateKwargs": { "enable_thinking": false }
+    }
+  },
+  "models": {
+    "auto": { "policy": "auto" },
+    "cloud": { "backend": "cloud" },
+    "coder": { "backend": "coder" },
+    "fast": { "backend": "fast" }
+  },
+  "defaultBackend": "cloud"
+}
