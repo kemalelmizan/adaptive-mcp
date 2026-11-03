@@ -261,6 +261,14 @@ ESLint but not formatting, so nothing will catch it for you.
 - Can workflows emerge from telemetry?
 - Can metadata evolve safely?
 
+## Standards & conformance
+
+This repo is not an MCP SDK, so it has no SDK tier to claim — but
+[`docs/sdk-tiers.md`](docs/sdk-tiers.md) grades it against the
+[MCP SDK tiering requirements](https://modelcontextprotocol.io/community/sdk-tiers)
+(conformance, feature tracking, triage labels, releases, docs, dependency policy,
+roadmap) and names what is missing. Read it before claiming protocol support.
+
 ## Guiding sentence
 
 When making design decisions, optimize for this statement:
