@@ -11,3 +11,4 @@ means the decision has settled.
 | [002](002-server-governed-precedence.md)    | Server suggestions are a floor, never an override                    | Accepted |
 | [003](003-decoding-resolver.md)             | Table-driven, versioned decoding resolver                            | Accepted |
 | [004](004-archetype-component-ownership.md) | Where archetype components live (agent or library) — no new packages | Accepted |
+| [005](005-context-orchestration.md)         | Context orchestration is a host concern — four seams, no new package | Accepted |
