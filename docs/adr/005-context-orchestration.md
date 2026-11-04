@@ -92,8 +92,15 @@ supplies for tool behaviour: recording, aggregation and advisory recommendations
 
 ## Phases
 
-1. **P0** — assembly point + token estimate; a catalog with `/context`; lazy MCP
-   resources; per-category budgets.
+Tracked in the `Context orchestration` milestone of each repo.
+
+1. **P0** — the assembly point and token estimate
+   ([agent#87](https://github.com/adaptivemcp/agent/issues/87)); a catalog and
+   `/context` ([agent#88](https://github.com/adaptivemcp/agent/issues/88)); lazy MCP
+   resources ([agent#89](https://github.com/adaptivemcp/agent/issues/89)); per-category
+   budgets ([agent#90](https://github.com/adaptivemcp/agent/issues/90)). Measured by
+   [`context-bench`](https://github.com/kemalelmizan/adaptive-mcp/issues/66), which
+   lands before any selection work.
 2. **P1** — dependency edges; pin/expire/evict/restore; context telemetry as a metric
    dimension.
 3. **P2** — adaptive selection (an advisor over context metric cells) and
