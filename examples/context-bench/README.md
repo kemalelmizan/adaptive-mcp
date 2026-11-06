@@ -12,6 +12,7 @@ same corpus and tasks:
 | `all-upfront`                     | every document body                                                                                                                        |
 | `lexical(top3)`                   | the best 3 documents by term overlap with the question, zero-score ones excluded                                                           |
 | `progressive`                     | an index (title + summary) and bodies read on demand, following pointers                                                                   |
+| `compiled`                        | the same selection, rendered dense: only the fact-bearing sentences of each body (numbers, obligations, rules)                             |
 | `adaptive-select`                 | the same index and on-demand reads, ordered by what the store learned — pins, load counts, then relevance; **no** carry-over between tasks |
 | `adaptive-cold` / `adaptive-warm` | `adaptive-select` plus a session working set: first pass, then a second pass over what the first learned                                   |
 
@@ -63,6 +64,7 @@ strategy           pass   tokens   precision  recall  reads  hops  pollution
 all-upfront        10/10  280      0.08       1.00    0.0    0.0   0.92
 lexical(top3)      8/10   45       0.43       0.80    1.0    0.0   0.57
 progressive        10/10  249      0.85       1.00    1.3    0.2   0.15
+compiled           10/10  241      0.85       1.00    1.3    0.2   0.15
 adaptive-cold      9/10   299      0.33       0.90    0.8    0.2   0.67
 adaptive-warm      9/10   299      0.33       0.90    0.8    0.2   0.67
 adaptive-select    10/10  250      0.80       1.00    1.4    0.2   0.20
@@ -104,20 +106,22 @@ the template, not the strategy.
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        9/10   280      740
-lexical(top3)      8/10   45       997
-progressive        10/10  249      867
-adaptive-warm      8/10   299      656
+all-upfront        9/10   280      673
+lexical(top3)      8/10   45       876
+progressive        10/10  249      792
+compiled           10/10  241      1329
+adaptive-warm      8/10   299      643
 ```
 
 **Qwen3-8B (CPU):**
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        9/10   280      2604
-lexical(top3)      7/10   45       2110
-progressive        8/10   249      3811
-adaptive-warm      7/10   299      2116
+all-upfront        9/10   280      2493
+lexical(top3)      7/10   45       1733
+progressive        8/10   249      2035
+compiled           8/10   241      1852
+adaptive-warm      7/10   299      1831
 ```
 
 ### Reading the tables together
@@ -135,6 +139,14 @@ adaptive-warm      7/10   299      2116
   8/10 while progressive holds 10/10; with the 8B it ties progressive's weakest arm
   (7/10 vs 8/10). The larger, less focused prompt is the plausible cause — the extra
   documents are the ones learned to be "useful", which on a fresh task are not.
+- **Model-aware representation buys tokens, not accuracy.** `compiled` selects exactly
+  what `progressive` selects and renders it densely (83% of the body characters): 10/10
+  at 241 tokens on the 30B and 8/10 at 241 on the 8B — the same pass counts as
+  progressive, for ~3% fewer tokens. It does **not** fix the 8B's extraction failure,
+  and the misses show why: the 8B copies from the **index**, not from the bodies
+  (`"- constraint-eu"`, `"Retention policy"`, `"- billing-export"`). Compacted bodies
+  changed _what_ it echoed, not _whether_ it echoed. The lever is the index/instruction,
+  not text volume — which is a different experiment than the one P2 assumed.
 - So the gain from progressive disclosure is **model-dependent**, and on this pack it
   is largest where the model can use what it is given. The corollary the data now
   supports: a selection policy that ignores the model's ability to read is _worse_ than
@@ -163,6 +175,14 @@ matcher is part of the benchmark.
   recall and pollution by accident.
 - The model mode is opt-in: it needs a server, is not deterministic, and CI stays
   offline.
+- `representation` (`src/representation.ts`) is rule-based on purpose: a summariser
+  would make every table incomparable with the ones before it. `dense` keeps sentences
+  with a number or an obligation and drops narrative; a document with no such sentence
+  is kept whole, and numbered lists are not shredded into bare ordinals. A test asserts
+  every answering fact survives the render — otherwise the tables would be measuring
+  the renderer's omissions.
+- `compiled` reuses `progressive`'s selection exactly, so a difference between those two
+  rows is attributable to representation rather than to what was chosen.
 - `adaptive` (`src/adaptive.ts`) is a _policy over the store's records_, not a new
   subsystem: it reads `contextEdges`/`contextStats`/`contextLifecycle` and writes
   `recordContext`/`setContextLifecycle` after each task, so learning never influences
