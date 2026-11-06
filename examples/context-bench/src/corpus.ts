@@ -106,4 +106,51 @@ export const CORPUS: Document[] = [
     summary: "Retention: how long exported data is kept.",
     body: "Export files older than 90 days are purged automatically.",
   },
+  {
+    id: "catalog-api",
+    title: "Catalog API reference",
+    summary: "Catalog API reference: batching, writes, versions.",
+    body:
+      "The catalog API accepts at most 500 entries per request. " +
+      "Before changing a catalog write path, the constraints document applies; it is linked below.",
+    seeAlso: ["catalog-constraints"],
+  },
+  {
+    id: "catalog-constraints",
+    title: "Catalog constraints",
+    summary: "Catalog constraints for writes and versioning.",
+    body:
+      "Entry ordering must be preserved and the schema version bumped. " +
+      "An approval gate also applies; the rules are linked below.",
+    seeAlso: ["catalog-approval", "approval-rules-legacy"],
+  },
+  {
+    // Two hops from the question: reachable only through catalog-api, then
+    // catalog-constraints. Shares no term with the question on purpose.
+    id: "catalog-approval",
+    title: "Approval rules",
+    summary: "Sign-off requirements for structural work.",
+    body: "Two approvals are required before such a change ships.",
+  },
+  {
+    // Vocabulary-overlap distractor: plausible, adjacent, and wrong.
+    id: "approval-rules-legacy",
+    title: "Approval rules (legacy)",
+    summary: "Sign-off requirements: the retired workflow.",
+    body: "A single sign-off was enough under the retired workflow.",
+  },
+  {
+    // Vocabulary-overlap distractor: same words as the EU question, retired target.
+    id: "constraint-eu-legacy",
+    title: "EU traffic constraints (legacy)",
+    summary: "EU traffic constraints: the earlier latency target.",
+    body: "EU traffic was once capped at p99 5s; that target was retired.",
+  },
+  {
+    // Vocabulary-overlap distractor: same words as the retention question, old value.
+    id: "retention-policy-legacy",
+    title: "Data retention policy (legacy)",
+    summary: "Retention: how long exported data was kept.",
+    body: "Export files were once purged after 30 days; superseded.",
+  },
 ];

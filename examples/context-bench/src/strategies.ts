@@ -195,6 +195,24 @@ function progressiveWith(
       return true;
     };
 
+    /**
+     * Follow a document's pointers, and their pointers.
+     *
+     * One hop is not enough: a constraint can point at the rule that implements it,
+     * and then the answer is two links from the question. Depth is bounded by the read
+     * budget, not by a separate limit, because every hop costs a real read.
+     */
+    const follow = (id: string): void => {
+      for (const pointer of byId.get(id)?.seeAlso ?? []) {
+        if (found() || reads >= maxReads) return;
+        if (loaded.includes(pointer)) continue;
+        if (read(pointer)) {
+          hops += 1;
+          follow(pointer);
+        }
+      }
+    };
+
     const queue = corpus
       .map((doc) => ({ doc, score: score(question, `${doc.title} ${doc.summary}`) }))
       .filter((entry) => entry.score > 0)
@@ -205,20 +223,15 @@ function progressiveWith(
       const next = queue.shift();
       if (!next) break;
       read(next);
-      const pointers = byId.get(next)?.seeAlso ?? [];
-      for (const pointer of pointers) {
-        if (found() || reads >= maxReads) break;
-        if (read(pointer)) hops += 1;
-      }
+      follow(next);
     }
 
     // Each body is labelled with its id. Without it the model sees a pile of
     // unattributed prose (or, with an id-only index, no way to connect a name to a
     // body at all), which is a defect rather than a representation choice.
-    const text = [
-      index,
-      ...loaded.map((id, position) => `${id}:\n${bodies[position] ?? ""}`),
-    ].join("\n\n");
+    const text = [index, ...loaded.map((id, position) => `${id}:\n${bodies[position] ?? ""}`)].join(
+      "\n\n",
+    );
     return {
       strategy: name,
       text,
