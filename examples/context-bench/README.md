@@ -89,7 +89,7 @@ than a ranking one.** `catalog-constraints` declares its pointers in priority or
 (`catalog-approval` first), but `context_edges` returns them ordered by `(relation,
 target)`, so `approval-rules-legacy` comes first, the read budget is spent there, and the
 answer is never reached. Selection is not the bug; the record losing declared order is.
-Tracked as [adaptive-mcp#78](https://github.com/kemalelmizan/adaptive-mcp/issues/78), and
+Tracked as [adaptive-mcp#79](https://github.com/kemalelmizan/adaptive-mcp/issues/79), and
 a test asserts the current behaviour so a fix has to change it deliberately.
 
 ## Live-model runs

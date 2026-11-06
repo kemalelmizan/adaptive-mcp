@@ -79,7 +79,7 @@ describe("adaptive selection", () => {
     // answer first. `context_edges` orders by (relation, target), so the adaptive
     // strategy follows the legacy distractor first and spends its budget there.
     // Recorded rather than papered over: the fix belongs in the storage shape
-    // (an explicit ordinal), not in this ranking. See adaptive-mcp#78.
+    // (an explicit ordinal), not in this ranking. See adaptive-mcp#79.
     const memory = store();
     const strategy = adaptive(memory, { name: "cold", session: false });
     const task = TASKS.find((entry) => entry.id === "catalog-change")!;
