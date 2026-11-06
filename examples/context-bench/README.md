@@ -137,6 +137,27 @@ index-ids          8/11   126      3702
 adaptive-warm      9/11   440      3045
 ```
 
+### Routing on capability
+
+The last two tables disagree about retention, so the harness now routes rather than picks.
+`--model-profile capable|limited` declares what the host knows about the model, and the
+`routed` row takes the policy that profile selects:
+
+| Profile   | Policy                      | Why                                                                      |
+| --------- | --------------------------- | ------------------------------------------------------------------------ |
+| `capable` | fresh working set each task | it reads more per task and is not distracted by earlier documents        |
+| `limited` | retain the working set      | it reads less, and the documents stay where a small model can reuse them |
+
+```
+qwen3-coder-30b  --model-profile capable   routed 11/11 @367   (best fixed arm: progressive 11/11 @367)
+qwen3-8b         --model-profile limited   routed  9/11 @440   (best fixed arm: adaptive-warm 9/11 @440)
+```
+
+`routed` matches the best fixed arm on each model, which is the whole claim: no single
+policy wins both, and the seam is one predicate plus the host's own knowledge of its model.
+Guessing capability from a model name is deliberately **not** done — a host that knows its
+model declares it, and the wrong declaration shows up as the wrong arm's score.
+
 ### With the answer constraint (`--strict`)
 
 The same prompts, with an instruction that forbids quoting a list item, a line, or a
@@ -169,11 +190,12 @@ constraint does not fix retrieval, it just changes the failure text.)
 - **The 8B is the counter-case**: all-upfront 10/11 beats progressive 8/11. Its misses are
   copies of index entries (`"catalog-constraints, catalog-approval"`) rather than the
   fact, so its bottleneck is extraction, not availability.
-- **The working set flips sign with model size.** `adaptive-warm` is 9/11 on the 30B —
-  worse than progressive — but **9/11 on the 8B, better than every other strategy there**.
-  Keeping earlier documents in context is noise for the model that can already reason,
-  and scaffolding for the one that cannot. That is the first positive result for
-  retention, and it argues for routing on model capability rather than picking one policy.
+- **The working set flips sign with model size, so the policy is routed.** `adaptive-warm`
+  is 9/11 on the 30B — worse than progressive — but **9/11 on the 8B, better than every
+  other strategy there**. Routing on the declared capability (`--model-profile`) gives
+  `routed` = 11/11 on the 30B and 9/11 on the 8B: the best fixed arm for each. That is the
+  first positive result for retention, and the reason the harness no longer pretends one
+  strategy is right for every model.
 - **Vocabulary-overlap distractors cost everyone**: lexical falls to 7/11 (30B) and 6/11
   (8B), and it loses a _direct_ question (`deploy-rule`) to a `legacy` document that
   repeats the question's words. Similarity is neither necessary nor sufficient here.

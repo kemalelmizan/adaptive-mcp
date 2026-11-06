@@ -14,6 +14,7 @@ import { CORPUS } from "./corpus.js";
 import { answersCorrectly, askModel, modelFromEnv } from "./model.js";
 import { adaptive, learnFromTask, seedEdges } from "./adaptive.js";
 import { representationRatio } from "./representation.js";
+import { profileFromEnv, policyFor, routed } from "./routing.js";
 import { allUpfront, compiled, idIndex, lexical, progressive } from "./strategies.js";
 import { TASKS } from "./tasks.js";
 import { MemoryStore } from "@adaptivemcp/memory";
@@ -79,8 +80,10 @@ if (interesting.length > 0) {
 
 const model = modelFromEnv(argv);
 if (model) {
+  const profile = profileFromEnv(argv);
   console.log(
-    `\nmodel: ${model.model} at ${model.baseURL}${model.strict ? " (strict answers)" : ""}`,
+    `\nmodel: ${model.model} at ${model.baseURL}${model.strict ? " (strict answers)" : ""}` +
+      `\nrouted: ${profile} → ${policyFor(profile)} the working set`,
   );
   interface LiveRow {
     strategy: string;
@@ -107,6 +110,8 @@ if (model) {
       trainer.session().filter((id) => !before.has(id)),
     );
   }
+  // The routed arm: the policy the declared capability selects, so the table shows what
+  // a host that knows its model would actually do.
   const liveStrategies = [
     allUpfront,
     lexical(),
@@ -114,6 +119,10 @@ if (model) {
     compiled(),
     idIndex(),
     adaptive(liveStore, { name: "adaptive-warm" }),
+    routed(profile, {
+      retain: adaptive(liveStore, { name: "routed", session: true }),
+      fresh: progressive(),
+    }),
   ];
   for (const strategy of liveStrategies) {
     for (const task of TASKS) {
