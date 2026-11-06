@@ -74,24 +74,42 @@ describe("adaptive selection", () => {
     memory.close();
   });
 
-  it("loses the second hop because the store returns edges in key order, not declared order", () => {
-    // `catalog-constraints` declares [catalog-approval, approval-rules-legacy] — the
-    // answer first. `context_edges` orders by (relation, target), so the adaptive
-    // strategy follows the legacy distractor first and spends its budget there.
-    // Recorded rather than papered over: the fix belongs in the storage shape
-    // (an explicit ordinal), not in this ranking. See adaptive-mcp#79.
+  it("reaches the second hop now that edges keep declared order", () => {
+    // The bug this replaced: `context_edges` returned pointers by (relation, target), so
+    // `catalog-constraints` yielded the legacy distractor first and the read budget was
+    // spent there. With an ordinal, the declared order survives and the answer is third.
     const memory = store();
     const strategy = adaptive(memory, { name: "cold", session: false });
     const task = TASKS.find((entry) => entry.id === "catalog-change")!;
 
     const outcome = runTask(task, CORPUS, strategy);
 
-    expect(outcome.success).toBe(false);
-    expect(outcome.loaded).toContain("approval-rules-legacy");
+    expect(outcome.success).toBe(true);
+    expect(outcome.loaded).toEqual(["catalog-api", "catalog-constraints", "catalog-approval"]);
+    expect(outcome.hops).toBe(2);
     expect(memory.contextEdges("catalog-constraints").map((edge) => edge.to)).toEqual([
-      "approval-rules-legacy",
       "catalog-approval",
+      "approval-rules-legacy",
     ]);
+    memory.close();
+  });
+
+  it("follows a pointer from a document the session already carries", () => {
+    // The second face of the same bug: with a working set, a loaded document's edges
+    // were never traversed, so `billing-change` could not reach `retention-policy`.
+    const memory = store();
+    const strategy = adaptive(memory, { name: "session", session: true });
+    runTask(
+      TASKS.find((entry) => entry.id === "billing-destination")!,
+      CORPUS,
+      strategy,
+    );
+    const query = TASKS.find((entry) => entry.id === "billing-change")!;
+
+    const outcome = runTask(query, CORPUS, strategy);
+
+    expect(outcome.success).toBe(true);
+    expect(strategy.session()).toContain("retention-policy");
     memory.close();
   });
 

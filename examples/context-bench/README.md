@@ -75,22 +75,31 @@ lexical(top3)      7/11   56       0.36       0.64    1.0    0.0   0.64
 progressive        11/11  367      0.74       1.00    1.6    0.4   0.26
 compiled           11/11  359      0.74       1.00    1.6    0.4   0.26
 index-ids          11/11  126      0.74       1.00    1.6    0.4   0.26
-adaptive-cold      10/11  431      0.28       0.91    0.9    0.2   0.72
-adaptive-warm      9/11   421      0.30       0.82    1.0    0.4   0.70
-adaptive-select    10/11  359      0.73       0.91    1.5    0.4   0.27
+adaptive-cold      11/11  451      0.28       1.00    1.1    0.2   0.72
+adaptive-warm      11/11  440      0.30       1.00    1.2    0.4   0.70
+adaptive-select    11/11  360      0.74       1.00    1.6    0.4   0.24
 ```
 
 `lexical` reaches 7 of 11: it misses all three hidden tasks, and one direct question is
-lost to a `legacy` distractor that shares its vocabulary. `progressive`, `compiled` and
-`index-ids` reach all 11 — including the two-hop chain, at 3 reads and 2 hops.
+lost to a `legacy` distractor that shares its vocabulary. Everything else reaches all 11,
+including the two-hop chain.
 
-**The adaptive rows now fail the second hop, and the reason is a storage detail rather
-than a ranking one.** `catalog-constraints` declares its pointers in priority order
-(`catalog-approval` first), but `context_edges` returns them ordered by `(relation,
-target)`, so `approval-rules-legacy` comes first, the read budget is spent there, and the
-answer is never reached. Selection is not the bug; the record losing declared order is.
-Tracked as [adaptive-mcp#79](https://github.com/kemalelmizan/adaptive-mcp/issues/79), and
-a test asserts the current behaviour so a fix has to change it deliberately.
+**The adaptive rows reach the second hop now, and getting there fixed three bugs rather
+than tuning a ranking** ([#79](https://github.com/kemalelmizan/adaptive-mcp/issues/79)):
+
+1. `context_edges` had no ordinal, so it returned a document's pointers in `(relation,
+target)` order. `catalog-constraints` declares the answer first and the distractor
+   second; the strategy followed the distractor and spent its budget. Migration 9 adds an
+   `ordinal`, and recording appends when none is given.
+2. The strategy stopped early because its "answer is present" check used a plain
+   `includes`, so `"5 minutes"` matched inside `"15 minutes"` — the same trap the scorer
+   fixed, missed in the stop condition.
+3. With a session working set, a document already in context had its pointers ignored, so
+   a follow-up question could not reach the document it named.
+
+The result is a real trade rather than a win: adaptive reads less than progressive (1.1
+vs 1.6 per task) and carries more (451 vs 367 tokens), because the working set keeps what
+earlier tasks loaded.
 
 ## Live-model runs
 
@@ -108,24 +117,24 @@ the template, not the strategy.
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        10/11  408      1294
-lexical(top3)      7/11   56       731
+all-upfront        10/11  408      1295
+lexical(top3)      7/11   56       726
 progressive        11/11  367      995
-compiled           11/11  359      1287
-index-ids          10/11  126      1482
-adaptive-warm      7/11   421      692
+compiled           11/11  359      1294
+index-ids          10/11  126      1489
+adaptive-warm      9/11   440      735
 ```
 
 **Qwen3-8B (CPU):**
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        10/11  408      3629
-lexical(top3)      6/11   56       2266
-progressive        8/11   367      2674
-compiled           8/11   359      4523
-index-ids          8/11   126      3560
-adaptive-warm      7/11   421      2951
+all-upfront        10/11  408      3694
+lexical(top3)      6/11   56       2149
+progressive        8/11   367      2673
+compiled           8/11   359      4617
+index-ids          8/11   126      3702
+adaptive-warm      9/11   440      3045
 ```
 
 ### With the answer constraint (`--strict`)
@@ -152,37 +161,34 @@ constraint does not fix retrieval, it just changes the failure text.)
 
 ### Reading the tables together
 
-- The deterministic table says the information is **available**: progressive 11/11,
-  including the two-hop chain.
-- **The 30B gets the second hop after one is added**, which is the useful result: given
-  the pointer chain, it reads `catalog-api`, follows to `catalog-constraints`, follows
-  again, and answers "Two approvals" — 11/11. All-upfront (10/11) and `index-ids`
-  (10/11) each miss one hidden task, so the pointer chain is doing work that volume does
-  not.
-- **The 8B is the counter-case**: all-upfront 10/11 beats progressive 8/11. Given the
-  index it copies index entries (`"- constraint-eu"`, `"catalog-constraints,
-catalog-approval"`), and given everything it answers the pointer sentence instead of
-  the fact. Its bottleneck is extraction, not availability.
+- The deterministic table says the information is **available**: every strategy except
+  lexical reaches 11/11, including the two-hop chain.
+- **The 30B gets the second hop** when the chain is supplied (progressive 11/11), while
+  volume (all-upfront 10/11) and a compressed index (`index-ids` 10/11) each miss one. The
+  pointer chain does work that neither size nor brevity does.
+- **The 8B is the counter-case**: all-upfront 10/11 beats progressive 8/11. Its misses are
+  copies of index entries (`"catalog-constraints, catalog-approval"`) rather than the
+  fact, so its bottleneck is extraction, not availability.
+- **The working set flips sign with model size.** `adaptive-warm` is 9/11 on the 30B —
+  worse than progressive — but **9/11 on the 8B, better than every other strategy there**.
+  Keeping earlier documents in context is noise for the model that can already reason,
+  and scaffolding for the one that cannot. That is the first positive result for
+  retention, and it argues for routing on model capability rather than picking one policy.
 - **Vocabulary-overlap distractors cost everyone**: lexical falls to 7/11 (30B) and 6/11
   (8B), and it loses a _direct_ question (`deploy-rule`) to a `legacy` document that
   repeats the question's words. Similarity is neither necessary nor sufficient here.
-- **Adaptive selection still does not pay for itself**, and the new pack shows two
-  distinct reasons: the larger working set loses one-hop tasks with the 30B (7/11), and
-  the store's edge ordering loses the second hop deterministically (see above). Both are
-  recorded rather than tuned away.
 - **Model-aware representation buys tokens, not accuracy.** `compiled` selects exactly
   what `progressive` selects and renders it densely (88% of the body characters): the same
   11/11 on the 30B for 8 fewer tokens, and the same 8/11 on the 8B.
 - **The index shape remains the cheap win for the capable model**: `index-ids` reaches
   10/11 on the 30B at **126 tokens against 367** — a third of the prompt — but gives up
-  the second hop, because with no summaries and no pointer sentence the model has less to
-  follow. For the 8B it is 8/11 at 126, the same as progressive.
-- **The answer constraint is counter-productive** on both models (30B 11 → 9), which is
-  the second time it has been measured and the second time it failed.
-- So the gain from progressive disclosure is **model-dependent**, and on this pack it is
-  largest where the model can use what it is given. A selection policy that ignores the
-  model's ability to read is _worse_ than no policy, which is why ADR-005 puts measurement
-  before retrieval.
+  the second hop. For the 8B it is 8/11 at 126, the same as progressive.
+- **The answer constraint is counter-productive** on both models (30B 11 → 9), measured
+  twice with the same direction.
+- So the gain from progressive disclosure is **model-dependent**, and the corollary is
+  sharper now: the same retention policy helps a small model and hurts a large one. A
+  selection policy that ignores the model it serves is _worse_ than no policy, which is
+  why ADR-005 puts measurement before retrieval.
 
 ## Caveats
 

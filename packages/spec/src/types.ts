@@ -350,6 +350,12 @@ export interface ContextEdge {
   from: string;
   to: string;
   relation?: ContextRelation;
+  /**
+   * Position in the order the host declared. Pointer order is meaningful — a document
+   * lists what to read first — so the record keeps it. Omit it and the store appends,
+   * which is what a host that records in declaration order wants.
+   */
+  ordinal?: number;
   /** Why the edge exists, in the host's words. */
   reason?: string;
   createdAt?: string;

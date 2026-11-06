@@ -215,6 +215,17 @@ CREATE TABLE IF NOT EXISTS context_lifecycle (
 CREATE INDEX IF NOT EXISTS idx_context_lifecycle_state ON context_lifecycle(state);
 `),
   },
+  {
+    version: 9,
+    name: "add_context_edge_ordinal",
+    up: (db) =>
+      db.exec(`
+-- Pointer order is part of the record: a document lists what to read first, and a host
+-- following the edges should follow them in that order. Existing rows get 0 and fall
+-- back to the previous (relation, to_item) ordering, which is what they had.
+ALTER TABLE context_edges ADD COLUMN ordinal INTEGER NOT NULL DEFAULT 0;
+`),
+  },
 ];
 
 /** Applies every migration in `migrations` that hasn't already been recorded, in version order. */

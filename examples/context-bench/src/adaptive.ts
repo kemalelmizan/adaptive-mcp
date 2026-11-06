@@ -18,6 +18,8 @@
  */
 import { MemoryStore } from "@adaptivemcp/memory";
 
+import { textIncludesAnswer } from "./bench.js";
+
 import type { Document } from "./corpus.js";
 import type { BenchTask } from "./tasks.js";
 import { estimateTokens, score, terms, type ContextResult, type Strategy } from "./strategies.js";
@@ -116,8 +118,13 @@ export function adaptive(store: MemoryStore, options: AdaptiveOptions = {}): Ada
 
     let reads = 0;
     let hops = 0;
+    // Boundary-aware, like the scorer: `"5 minutes"` is a substring of `"15 minutes"`,
+    // so a plain `includes` stops the loop on a document that does not answer.
     const answerInWorkingSet = (): boolean =>
-      loaded.some((id) => byId.get(id)?.body.includes(task.answer) ?? false);
+      loaded.some((id) => {
+        const body = byId.get(id)?.body;
+        return body !== undefined && textIncludesAnswer(body, task.answer);
+      });
 
     const read = (id: string): boolean => {
       if (!byId.has(id) || reads >= maxReads) return false;
@@ -151,8 +158,18 @@ export function adaptive(store: MemoryStore, options: AdaptiveOptions = {}): Ada
       .sort((a, b) => rank(b.id, b.lexical) - rank(a.id, a.lexical) || a.id.localeCompare(b.id))
       .map((entry) => entry.id);
 
-    while (!answerInWorkingSet() && reads < maxReads && candidates.length > 0) {
-      const next = candidates.shift()!;
+    // A document already in the working set still names pointers, and those targets may
+    // not be loaded. Following them costs nothing for the source and one read per target.
+    for (const id of [...loaded]) {
+      if (!answerInWorkingSet() && reads < maxReads) follow(id);
+    }
+
+    while (!answerInWorkingSet() && reads < maxReads) {
+      // Skip what the session already carries: re-consulting a loaded document costs a
+      // turn without adding evidence, and with a full working set it stalls the loop.
+      const position = candidates.findIndex((id) => !loaded.includes(id));
+      if (position === -1) break;
+      const next = candidates.splice(position, 1)[0]!;
       if (!read(next)) break;
       // A pointer is stronger evidence than a term overlap: follow it now.
       follow(next);
