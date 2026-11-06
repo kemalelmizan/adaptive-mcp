@@ -31,6 +31,7 @@ describe("context edges", () => {
         from: "api-payments",
         to: "constraint-eu",
         relation: "requires",
+        ordinal: 0,
         reason: "EU traffic constraint",
         createdAt: "2026-11-06T00:00:00.000Z",
       },
@@ -60,7 +61,38 @@ describe("context edges", () => {
     expect(store.contextEdges("nope")).toEqual([]);
   });
 
-  it("orders deterministically, by from then relation then to", () => {
+  it("keeps the order the host declared, not the alphabetical order of targets", () => {
+    // Two pointers out of one document: the first declared is the one to read first.
+    store.recordContextEdge({ from: "catalog-constraints", to: "catalog-approval" });
+    store.recordContextEdge({ from: "catalog-constraints", to: "approval-rules-legacy" });
+
+    expect(store.contextEdges("catalog-constraints").map((edge) => edge.to)).toEqual([
+      "catalog-approval",
+      "approval-rules-legacy",
+    ]);
+    expect(store.contextEdges("catalog-constraints").map((edge) => edge.ordinal)).toEqual([0, 1]);
+  });
+
+  it("honours an explicit ordinal and appends after the highest one", () => {
+    store.recordContextEdge({ from: "doc", to: "third", ordinal: 10 });
+    store.recordContextEdge({ from: "doc", to: "first", ordinal: 1 });
+    store.recordContextEdge({ from: "doc", to: "last" });
+
+    expect(store.contextEdges("doc").map((edge) => edge.to)).toEqual(["first", "third", "last"]);
+  });
+
+  it("re-recording an edge keeps its place, and replaces its reason", () => {
+    store.recordContextEdge({ from: "doc", to: "second" });
+    store.recordContextEdge({ from: "doc", to: "first", ordinal: 0 });
+    // `second` was appended at 1; rewriting it must not move it to the end.
+    store.recordContextEdge({ from: "doc", to: "second", reason: "rewritten" });
+
+    const edges = store.contextEdges("doc");
+    expect(edges.map((edge) => edge.to)).toEqual(["first", "second"]);
+    expect(edges[1]?.reason).toBe("rewritten");
+  });
+
+  it("orders across documents deterministically, by from then relation then ordinal", () => {
     store.recordContextEdge({ from: "b", to: "a" });
     store.recordContextEdge({ from: "a", to: "z" });
     store.recordContextEdge({ from: "a", to: "y", relation: "see-also" });
@@ -83,7 +115,11 @@ describe("context edges", () => {
     const second = new MemoryStore({ path });
     try {
       expect(second.contextEdges()).toEqual([
-        expect.objectContaining({ from: "api-payments", to: "constraint-eu", relation: "see-also" }),
+        expect.objectContaining({
+          from: "api-payments",
+          to: "constraint-eu",
+          relation: "see-also",
+        }),
       ]);
     } finally {
       second.close();

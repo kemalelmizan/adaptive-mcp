@@ -412,15 +412,29 @@ export class MemoryStore implements Store {
    * re-derive its edges on every startup without growing the table.
    */
   recordContextEdge(edge: ContextEdge): void {
+    const relation = edge.relation ?? "requires";
+    // Pointer order is meaningful: a document lists what to read first. An explicit
+    // ordinal wins; otherwise append, so a host recording in declaration order needs to
+    // think about nothing. Re-recording the same edge replaces it in place.
+    const ordinal =
+      edge.ordinal ??
+      (
+        this.db
+          .prepare(`SELECT MAX(ordinal) AS max FROM context_edges WHERE from_item = ?`)
+          .get(edge.from) as { max: number | null } | undefined
+      )?.max ??
+      -1;
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO context_edges (from_item, to_item, relation, reason, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO context_edges
+           (from_item, to_item, relation, ordinal, reason, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(
         edge.from,
         edge.to,
-        edge.relation ?? "requires",
+        relation,
+        edge.ordinal ?? ordinal + 1,
         edge.reason ?? null,
         edge.createdAt ?? new Date().toISOString(),
       );
@@ -428,14 +442,21 @@ export class MemoryStore implements Store {
 
   /** Every recorded edge, or those leaving one item, in a stable order. */
   contextEdges(from?: string): ContextEdge[] {
+    // Order by what the host declared, not by the target's name: a host following these
+    // edges must follow them in the order the document listed them.
     const rows = (from === undefined
-      ? this.db.prepare(`SELECT * FROM context_edges ORDER BY from_item, relation, to_item`).all()
+      ? this.db
+          .prepare(`SELECT * FROM context_edges ORDER BY from_item, relation, ordinal, to_item`)
+          .all()
       : this.db
-          .prepare(`SELECT * FROM context_edges WHERE from_item = ? ORDER BY relation, to_item`)
+          .prepare(
+            `SELECT * FROM context_edges WHERE from_item = ? ORDER BY relation, ordinal, to_item`,
+          )
           .all(from)) as unknown as Array<{
       from_item: string;
       to_item: string;
       relation: string;
+      ordinal: number;
       reason: string | null;
       created_at: string;
     }>;
@@ -443,6 +464,7 @@ export class MemoryStore implements Store {
       from: row.from_item,
       to: row.to_item,
       relation: row.relation as ContextRelation,
+      ordinal: row.ordinal,
       ...(row.reason !== null ? { reason: row.reason } : {}),
       createdAt: row.created_at,
     }));
