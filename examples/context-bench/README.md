@@ -19,19 +19,27 @@ same corpus and tasks:
 
 ## The pack
 
-10 tasks over 13 documents. Eight tasks are answerable from a document whose
-vocabulary overlaps the question; **two are not** — their answer lives in a document
-sharing no terms with the question, reachable only by following a pointer:
+11 tasks over 19 documents. Eight are answerable from a document whose vocabulary
+overlaps the question; **three are not** — their answer lives in a document sharing no
+term with the question, reachable only by following pointers:
 
-| Hidden task                  | Route                                             |
-| ---------------------------- | ------------------------------------------------- |
-| payments API timeout change  | `api-payments` → `constraint-eu` ("p99 under 2s") |
-| billing export format change | `billing-export` → `retention-policy` ("90 days") |
+| Hidden task                  | Route                                                                        | Hops  |
+| ---------------------------- | ---------------------------------------------------------------------------- | ----- |
+| payments API timeout change  | `api-payments` → `constraint-eu` ("p99 under 2s")                            | 1     |
+| billing export format change | `billing-export` → `retention-policy` ("90 days")                            | 1     |
+| catalog API batching change  | `catalog-api` → `catalog-constraints` → `catalog-approval` ("Two approvals") | **2** |
 
-Five `legacy` documents are deliberate distractors: they match the questions' words
-and hold the wrong facts, so precision and pollution mean something. A test asserts
-that each hidden answer document shares no term with its question, so the benchmark
-cannot quietly stop testing what it claims.
+The last one is the second-hop case: the document the question matches points at a
+constraint, which points at the rule that actually answers. A strategy that follows one
+pointer and stops cannot reach it, and a test asserts the question-matching document does
+**not** point at the answer directly.
+
+Three `legacy` documents are deliberate vocabulary-overlap distractors: they repeat the
+questions' words and hold retired values (`p99 5s`, `30 days`, a single sign-off), so
+precision and pollution mean something and similarity alone is not enough. Tests assert
+that each hidden answer document shares no term with its question, and that at least one
+direct question is defeated by a distractor — a benchmark where similarity always wins
+would not be testing anything.
 
 ## What it measures — and what it does not
 
@@ -62,40 +70,27 @@ pnpm --filter @adaptivemcp/context-bench bench
 
 ```
 strategy           pass   tokens   precision  recall  reads  hops  pollution
-all-upfront        10/10  280      0.08       1.00    0.0    0.0   0.92
-lexical(top3)      8/10   45       0.43       0.80    1.0    0.0   0.57
-progressive        10/10  254      0.85       1.00    1.3    0.2   0.15
-compiled           10/10  246      0.85       1.00    1.3    0.2   0.15
-index-ids          10/10  84       0.85       1.00    1.3    0.2   0.15
-adaptive-cold      9/10   299      0.33       0.90    0.8    0.2   0.67
-adaptive-warm      9/10   299      0.33       0.90    0.8    0.2   0.67
-adaptive-select    10/10  250      0.80       1.00    1.4    0.2   0.20
+all-upfront        11/11  408      0.05       1.00    0.0    0.0   0.95
+lexical(top3)      7/11   56       0.36       0.64    1.0    0.0   0.64
+progressive        11/11  367      0.74       1.00    1.6    0.4   0.26
+compiled           11/11  359      0.74       1.00    1.6    0.4   0.26
+index-ids          11/11  126      0.74       1.00    1.6    0.4   0.26
+adaptive-cold      10/11  431      0.28       0.91    0.9    0.2   0.72
+adaptive-warm      9/11   421      0.30       0.82    1.0    0.4   0.70
+adaptive-select    10/11  359      0.73       0.91    1.5    0.4   0.27
 ```
 
-`lexical` misses both hidden tasks: it loads `api-payments` / `billing-export` and
-never the documents they point at. `progressive` reads two documents per hidden task —
-one to find the pointer, one to follow it.
+`lexical` reaches 7 of 11: it misses all three hidden tasks, and one direct question is
+lost to a `legacy` distractor that shares its vocabulary. `progressive`, `compiled` and
+`index-ids` reach all 11 — including the two-hop chain, at 3 reads and 2 hops.
 
-**`index-ids` is the strongest row here:** identical selection and reads to
-`compiled`, same 10/10, at **84 tokens instead of 246** — because the summaries were
-most of the prompt. Deterministically that is free; with a model it is the experiment
-below.
-
-**The adaptive rows are a negative result, and that is the finding.** They are built on
-the store's own P1 records — `contextEdges` for pointers, `contextStats` for what has
-been loaded, `contextLifecycle` pins for what actually answered — so they are the
-honest test of P2, not a straw man:
-
-- `adaptive-select` reads _more_ than `progressive` (1.4 vs 1.3 per task), costs about
-  the same, and pollutes more (0.20 vs 0.15). Selection, without retention, adds
-  nothing here: on a 13-document corpus the lexical ranking is already the right
-  ranking, and pins/load counts only perturb ties.
-- The session variants trade reads for tokens and lose a task (9/10). Keeping a working
-  set means fewer reads (0.8) but a prompt that grows to carry everything read so far
-  (299 tokens vs 249), and the one miss is a case where the working set was full of
-  earlier answers and the right document never got read inside the read budget.
-- `adaptive-cold` and `adaptive-warm` are identical, which is itself information: one
-  pass of experience did not change a single selection on this pack.
+**The adaptive rows now fail the second hop, and the reason is a storage detail rather
+than a ranking one.** `catalog-constraints` declares its pointers in priority order
+(`catalog-approval` first), but `context_edges` returns them ordered by `(relation,
+target)`, so `approval-rules-legacy` comes first, the read budget is spent there, and the
+answer is never reached. Selection is not the bug; the record losing declared order is.
+Tracked as [adaptive-mcp#78](https://github.com/kemalelmizan/adaptive-mcp/issues/78), and
+a test asserts the current behaviour so a fix has to change it deliberately.
 
 ## Live-model runs
 
@@ -113,24 +108,24 @@ the template, not the strategy.
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        9/10   280      673
-lexical(top3)      8/10   45       877
-progressive        10/10  254      998
-compiled           9/10   246      977
-index-ids          10/10  84       1191
-adaptive-warm      8/10   299      688
+all-upfront        10/11  408      1294
+lexical(top3)      7/11   56       731
+progressive        11/11  367      995
+compiled           11/11  359      1287
+index-ids          10/11  126      1482
+adaptive-warm      7/11   421      692
 ```
 
 **Qwen3-8B (CPU):**
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        9/10   280      2497
-lexical(top3)      7/10   45       1743
-progressive        8/10   254      2213
-compiled           8/10   246      1873
-index-ids          8/10   84       2066
-adaptive-warm      7/10   299      1964
+all-upfront        10/11  408      3629
+lexical(top3)      6/11   56       2266
+progressive        8/11   367      2674
+compiled           8/11   359      4523
+index-ids          8/11   126      3560
+adaptive-warm      7/11   421      2951
 ```
 
 ### With the answer constraint (`--strict`)
@@ -140,55 +135,54 @@ document title and demands the exact value:
 
 ```
 qwen3-coder-30b        qwen3-8b
-all-upfront   8/10     all-upfront   8/10
-lexical       8/10     lexical       8/10
-progressive   8/10     progressive   8/10
-compiled      8/10     compiled      8/10
-index-ids     8/10     index-ids     8/10
-adaptive      7/10     adaptive      7/10
+all-upfront   9/11     all-upfront   8/11
+lexical       9/11     lexical       7/11
+progressive   9/11     progressive   8/11
+compiled      9/11     compiled      8/11
+index-ids     9/11     index-ids     8/11
+adaptive      7/11     adaptive      7/11
 ```
 
-**The constraint makes things worse.** The 30B drops from 10/10 to 8/10; every hidden
-task now answers a nearby value with confidence (`"two"`, `"900ms"`, `"api-payments"`)
-instead of reasoning to the constraint. Forcing brevity removed the explanation that
-was carrying the right answer.
+**The constraint makes things worse.** The 30B drops from 11/11 to 9/11; every hidden
+task now answers a nearby value with confidence (`"900ms"`, `"api-payments"`,
+`"retention-policy"`) instead of reasoning to the constraint. Forcing brevity removed the
+explanation that was carrying the right answer. (Lexical is the exception: it goes 7 →
+9 on the 30B, because a one-word answer from the wrong document is still wrong — the
+constraint does not fix retrieval, it just changes the failure text.)
 
 ### Reading the tables together
 
-- The deterministic table says the information is **available**: progressive 10/10.
-- The 30B model reproduces the original finding: **all-upfront misses a hidden task
-  that progressive gets**, despite loading the answering document. Lexical misses both,
-  as designed.
-- The 8B is the interesting counter-case: its misses are **extraction**, not
-  retrieval. Given everything, it answers the pointer sentence ("Read the retention
-  policy…") instead of the fact; given the index it echoes the title ("Retention
-  policy") or the line ("- constraint-eu"). A smaller model is the bottleneck, not the
-  strategy.
-- **Adaptive selection does not pay for itself on this pack.** With the 30B it drops to
-  8/10 while progressive holds 10/10; with the 8B it ties progressive's weakest arm
-  (7/10 vs 8/10). The larger, less focused prompt is the plausible cause — the extra
-  documents are the ones learned to be "useful", which on a fresh task are not.
+- The deterministic table says the information is **available**: progressive 11/11,
+  including the two-hop chain.
+- **The 30B gets the second hop after one is added**, which is the useful result: given
+  the pointer chain, it reads `catalog-api`, follows to `catalog-constraints`, follows
+  again, and answers "Two approvals" — 11/11. All-upfront (10/11) and `index-ids`
+  (10/11) each miss one hidden task, so the pointer chain is doing work that volume does
+  not.
+- **The 8B is the counter-case**: all-upfront 10/11 beats progressive 8/11. Given the
+  index it copies index entries (`"- constraint-eu"`, `"catalog-constraints,
+catalog-approval"`), and given everything it answers the pointer sentence instead of
+  the fact. Its bottleneck is extraction, not availability.
+- **Vocabulary-overlap distractors cost everyone**: lexical falls to 7/11 (30B) and 6/11
+  (8B), and it loses a _direct_ question (`deploy-rule`) to a `legacy` document that
+  repeats the question's words. Similarity is neither necessary nor sufficient here.
+- **Adaptive selection still does not pay for itself**, and the new pack shows two
+  distinct reasons: the larger working set loses one-hop tasks with the 30B (7/11), and
+  the store's edge ordering loses the second hop deterministically (see above). Both are
+  recorded rather than tuned away.
 - **Model-aware representation buys tokens, not accuracy.** `compiled` selects exactly
-  what `progressive` selects and renders it densely (83% of the body characters):
-  the same pass counts as progressive for ~3% fewer tokens. It does **not** fix the
-  8B's extraction failure, and on the 30B it now costs a hidden task (9/10): the
-  sentences it drops are the ones the model uses to reason.
-- **The index shape is where the cheap win is.** `index-ids` keeps the same selection
-  and the same dense bodies but shows no summaries: **10/10 at 84 tokens on the 30B**
-  (against 254) and 8/10 at 84 on the 8B (against 254). For the 30B that is a third of
-  the prompt at identical accuracy. For the 8B it is the same accuracy at a third of
-  the cost — but its misses move from `"- constraint-eu"` to `"constraint-eu"`: it now
-  copies the **id**. Removing prose from the index did not stop the copying; it
-  changed the string being copied.
-- **The answer constraint is counter-productive.** With `--strict` every strategy
-  loses the hidden tasks and answers a nearby value (`"two"`, `"900ms"`, `"api-payments"`).
-  The 30B goes 10/10 → 8/10. Suppressing the explanation suppresses the reasoning that
-  produced the right answer, so the constraint solves a symptom the benchmark already
-  reported as a miss for the wrong reason.
-- So the gain from progressive disclosure is **model-dependent**, and on this pack it
-  is largest where the model can use what it is given. The corollary the data now
-  supports: a selection policy that ignores the model's ability to read is _worse_ than
-  no policy, which is exactly why ADR-005 puts measurement before retrieval.
+  what `progressive` selects and renders it densely (88% of the body characters): the same
+  11/11 on the 30B for 8 fewer tokens, and the same 8/11 on the 8B.
+- **The index shape remains the cheap win for the capable model**: `index-ids` reaches
+  10/11 on the 30B at **126 tokens against 367** — a third of the prompt — but gives up
+  the second hop, because with no summaries and no pointer sentence the model has less to
+  follow. For the 8B it is 8/11 at 126, the same as progressive.
+- **The answer constraint is counter-productive** on both models (30B 11 → 9), which is
+  the second time it has been measured and the second time it failed.
+- So the gain from progressive disclosure is **model-dependent**, and on this pack it is
+  largest where the model can use what it is given. A selection policy that ignores the
+  model's ability to read is _worse_ than no policy, which is why ADR-005 puts measurement
+  before retrieval.
 
 ## Caveats
 

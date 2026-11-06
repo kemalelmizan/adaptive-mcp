@@ -133,6 +133,18 @@ export function adaptive(store: MemoryStore, options: AdaptiveOptions = {}): Ada
     const rank = (id: string, lexical: number): number =>
       lexical * 100 + (pinned.has(id) ? 5 : 0) + Math.min(loads.get(id) ?? 0, 5);
 
+    /** Follow edges transitively; depth is bounded by the read budget. */
+    const follow = (id: string): void => {
+      for (const edge of store.contextEdges(id)) {
+        if (answerInWorkingSet() || reads >= maxReads) return;
+        if (loaded.includes(edge.to)) continue;
+        if (read(edge.to)) {
+          hops += 1;
+          follow(edge.to);
+        }
+      }
+    };
+
     const candidates = corpus
       .map((doc) => ({ id: doc.id, lexical: score(question, `${doc.title} ${doc.summary}`) }))
       .filter((entry) => entry.lexical > 0 || pinned.has(entry.id) || loads.has(entry.id))
@@ -143,10 +155,7 @@ export function adaptive(store: MemoryStore, options: AdaptiveOptions = {}): Ada
       const next = candidates.shift()!;
       if (!read(next)) break;
       // A pointer is stronger evidence than a term overlap: follow it now.
-      for (const edge of store.contextEdges(next)) {
-        if (answerInWorkingSet() || reads >= maxReads) break;
-        if (!loaded.includes(edge.to) && read(edge.to)) hops += 1;
-      }
+      follow(next);
     }
 
     // The prompt carries the index plus the whole working set, so its cost is the

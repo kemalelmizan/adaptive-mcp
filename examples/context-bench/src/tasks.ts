@@ -86,4 +86,12 @@ export const TASKS: BenchTask[] = [
     answer: "90 days",
     hiddenDependency: true,
   },
+  {
+    id: "catalog-change",
+    question:
+      "I am changing how the catalog API batches writes. What must I check before shipping?",
+    answerIn: "catalog-approval",
+    answer: "Two approvals",
+    hiddenDependency: true,
+  },
 ];
