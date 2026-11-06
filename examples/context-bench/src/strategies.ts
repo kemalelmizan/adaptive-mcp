@@ -70,7 +70,7 @@ export function terms(text: string): Set<string> {
 }
 
 /** How many distinct question terms a document's text contains. */
-function score(question: Set<string>, text: string): number {
+export function score(question: Set<string>, text: string): number {
   let hits = 0;
   for (const term of terms(text)) if (question.has(term)) hits += 1;
   return hits;

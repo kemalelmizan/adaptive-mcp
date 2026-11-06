@@ -109,3 +109,12 @@ Tracked in the `Context orchestration` milestone of each repo.
    ([adaptive-mcp#71](https://github.com/kemalelmizan/adaptive-mcp/issues/71)).
 3. **P2** — adaptive selection (an advisor over context metric cells) and
    model-aware representation, each only if the benchmark shows headroom.
+   **Measured 2026-11-06: it does not, and P2 is deliberately unscheduled.** The
+   harness ships the experiment (`adaptive-select`, `adaptive-cold`,
+   `adaptive-warm` over the store's edges/telemetry/pins): selection without
+   retention ties progressive and pollutes more (10/10, 1.4 vs 1.3 reads, 0.20 vs
+   0.15 pollution), and with a session working set it scores 9/10 at 299 tokens
+   against progressive's 10/10 at 249. With a model the gap widens: 8/10
+   (Qwen3-Coder-30B) and 7/10 (Qwen3-8B) against 10/10 and 8/10. The condition
+   this phase set for itself is unmet, so the work is not started — see
+   [`examples/context-bench`](../examples/context-bench/README.md) for the tables.
