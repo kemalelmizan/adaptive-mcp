@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { runTask, summarise } from "./bench.js";
 import { CORPUS } from "./corpus.js";
-import { allUpfront, lexical, progressive, terms } from "./strategies.js";
+import { allUpfront, isStale, lexical, progressive, terms } from "./strategies.js";
 import { TASKS } from "./tasks.js";
 
 const hiddenTasks = TASKS.filter((task) => task.hiddenDependency);
@@ -41,15 +41,29 @@ describe("context bench", () => {
     }
   });
 
-  it("is defeated by vocabulary overlap on at least one direct question", () => {
-    // The legacy distractors share the question's words and hold the wrong value, so a
-    // term-overlap ranker picks them. That is the second half of the argument: similarity
-    // is neither necessary (hidden tasks) nor sufficient (this).
-    const outcomes = TASKS.map((task) => runTask(task, CORPUS, lexical()));
-    const defeated = outcomes.filter((outcome) => !outcome.hidden && !outcome.success);
+  it("prefers the current document over a retired one that matches equally", () => {
+    // The distractor regression: `deploy-rule` was lost because `approval-rules-legacy`
+    // repeated the question's words and sorted first. Staleness breaks the tie.
+    const outcome = TASKS.map((task) => runTask(task, CORPUS, lexical())).find(
+      (entry) => entry.taskId === "deploy-rule",
+    )!;
 
-    expect(defeated.length).toBeGreaterThan(0);
-    for (const outcome of defeated) expect(outcome.requiredLoaded).toBe(false);
+    expect(outcome.success).toBe(true);
+    expect(outcome.loaded).toContain("runbook-deploy");
+    expect(outcome.loaded).not.toContain("runbook-deploy-legacy");
+  });
+
+  it("marks exactly the documents that advertise themselves as superseded", () => {
+    const stale = CORPUS.filter((doc) => isStale(doc)).map((doc) => doc.id);
+
+    expect(stale.sort()).toEqual([
+      "approval-rules-legacy",
+      "auth-tokens-legacy",
+      "billing-export-legacy",
+      "constraint-eu-legacy",
+      "retention-policy-legacy",
+      "runbook-deploy-legacy",
+    ]);
   });
 
   it("reaches every hidden dependency through pointers, including the second hop", () => {

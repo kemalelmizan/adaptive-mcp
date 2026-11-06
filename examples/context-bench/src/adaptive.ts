@@ -22,7 +22,14 @@ import { textIncludesAnswer } from "./bench.js";
 
 import type { Document } from "./corpus.js";
 import type { BenchTask } from "./tasks.js";
-import { estimateTokens, score, terms, type ContextResult, type Strategy } from "./strategies.js";
+import {
+  estimateTokens,
+  isStale,
+  score,
+  terms,
+  type ContextResult,
+  type Strategy,
+} from "./strategies.js";
 
 const KIND = "doc";
 
@@ -137,8 +144,13 @@ export function adaptive(store: MemoryStore, options: AdaptiveOptions = {}): Ada
     // Relevance dominates; telemetry and pins break ties and nudge known-useful
     // items up. Weighting a pin above relevance made an experienced host *worse*,
     // because a pinned item that matched no term still beat the document that did.
+    // Relevance first, then whether the document advertises itself as superseded — a
+    // retired document that repeats the question's words is a plausible wrong answer.
     const rank = (id: string, lexical: number): number =>
-      lexical * 100 + (pinned.has(id) ? 5 : 0) + Math.min(loads.get(id) ?? 0, 5);
+      lexical * 100 -
+      (isStale(byId.get(id)!) ? 20 : 0) +
+      (pinned.has(id) ? 5 : 0) +
+      Math.min(loads.get(id) ?? 0, 5);
 
     /** Follow edges transitively; depth is bounded by the read budget. */
     const follow = (id: string): void => {

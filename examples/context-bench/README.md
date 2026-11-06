@@ -71,18 +71,19 @@ pnpm --filter @adaptivemcp/context-bench bench
 ```
 strategy           pass   tokens   precision  recall  reads  hops  pollution
 all-upfront        11/11  408      0.05       1.00    0.0    0.0   0.95
-lexical(top3)      7/11   56       0.36       0.64    1.0    0.0   0.64
-progressive        11/11  367      0.74       1.00    1.6    0.4   0.26
-compiled           11/11  359      0.74       1.00    1.6    0.4   0.26
-index-ids          11/11  126      0.74       1.00    1.6    0.4   0.26
-adaptive-cold      11/11  451      0.28       1.00    1.1    0.2   0.72
+lexical(top3)      8/11   56       0.39       0.73    1.0    0.0   0.61
+progressive        11/11  365      0.76       1.00    1.5    0.4   0.24
+compiled           11/11  358      0.76       1.00    1.5    0.4   0.24
+index-ids          11/11  124      0.76       1.00    1.5    0.4   0.24
+adaptive-cold      11/11  442      0.29       1.00    1.0    0.2   0.71
 adaptive-warm      11/11  440      0.30       1.00    1.2    0.4   0.70
-adaptive-select    11/11  360      0.74       1.00    1.6    0.4   0.24
+adaptive-select    11/11  360      0.74       1.00    1.6    0.4   0.26
 ```
 
-`lexical` reaches 7 of 11: it misses all three hidden tasks, and one direct question is
-lost to a `legacy` distractor that shares its vocabulary. Everything else reaches all 11,
-including the two-hop chain.
+`lexical` reaches 8 of 11: it misses exactly the three hidden tasks and nothing else. It
+used to lose a fourth — `deploy-rule` — to a `legacy` document that repeated the
+question's words and sorted first; ranking now prefers a current document when two match
+equally (see below). Everything else reaches all 11, including the two-hop chain.
 
 **The adaptive rows reach the second hop now, and getting there fixed three bugs rather
 than tuning a ranking** ([#79](https://github.com/kemalelmizan/adaptive-mcp/issues/79)):
@@ -101,6 +102,28 @@ The result is a real trade rather than a win: adaptive reads less than progressi
 vs 1.6 per task) and carries more (451 vs 367 tokens), because the working set keeps what
 earlier tasks loaded.
 
+### Preferring the current document over a retired one
+
+The distractors are named for it — `legacy`, `deprecated`, `retired`, `superseded` — and a
+retired document that repeats the question's words is the most expensive kind of
+distractor: it matches, it is plausible, and its answer is wrong. Ranking now breaks an
+equal-relevance tie in favour of the document that does not advertise itself as
+superseded, in all three selecting strategies.
+
+```
+before (top-3 for "the rule about tagging a release"):
+  approval-rules-legacy, catalog-approval, catalog-constraints   → MISS
+after:
+  catalog-approval, catalog-constraints, runbook-deploy          → hit
+```
+
+It is a **tie-break, not a filter**: a genuinely better match still wins, and a corpus
+without such labels gets no benefit. That is deliberate — the signal is a naming
+convention, not an understanding of versions, and pretending otherwise would be the kind
+of heuristic that looks clever and ages badly. The measured effect is one direct task
+(`lexical` 7 → 8 of 11) plus fewer tokens for progressive (367 → 365) and `index-ids`
+(126 → 124), because two stale documents drop out of the read set.
+
 ## Live-model runs
 
 ```bash
@@ -117,12 +140,13 @@ the template, not the strategy.
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        10/11  408      1295
-lexical(top3)      7/11   56       726
-progressive        11/11  367      995
-compiled           11/11  359      1294
-index-ids          10/11  126      1489
-adaptive-warm      9/11   440      735
+all-upfront        10/11  408      1294
+lexical(top3)      8/11   56       794
+progressive        11/11  365      1030
+compiled           11/11  358      1261
+index-ids          10/11  124      1505
+adaptive-warm      9/11   440      740
+routed             11/11  365      950
 ```
 
 **Qwen3-8B (CPU):**
@@ -130,11 +154,12 @@ adaptive-warm      9/11   440      735
 ```
 strategy           pass   tokens   mean ms
 all-upfront        10/11  408      3694
-lexical(top3)      6/11   56       2149
-progressive        8/11   367      2673
-compiled           8/11   359      4617
-index-ids          8/11   126      3702
-adaptive-warm      9/11   440      3045
+lexical(top3)      7/11   56       2374
+progressive        8/11   365      2742
+compiled           8/11   358      4844
+index-ids          8/11   124      3390
+adaptive-warm      9/11   440      3254
+routed             9/11   440      3130
 ```
 
 ### Routing on capability
@@ -149,7 +174,7 @@ The last two tables disagree about retention, so the harness now routes rather t
 | `limited` | retain the working set      | it reads less, and the documents stay where a small model can reuse them |
 
 ```
-qwen3-coder-30b  --model-profile capable   routed 11/11 @367   (best fixed arm: progressive 11/11 @367)
+qwen3-coder-30b  --model-profile capable   routed 11/11 @365   (best fixed arm: progressive 11/11 @365)
 qwen3-8b         --model-profile limited   routed  9/11 @440   (best fixed arm: adaptive-warm 9/11 @440)
 ```
 
