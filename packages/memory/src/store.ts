@@ -12,6 +12,8 @@ import type {
   ContextStat,
   ContextEdge,
   ContextRelation,
+  ContextLifecycle,
+  ContextLifecycleState,
   PlanStep,
   Recommendation,
   RecommendationType,
@@ -426,13 +428,11 @@ export class MemoryStore implements Store {
 
   /** Every recorded edge, or those leaving one item, in a stable order. */
   contextEdges(from?: string): ContextEdge[] {
-    const rows = (
-      from === undefined
-        ? this.db.prepare(`SELECT * FROM context_edges ORDER BY from_item, relation, to_item`).all()
-        : this.db
-            .prepare(`SELECT * FROM context_edges WHERE from_item = ? ORDER BY relation, to_item`)
-            .all(from)
-    ) as unknown as Array<{
+    const rows = (from === undefined
+      ? this.db.prepare(`SELECT * FROM context_edges ORDER BY from_item, relation, to_item`).all()
+      : this.db
+          .prepare(`SELECT * FROM context_edges WHERE from_item = ? ORDER BY relation, to_item`)
+          .all(from)) as unknown as Array<{
       from_item: string;
       to_item: string;
       relation: string;
@@ -446,6 +446,48 @@ export class MemoryStore implements Store {
       ...(row.reason !== null ? { reason: row.reason } : {}),
       createdAt: row.created_at,
     }));
+  }
+
+  /**
+   * Write the retention record for a context item. Idempotent by `item`: the record is
+   * the current decision, not a history, so a sweep can rewrite it without the table
+   * growing. Eviction is `DELETE`, which the host does through its own policy.
+   */
+  setContextLifecycle(record: ContextLifecycle): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO context_lifecycle
+         (item, kind, state, pinned, expires_at, archived_at, reason, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        record.item,
+        record.kind,
+        record.state,
+        record.pinned ? 1 : 0,
+        record.expiresAt ?? null,
+        record.archivedAt ?? null,
+        record.reason ?? null,
+        record.updatedAt,
+      );
+  }
+
+  /** The retention record for one item, if any. */
+  contextLifecycle(item: string): ContextLifecycle | undefined {
+    const row = this.db
+      .prepare(`SELECT * FROM context_lifecycle WHERE item = ?`)
+      .get(item) as unknown as LifecycleRow | undefined;
+    return row ? lifecycleFromRow(row) : undefined;
+  }
+
+  /** Retention records, optionally filtered by state, in item order. */
+  contextLifecycles(options: { state?: ContextLifecycleState } = {}): ContextLifecycle[] {
+    const rows = (options.state === undefined
+      ? this.db.prepare(`SELECT * FROM context_lifecycle ORDER BY item`).all()
+      : this.db
+          .prepare(`SELECT * FROM context_lifecycle WHERE state = ? ORDER BY item`)
+          .all(options.state)) as unknown as LifecycleRow[];
+    return rows.map(lifecycleFromRow);
   }
 
   /** Pre-aggregate an event into the bounded set of metric cells it belongs to. */
@@ -1054,6 +1096,34 @@ function deserializeSuspension(row: SuspensionRow): Suspension {
   };
 }
 
+interface LifecycleRow {
+  item: string;
+  kind: string;
+  state: string;
+  pinned: number;
+  expires_at: string | null;
+  archived_at: string | null;
+  reason: string | null;
+  updated_at: string;
+}
+
+/**
+ * A row back to the shape. Optional fields stay absent rather than becoming
+ * `undefined` keys, so a record read back equals the record written.
+ */
+function lifecycleFromRow(row: LifecycleRow): ContextLifecycle {
+  return {
+    item: row.item,
+    kind: row.kind,
+    state: row.state as ContextLifecycleState,
+    ...(row.pinned !== 0 ? { pinned: true } : {}),
+    ...(row.expires_at !== null ? { expiresAt: row.expires_at } : {}),
+    ...(row.archived_at !== null ? { archivedAt: row.archived_at } : {}),
+    ...(row.reason !== null ? { reason: row.reason } : {}),
+    updatedAt: row.updated_at,
+  };
+}
+
 function deserializeExecutionNode(row: ExecutionNodeRow): ExecutionNode {
   return {
     id: row.id,
@@ -1225,7 +1295,8 @@ function dimsKey(dims: MetricDimensions): string {
  * would double-count them. The `other` bucket is the cardinality overflow, not a
  * model anyone can choose.
  */
-export function modelStatsFromCells(cells: MetricCell[]): ModelStats[] {  // Cells for the same model can come from different servers when no server was
+export function modelStatsFromCells(cells: MetricCell[]): ModelStats[] {
+  // Cells for the same model can come from different servers when no server was
   // named; they are summed rather than overwritten.
   const byModel = new Map<
     string,
