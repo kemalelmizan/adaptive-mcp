@@ -13,6 +13,19 @@ import type { Document } from "./corpus.js";
 import type { BenchTask } from "./tasks.js";
 import type { Strategy } from "./strategies.js";
 
+/**
+ * Whether the context contains the answer, as a whole token sequence.
+ *
+ * A plain substring test is unsound for numbers: ``"5 minutes"`` is a substring of
+ * ``"15 minutes"``, so a document about token lifetimes would "answer" a question
+ * about paging. Boundaries are therefore required on both sides, and case is ignored
+ * because the fact is the meaning, not the capitalisation.
+ */
+export function textIncludesAnswer(text: string, answer: string): boolean {
+  const escaped = answer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\w.])${escaped}(?![\\w])`, "i").test(text);
+}
+
 export interface TaskOutcome {
   taskId: string;
   strategy: string;
@@ -36,7 +49,7 @@ export function runTask(task: BenchTask, corpus: Document[], strategy: Strategy)
     taskId: task.id,
     strategy: result.strategy,
     hidden: task.hiddenDependency === true,
-    success: result.text.includes(task.answer),
+    success: textIncludesAnswer(result.text, task.answer),
     tokens: result.tokens,
     precision: loaded === 0 ? 0 : (requiredLoaded ? 1 : 0) / loaded,
     recall: requiredLoaded ? 1 : 0,

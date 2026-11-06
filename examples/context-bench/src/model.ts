@@ -11,6 +11,8 @@
  *   pnpm --filter @adaptivemcp/context-bench bench -- --model http://127.0.0.1:8080/v1
  */
 
+import { textIncludesAnswer } from "./bench.js";
+
 export interface ModelOptions {
   baseURL: string;
   model: string;
@@ -104,10 +106,13 @@ export function answersCorrectly(answer: string, fact: string): boolean {
   const normalize = (text: string): string =>
     text
       .toLowerCase()
-      .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/g, (word) => NUMBER_WORDS[word] ?? word)
+      .replace(
+        /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/g,
+        (word) => NUMBER_WORDS[word] ?? word,
+      )
       .replace(/\s+/g, " ")
       .trim();
-  return normalize(answer).includes(normalize(fact));
+  return textIncludesAnswer(normalize(answer), normalize(fact));
 }
 
 /** Read the model config from flags/env; `undefined` keeps the run deterministic. */

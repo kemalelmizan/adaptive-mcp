@@ -12,14 +12,50 @@
 import { formatTable, runTask, summarise, type TaskOutcome } from "./bench.js";
 import { CORPUS } from "./corpus.js";
 import { answersCorrectly, askModel, modelFromEnv } from "./model.js";
+import { adaptive, learnFromTask, seedEdges } from "./adaptive.js";
 import { allUpfront, lexical, progressive } from "./strategies.js";
 import { TASKS } from "./tasks.js";
+import { MemoryStore } from "@adaptivemcp/memory";
 
 const argv = process.argv.slice(2);
-const strategies = [allUpfront, lexical(), progressive()];
-const outcomes: TaskOutcome[] = strategies.flatMap((strategy) =>
+const fixed: TaskOutcome[] = [allUpfront, lexical(), progressive()].flatMap((strategy) =>
   TASKS.map((task) => runTask(task, CORPUS, strategy)),
 );
+
+/**
+ * A pass with the adaptive strategy, learning after each task.
+ *
+ * Learning happens *after* the task is measured, so a task never benefits from what
+ * it taught the store. Two passes over the same store are reported: the first is
+ * what a host does on a new corpus, the second is after one pass of experience.
+ */
+function adaptivePass(
+  store: MemoryStore,
+  label: string,
+  options: { session: boolean },
+): TaskOutcome[] {
+  const strategy = adaptive(store, { name: label, session: options.session });
+  return TASKS.map((task) => {
+    const before = new Set(strategy.session());
+    const outcome = runTask(task, CORPUS, strategy);
+    const learned = strategy.session().filter((id) => !before.has(id));
+    learnFromTask(store, CORPUS, task, learned);
+    return outcome;
+  });
+}
+
+const store = new MemoryStore({ path: ":memory:" });
+seedEdges(store, CORPUS);
+const adaptiveOutcomes = [
+  ...adaptivePass(store, "adaptive-cold", { session: true }),
+  ...adaptivePass(store, "adaptive-warm", { session: true }),
+  // Selection alone: a warm prior, but no carry-over between tasks, so the token
+  // column is directly comparable with the fixed strategies'.
+  ...adaptivePass(store, "adaptive-select", { session: false }),
+];
+store.close();
+
+const outcomes: TaskOutcome[] = [...fixed, ...adaptiveOutcomes];
 
 console.log(`context-bench — ${TASKS.length} tasks, ${CORPUS.length} documents\n`);
 console.log(formatTable(summarise(outcomes)));
@@ -50,7 +86,28 @@ if (model) {
     answer: string;
   }
   const live: LiveRow[] = [];
-  for (const strategy of strategies) {
+  // A fresh warm session for the model half: a silent training pass, then a new
+  // working set, so the model sees what a returning host would see.
+  const liveStore = new MemoryStore({ path: ":memory:" });
+  seedEdges(liveStore, CORPUS);
+  const trainer = adaptive(liveStore, { name: "adaptive-warm" });
+  for (const task of TASKS) {
+    const before = new Set(trainer.session());
+    runTask(task, CORPUS, trainer);
+    learnFromTask(
+      liveStore,
+      CORPUS,
+      task,
+      trainer.session().filter((id) => !before.has(id)),
+    );
+  }
+  const liveStrategies = [
+    allUpfront,
+    lexical(),
+    progressive(),
+    adaptive(liveStore, { name: "adaptive-warm" }),
+  ];
+  for (const strategy of liveStrategies) {
     for (const task of TASKS) {
       const result = strategy(task, CORPUS);
       const answer = await askModel(model, result.text, task.question);
@@ -72,7 +129,11 @@ if (model) {
     "\n" +
       rows
         .map((row) =>
-          row.map((cell, index) => (cell + " ".repeat(widths[index] ?? 8)).slice(0, widths[index] ?? 8)).join(" "),
+          row
+            .map((cell, index) =>
+              (cell + " ".repeat(widths[index] ?? 8)).slice(0, widths[index] ?? 8),
+            )
+            .join(" "),
         )
         .join("\n"),
   );
@@ -90,7 +151,9 @@ if (model) {
 }
 
 /** Group live rows by strategy: pass count, token cost, mean latency. */
-function summariseLive(live: Array<{ strategy: string; ok: boolean; tokens: number; durationMs: number }>): string[][] {
+function summariseLive(
+  live: Array<{ strategy: string; ok: boolean; tokens: number; durationMs: number }>,
+): string[][] {
   const byStrategy = new Map<string, typeof live>();
   for (const row of live) {
     const group = byStrategy.get(row.strategy) ?? [];
