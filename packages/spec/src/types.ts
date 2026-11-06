@@ -356,6 +356,39 @@ export interface ContextEdge {
 }
 
 /**
+ * Where a context item sits in its retention lifecycle.
+ *
+ * Deliberately only two states: an item is either usable, or kept but out of the
+ * working set. `evicted` is the absence of a record, and `restore` is a write back to
+ * `active` — states need to be *decidable*, not numerous (ADR-005's rule for `ACTIVE`).
+ */
+export type ContextLifecycleState = "active" | "archived";
+
+/**
+ * The retention record for one context item.
+ *
+ * State and timestamps are shared; *when* to move between them is the host's policy.
+ * Pinning is an operator decision and outranks expiry: a sweep may archive anything
+ * expired and unpinned, but it must not archive a pin.
+ */
+export interface ContextLifecycle {
+  /** Stable item id, in the host's vocabulary — the same id used for loads and edges. */
+  item: string;
+  kind: string;
+  state: ContextLifecycleState;
+  /** Pinned items are never expired by a policy sweep. */
+  pinned?: boolean;
+  /** ISO timestamp after which a sweep may archive it. */
+  expiresAt?: string;
+  /** When it was archived (`state === "archived"`). */
+  archivedAt?: string;
+  /** Why the state last changed, in the host's words. */
+  reason?: string;
+  /** When the record was written. */
+  updatedAt: string;
+}
+
+/**
  * A bounded dimension tuple for a metric cell. Keys with undefined values are
  * omitted. Kept open-ended (`[key]`) so new dimensions don't need a migration;
  * cardinality is bounded by the host (models from its catalog, 3 decoding
@@ -601,6 +634,15 @@ export interface Store {
 
   /** Every recorded edge, or those leaving one item. */
   contextEdges?(from?: string): ContextEdge[];
+
+  /** Write the retention record for a context item (idempotent by `item`). */
+  setContextLifecycle?(record: ContextLifecycle): void;
+
+  /** The retention record for one item, if any. */
+  contextLifecycle?(item: string): ContextLifecycle | undefined;
+
+  /** Retention records, optionally filtered by state, in item order. */
+  contextLifecycles?(options?: { state?: ContextLifecycleState }): ContextLifecycle[];
 
   // Graph methods (optional - only implemented when graph tracking is enabled)
   /** Record an execution node in the graph. */

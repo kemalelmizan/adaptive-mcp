@@ -193,6 +193,28 @@ CREATE INDEX IF NOT EXISTS idx_context_edges_from ON context_edges(from_item);
 CREATE INDEX IF NOT EXISTS idx_context_edges_to ON context_edges(to_item);
 `),
   },
+  {
+    version: 8,
+    name: "add_context_lifecycle",
+    up: (db) =>
+      db.exec(`
+-- Retention is a record, not a policy: the host decides *when* to archive, evict or
+-- restore; this table only remembers the decision and its timestamps. One row per
+-- item, so a sweep is a read and a comparison, and eviction is a delete.
+CREATE TABLE IF NOT EXISTS context_lifecycle (
+  item TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  state TEXT NOT NULL,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT,
+  archived_at TEXT,
+  reason TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_context_lifecycle_state ON context_lifecycle(state);
+`),
+  },
 ];
 
 /** Applies every migration in `migrations` that hasn't already been recorded, in version order. */
