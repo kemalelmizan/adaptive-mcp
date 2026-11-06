@@ -39,7 +39,6 @@ describe("representation", () => {
     const doc = byId("auth-tokens-legacy");
     expect(renderDocument(doc, "dense")).toBe(doc.body);
   });
-
   it("is smaller than the full corpus, but not by much — the bodies are already terse", () => {
     const ratio = representationRatio(CORPUS, "dense");
 

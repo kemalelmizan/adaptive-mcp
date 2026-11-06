@@ -13,6 +13,7 @@ same corpus and tasks:
 | `lexical(top3)`                   | the best 3 documents by term overlap with the question, zero-score ones excluded                                                           |
 | `progressive`                     | an index (title + summary) and bodies read on demand, following pointers                                                                   |
 | `compiled`                        | the same selection, rendered dense: only the fact-bearing sentences of each body (numbers, obligations, rules)                             |
+| `index-ids`                       | dense bodies, but the index is **bare ids** — no summaries, nothing answerable to copy                                                     |
 | `adaptive-select`                 | the same index and on-demand reads, ordered by what the store learned — pins, load counts, then relevance; **no** carry-over between tasks |
 | `adaptive-cold` / `adaptive-warm` | `adaptive-select` plus a session working set: first pass, then a second pass over what the first learned                                   |
 
@@ -63,8 +64,9 @@ pnpm --filter @adaptivemcp/context-bench bench
 strategy           pass   tokens   precision  recall  reads  hops  pollution
 all-upfront        10/10  280      0.08       1.00    0.0    0.0   0.92
 lexical(top3)      8/10   45       0.43       0.80    1.0    0.0   0.57
-progressive        10/10  249      0.85       1.00    1.3    0.2   0.15
-compiled           10/10  241      0.85       1.00    1.3    0.2   0.15
+progressive        10/10  254      0.85       1.00    1.3    0.2   0.15
+compiled           10/10  246      0.85       1.00    1.3    0.2   0.15
+index-ids          10/10  84       0.85       1.00    1.3    0.2   0.15
 adaptive-cold      9/10   299      0.33       0.90    0.8    0.2   0.67
 adaptive-warm      9/10   299      0.33       0.90    0.8    0.2   0.67
 adaptive-select    10/10  250      0.80       1.00    1.4    0.2   0.20
@@ -73,6 +75,11 @@ adaptive-select    10/10  250      0.80       1.00    1.4    0.2   0.20
 `lexical` misses both hidden tasks: it loads `api-payments` / `billing-export` and
 never the documents they point at. `progressive` reads two documents per hidden task —
 one to find the pointer, one to follow it.
+
+**`index-ids` is the strongest row here:** identical selection and reads to
+`compiled`, same 10/10, at **84 tokens instead of 246** — because the summaries were
+most of the prompt. Deterministically that is free; with a model it is the experiment
+below.
 
 **The adaptive rows are a negative result, and that is the finding.** They are built on
 the store's own P1 records — `contextEdges` for pointers, `contextStats` for what has
@@ -107,22 +114,44 @@ the template, not the strategy.
 ```
 strategy           pass   tokens   mean ms
 all-upfront        9/10   280      673
-lexical(top3)      8/10   45       876
-progressive        10/10  249      792
-compiled           10/10  241      1329
-adaptive-warm      8/10   299      643
+lexical(top3)      8/10   45       877
+progressive        10/10  254      998
+compiled           9/10   246      977
+index-ids          10/10  84       1191
+adaptive-warm      8/10   299      688
 ```
 
 **Qwen3-8B (CPU):**
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        9/10   280      2493
-lexical(top3)      7/10   45       1733
-progressive        8/10   249      2035
-compiled           8/10   241      1852
-adaptive-warm      7/10   299      1831
+all-upfront        9/10   280      2497
+lexical(top3)      7/10   45       1743
+progressive        8/10   254      2213
+compiled           8/10   246      1873
+index-ids          8/10   84       2066
+adaptive-warm      7/10   299      1964
 ```
+
+### With the answer constraint (`--strict`)
+
+The same prompts, with an instruction that forbids quoting a list item, a line, or a
+document title and demands the exact value:
+
+```
+qwen3-coder-30b        qwen3-8b
+all-upfront   8/10     all-upfront   8/10
+lexical       8/10     lexical       8/10
+progressive   8/10     progressive   8/10
+compiled      8/10     compiled      8/10
+index-ids     8/10     index-ids     8/10
+adaptive      7/10     adaptive      7/10
+```
+
+**The constraint makes things worse.** The 30B drops from 10/10 to 8/10; every hidden
+task now answers a nearby value with confidence (`"two"`, `"900ms"`, `"api-payments"`)
+instead of reasoning to the constraint. Forcing brevity removed the explanation that
+was carrying the right answer.
 
 ### Reading the tables together
 
@@ -140,13 +169,22 @@ adaptive-warm      7/10   299      1831
   (7/10 vs 8/10). The larger, less focused prompt is the plausible cause — the extra
   documents are the ones learned to be "useful", which on a fresh task are not.
 - **Model-aware representation buys tokens, not accuracy.** `compiled` selects exactly
-  what `progressive` selects and renders it densely (83% of the body characters): 10/10
-  at 241 tokens on the 30B and 8/10 at 241 on the 8B — the same pass counts as
-  progressive, for ~3% fewer tokens. It does **not** fix the 8B's extraction failure,
-  and the misses show why: the 8B copies from the **index**, not from the bodies
-  (`"- constraint-eu"`, `"Retention policy"`, `"- billing-export"`). Compacted bodies
-  changed _what_ it echoed, not _whether_ it echoed. The lever is the index/instruction,
-  not text volume — which is a different experiment than the one P2 assumed.
+  what `progressive` selects and renders it densely (83% of the body characters):
+  the same pass counts as progressive for ~3% fewer tokens. It does **not** fix the
+  8B's extraction failure, and on the 30B it now costs a hidden task (9/10): the
+  sentences it drops are the ones the model uses to reason.
+- **The index shape is where the cheap win is.** `index-ids` keeps the same selection
+  and the same dense bodies but shows no summaries: **10/10 at 84 tokens on the 30B**
+  (against 254) and 8/10 at 84 on the 8B (against 254). For the 30B that is a third of
+  the prompt at identical accuracy. For the 8B it is the same accuracy at a third of
+  the cost — but its misses move from `"- constraint-eu"` to `"constraint-eu"`: it now
+  copies the **id**. Removing prose from the index did not stop the copying; it
+  changed the string being copied.
+- **The answer constraint is counter-productive.** With `--strict` every strategy
+  loses the hidden tasks and answers a nearby value (`"two"`, `"900ms"`, `"api-payments"`).
+  The 30B goes 10/10 → 8/10. Suppressing the explanation suppresses the reasoning that
+  produced the right answer, so the constraint solves a symptom the benchmark already
+  reported as a miss for the wrong reason.
 - So the gain from progressive disclosure is **model-dependent**, and on this pack it
   is largest where the model can use what it is given. The corollary the data now
   supports: a selection policy that ignores the model's ability to read is _worse_ than
@@ -159,6 +197,12 @@ adaptive-warm      7/10   299      1831
 fact, not a paraphrase — which is why one task's key is a number ("5 minutes") rather
 than a sentence: an imperative sentence was measuring paraphrasing, not retrieval.
 Treat the tables as a direction to test further, not a conclusion.
+
+**A structural fix recorded with these tables:** each body is now labelled with its id
+(`api-payments:` above the text). Before, the model saw a pile of unattributed prose, and
+with an id-only index it had no way to connect a name to a body at all. That is a defect
+rather than a representation choice, and fixing it is why the `progressive` row moved
+from 249 to 254 tokens — the numbers here supersede the earlier tables.
 
 **A matcher bug this pass fixed:** success used to be a plain substring test, so
 `"5 minutes"` matched inside `"15 minutes"` and a document about token lifetimes
@@ -181,8 +225,11 @@ matcher is part of the benchmark.
   is kept whole, and numbered lists are not shredded into bare ordinals. A test asserts
   every answering fact survives the render — otherwise the tables would be measuring
   the renderer's omissions.
-- `compiled` reuses `progressive`'s selection exactly, so a difference between those two
-  rows is attributable to representation rather than to what was chosen.
+- `compiled` and `index-ids` reuse `progressive`'s selection exactly, so a difference
+  between those rows is attributable to representation rather than to what was chosen.
+  A test asserts the loaded set, reads and hops are identical across them.
+- `--strict` is an instruction change only, so it is reported as a second table rather
+  than a strategy: the prompt and the selection stay the same across the two runs.
 - `adaptive` (`src/adaptive.ts`) is a _policy over the store's records_, not a new
   subsystem: it reads `contextEdges`/`contextStats`/`contextLifecycle` and writes
   `recordContext`/`setContextLifecycle` after each task, so learning never influences

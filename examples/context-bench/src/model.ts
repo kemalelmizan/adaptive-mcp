@@ -25,7 +25,31 @@ export interface ModelOptions {
    * model's template, not the strategy.
    */
   chatTemplateKwargs?: Record<string, unknown>;
+  /**
+   * Ask for the value and nothing else. The default instruction already says "no
+   * explanation"; `strict` also forbids quoting a list item or a line, which is the
+   * exact failure the 8B showed.
+   */
+  strict?: boolean;
 }
+
+const INSTRUCTION =
+  "Answer from the context only. If the context does not contain the answer, " +
+  'reply exactly "unknown". Reply with the answer only, no explanation.';
+
+/**
+ * The answer constraint under test.
+ *
+ * The default already says "no explanation", and the 8B still replied with the
+ * document's own headline. This names the two shapes it actually produced — a list
+ * item and a copied line — and forbids them, which is cheaper than a schema and needs
+ * no server support.
+ */
+const STRICT_INSTRUCTION =
+  "Answer from the context only. Reply with only the exact value taken from the " +
+  "context — a number, a short phrase, or a URL. Never reply with a list item, never " +
+  'start a line with "-", and never copy a document title or summary. If the context ' +
+  'does not contain the answer, reply exactly "unknown".';
 
 export interface ModelAnswer {
   text: string;
@@ -51,9 +75,7 @@ export async function askModel(
       messages: [
         {
           role: "system",
-          content:
-            "Answer from the context only. If the context does not contain the answer, " +
-            'reply exactly "unknown". Reply with the answer only, no explanation.',
+          content: options.strict ? STRICT_INSTRUCTION : INSTRUCTION,
         },
         { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
       ],
@@ -128,8 +150,7 @@ export function modelFromEnv(
     baseURL,
     model: nameAt >= 0 ? (argv[nameAt + 1] ?? "local") : (env.CONTEXT_BENCH_MODEL_NAME ?? "local"),
     // `--no-think` is for llama.cpp's Qwen3 hybrids; other servers ignore it.
-    ...(argv.includes("--no-think")
-      ? { chatTemplateKwargs: { enable_thinking: false } }
-      : {}),
+    ...(argv.includes("--no-think") ? { chatTemplateKwargs: { enable_thinking: false } } : {}),
+    ...(argv.includes("--strict") ? { strict: true } : {}),
   };
 }

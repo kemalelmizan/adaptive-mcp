@@ -140,11 +140,43 @@ export function compiled(maxReads = 3): Strategy {
   return progressiveWith("dense", "compiled", maxReads);
 }
 
-function progressiveWith(representation: Representation, name: string, maxReads: number): Strategy {
+/**
+ * The index without prose: bare ids, no summaries.
+ *
+ * This is the experiment the last pass pointed at. The 8B's misses were copies of
+ * **index lines** (`"- constraint-eu"`, `"Retention policy"`), not wrong documents, so
+ * the suspicion is that an index written as answerable-looking sentences *is* the
+ * distraction. If the index is only ids, there is nothing to copy and the model has to
+ * answer from what it read.
+ *
+ * Selection is unchanged — the lexical ranking still uses title and summary — so the
+ * only variable is what the prompt shows.
+ */
+export function idIndex(maxReads = 3): Strategy {
+  return progressiveWith("dense", "index-ids", maxReads, "ids");
+}
+
+export type IndexShape = "titled" | "ids";
+
+/**
+ * An index in the prompt, and bodies read on demand.
+ *
+ * The reader picks from the index, not the bodies, then follows any pointer the
+ * document it just read names. That is how a dependency that shares no vocabulary with
+ * the question is still reachable.
+ */
+function progressiveWith(
+  representation: Representation,
+  name: string,
+  maxReads: number,
+  indexShape: IndexShape = "titled",
+): Strategy {
   return (task, corpus) => {
     const byId = new Map(corpus.map((doc) => [doc.id, doc]));
     const question = terms(task.question);
-    const index = corpus.map((doc) => `- ${doc.id}: ${doc.summary}`).join("\n");
+    const index = corpus
+      .map((doc) => (indexShape === "ids" ? `- ${doc.id}` : `- ${doc.id}: ${doc.summary}`))
+      .join("\n");
     const wanted = task.answer;
 
     const loaded: string[] = [];
@@ -180,7 +212,13 @@ function progressiveWith(representation: Representation, name: string, maxReads:
       }
     }
 
-    const text = [index, ...bodies].join("\n\n");
+    // Each body is labelled with its id. Without it the model sees a pile of
+    // unattributed prose (or, with an id-only index, no way to connect a name to a
+    // body at all), which is a defect rather than a representation choice.
+    const text = [
+      index,
+      ...loaded.map((id, position) => `${id}:\n${bodies[position] ?? ""}`),
+    ].join("\n\n");
     return {
       strategy: name,
       text,
