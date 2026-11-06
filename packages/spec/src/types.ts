@@ -332,6 +332,30 @@ export interface ContextStat {
 }
 
 /**
+ * How one context item points at another.
+ *
+ * `requires` is a hard dependency (the answer is not usable without it);
+ * `see-also` is a hint. The distinction matters to a host deciding what to follow.
+ */
+export type ContextRelation = "requires" | "see-also";
+
+/**
+ * A directed edge between two context items, by opaque host id.
+ *
+ * This is a *shape and a durable record*, not a traversal policy: how many hops to
+ * follow, and what to do on a cycle, is the host's decision (ADR-005 owns selection).
+ * Same split as pause/resume — the record is shared, the policy is not.
+ */
+export interface ContextEdge {
+  from: string;
+  to: string;
+  relation?: ContextRelation;
+  /** Why the edge exists, in the host's words. */
+  reason?: string;
+  createdAt?: string;
+}
+
+/**
  * A bounded dimension tuple for a metric cell. Keys with undefined values are
  * omitted. Kept open-ended (`[key]`) so new dimensions don't need a migration;
  * cardinality is bounded by the host (models from its catalog, 3 decoding
@@ -571,6 +595,12 @@ export interface Store {
 
   /** Per-item load counts and estimated token cost, most-loaded first. */
   contextStats?(): ContextStat[];
+
+  /** Record a dependency edge between two context items (idempotent per relation). */
+  recordContextEdge?(edge: ContextEdge): void;
+
+  /** Every recorded edge, or those leaving one item. */
+  contextEdges?(from?: string): ContextEdge[];
 
   // Graph methods (optional - only implemented when graph tracking is enabled)
   /** Record an execution node in the graph. */

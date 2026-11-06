@@ -170,6 +170,29 @@ CREATE TABLE IF NOT EXISTS steps (
 CREATE INDEX IF NOT EXISTS idx_steps_session ON steps(session_id, kind, created_at);
 `),
   },
+  {
+    version: 7,
+    name: "add_context_edges",
+    up: (db) =>
+      db.exec(`
+-- Directed edges between context items, by opaque host id. A context item is not a
+-- tool (see the reserved \`context\` metric scope), and an edge is a fact about the
+-- host's own corpus, so it gets its own table rather than a column on anything else.
+-- Traversal policy — how far to follow, how to break cycles — is the host's, exactly
+-- like pause/resume: this table only remembers what the host decided.
+CREATE TABLE IF NOT EXISTS context_edges (
+  from_item TEXT NOT NULL,
+  to_item TEXT NOT NULL,
+  relation TEXT NOT NULL DEFAULT 'requires',
+  reason TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (from_item, to_item, relation)
+);
+
+CREATE INDEX IF NOT EXISTS idx_context_edges_from ON context_edges(from_item);
+CREATE INDEX IF NOT EXISTS idx_context_edges_to ON context_edges(to_item);
+`),
+  },
 ];
 
 /** Applies every migration in `migrations` that hasn't already been recorded, in version order. */
