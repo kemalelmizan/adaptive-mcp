@@ -70,6 +70,21 @@ export function terms(text: string): Set<string> {
   return found;
 }
 
+/**
+ * Whether a document advertises itself as superseded.
+ *
+ * Corpora do carry this mark in the name — `legacy`, `deprecated`, `retired`,
+ * `superseded` — and a retired document that repeats the current question's words is the
+ * most expensive kind of distractor: it matches, it is plausible, and its answer is
+ * wrong. The signal is a naming convention, not semantics: a corpus without such labels
+ * gets no benefit from this, which is why it is a tie-break rather than a filter.
+ */
+export function isStale(doc: Document): boolean {
+  return /\b(legacy|deprecated|retired|superseded|obsolete)\b/i.test(
+    `${doc.id} ${doc.title} ${doc.summary}`,
+  );
+}
+
 /** How many distinct question terms a document's text contains. */
 export function score(question: Set<string>, text: string): number {
   let hits = 0;
@@ -103,7 +118,12 @@ export function lexical(topK = 3): Strategy {
     const ranked = corpus
       .map((doc) => ({ doc, score: score(question, `${doc.title} ${doc.summary} ${doc.body}`) }))
       .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score || a.doc.id.localeCompare(b.doc.id))
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          Number(isStale(a.doc)) - Number(isStale(b.doc)) ||
+          a.doc.id.localeCompare(b.doc.id),
+      )
       .slice(0, topK)
       .map((entry) => entry.doc);
     const text = ranked.map((doc) => doc.body).join("\n\n");
@@ -216,7 +236,12 @@ function progressiveWith(
     const queue = corpus
       .map((doc) => ({ doc, score: score(question, `${doc.title} ${doc.summary}`) }))
       .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score || a.doc.id.localeCompare(b.doc.id))
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          Number(isStale(a.doc)) - Number(isStale(b.doc)) ||
+          a.doc.id.localeCompare(b.doc.id),
+      )
       .map((entry) => entry.doc.id);
 
     while (!found() && reads < maxReads) {
