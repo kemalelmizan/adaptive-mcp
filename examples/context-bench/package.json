@@ -1,0 +1,16 @@
+{
+  "name": "@adaptivemcp/context-bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A deterministic harness comparing context strategies: all-upfront, lexical retrieval, progressive disclosure.",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "bench": "node dist/run.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
