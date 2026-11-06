@@ -13,13 +13,14 @@ import { formatTable, runTask, summarise, type TaskOutcome } from "./bench.js";
 import { CORPUS } from "./corpus.js";
 import { answersCorrectly, askModel, modelFromEnv } from "./model.js";
 import { adaptive, learnFromTask, seedEdges } from "./adaptive.js";
-import { allUpfront, lexical, progressive } from "./strategies.js";
+import { representationRatio } from "./representation.js";
+import { allUpfront, compiled, lexical, progressive } from "./strategies.js";
 import { TASKS } from "./tasks.js";
 import { MemoryStore } from "@adaptivemcp/memory";
 
 const argv = process.argv.slice(2);
-const fixed: TaskOutcome[] = [allUpfront, lexical(), progressive()].flatMap((strategy) =>
-  TASKS.map((task) => runTask(task, CORPUS, strategy)),
+const fixed: TaskOutcome[] = [allUpfront, lexical(), progressive(), compiled()].flatMap(
+  (strategy) => TASKS.map((task) => runTask(task, CORPUS, strategy)),
 );
 
 /**
@@ -59,6 +60,9 @@ const outcomes: TaskOutcome[] = [...fixed, ...adaptiveOutcomes];
 
 console.log(`context-bench — ${TASKS.length} tasks, ${CORPUS.length} documents\n`);
 console.log(formatTable(summarise(outcomes)));
+console.log(
+  `\nrepresentation: dense keeps ${Math.round(representationRatio(CORPUS, "dense") * 100)}% of body characters`,
+);
 
 // Detail for the cases that carry the argument: the hidden dependency, and any miss.
 const interesting = outcomes.filter((outcome) => outcome.hidden || !outcome.success);
@@ -105,6 +109,7 @@ if (model) {
     allUpfront,
     lexical(),
     progressive(),
+    compiled(),
     adaptive(liveStore, { name: "adaptive-warm" }),
   ];
   for (const strategy of liveStrategies) {

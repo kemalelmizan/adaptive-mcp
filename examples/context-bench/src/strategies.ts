@@ -8,6 +8,7 @@
  * harness says so rather than pretending otherwise.
  */
 import type { Document } from "./corpus.js";
+import { renderDocument, type Representation } from "./representation.js";
 import type { BenchTask } from "./tasks.js";
 
 export interface ContextResult {
@@ -78,7 +79,7 @@ export function score(question: Set<string>, text: string): number {
 
 /** Every document's body, in one prompt. The cost baseline. */
 export const allUpfront: Strategy = (task, corpus) => {
-  const text = corpus.map((doc) => doc.body).join("\n\n");
+  const text = corpus.map((doc) => renderDocument(doc, "full")).join("\n\n");
   return {
     strategy: "all-upfront",
     text,
@@ -125,6 +126,21 @@ export function lexical(topK = 3): Strategy {
  * vocabulary with the question is still reachable.
  */
 export function progressive(maxReads = 3): Strategy {
+  return progressiveWith("full", "progressive", maxReads);
+}
+
+/**
+ * The same selection, rendered densely: the model-aware representation experiment.
+ *
+ * Selection is identical to `progressive` on purpose — the only variable is how each
+ * selected document is rendered, so a difference in the tables is attributable to the
+ * representation and not to what was chosen.
+ */
+export function compiled(maxReads = 3): Strategy {
+  return progressiveWith("dense", "compiled", maxReads);
+}
+
+function progressiveWith(representation: Representation, name: string, maxReads: number): Strategy {
   return (task, corpus) => {
     const byId = new Map(corpus.map((doc) => [doc.id, doc]));
     const question = terms(task.question);
@@ -143,7 +159,7 @@ export function progressive(maxReads = 3): Strategy {
       if (!doc) return false;
       reads += 1;
       loaded.push(id);
-      bodies.push(doc.body);
+      bodies.push(renderDocument(doc, representation));
       return true;
     };
 
@@ -166,7 +182,7 @@ export function progressive(maxReads = 3): Strategy {
 
     const text = [index, ...bodies].join("\n\n");
     return {
-      strategy: "progressive",
+      strategy: name,
       text,
       loaded,
       reads,
