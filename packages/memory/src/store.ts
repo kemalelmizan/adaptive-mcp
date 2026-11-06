@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
 import type { DatabaseSyncOptions } from "node:sqlite";
 import type {
   ActionStep,
@@ -7,6 +8,8 @@ import type {
   MetricCell,
   MetricDimensions,
   ModelStats,
+  ContextEvent,
+  ContextStat,
   PlanStep,
   Recommendation,
   RecommendationType,
@@ -112,6 +115,12 @@ interface ExecutionNodeRow {
  * defeat the composite key for the common case where the server is unknown.
  */
 const UNKNOWN_SERVER = "";
+
+/**
+ * Reserved metric-cell scope for context loads. It is not a tool and never gets a
+ * `tools` record; the cells live beside tool cells so one store, one fold.
+ */
+export const CONTEXT_SCOPE = "context";
 
 /**
  * SQLite-backed store for Adaptive MCP.
@@ -351,6 +360,46 @@ export class MemoryStore implements Store {
     return modelStatsFromCells(
       this.metricCells(serverName === undefined ? { toolName } : { toolName, serverName }),
     );
+  }
+
+  /**
+   * Record one context load. It folds into a metric cell under the reserved
+   * `context` scope: a bounded counter update, and no `tools` row — a context item
+   * is not a tool and must not appear in the tool view.
+   */
+  recordContext(event: ContextEvent): void {
+    const now = event.timestamp ?? new Date().toISOString();
+    const dimensions: MetricDimensions = {
+      contextItem: event.item,
+      contextKind: event.kind,
+    };
+    const key = dimsKey(dimensions);
+    const existing = this.readMetricCell(CONTEXT_SCOPE, CONTEXT_SCOPE, "all", key);
+    const synthetic: ToolExecutionEvent = {
+      id: event.id ?? randomUUID(),
+      toolName: CONTEXT_SCOPE,
+      serverName: CONTEXT_SCOPE,
+      sessionId: event.sessionId,
+      timestamp: now,
+      status: "completed",
+      cost: event.tokens !== undefined ? { inputTokens: event.tokens } : undefined,
+      metadata: event.reason !== undefined ? { reason: event.reason } : undefined,
+    };
+    this.writeMetricCell(foldMetricCell(existing, synthetic, dimensions, "all", now), key);
+  }
+
+  /** Per-item load counts and estimated cost, most-loaded first. */
+  contextStats(): ContextStat[] {
+    return this.metricCells({ toolName: CONTEXT_SCOPE, serverName: CONTEXT_SCOPE })
+      .filter((cell) => cell.window === "all" && cell.dimensions.contextItem !== undefined)
+      .map((cell) => ({
+        item: cell.dimensions.contextItem!,
+        kind: cell.dimensions.contextKind ?? "unknown",
+        loads: cell.invocations,
+        tokens: cell.tokenInSum,
+        lastSeen: cell.lastSeen,
+      }))
+      .sort((a, b) => b.loads - a.loads || a.item.localeCompare(b.item));
   }
 
   /** Pre-aggregate an event into the bounded set of metric cells it belongs to. */
@@ -1130,8 +1179,7 @@ function dimsKey(dims: MetricDimensions): string {
  * would double-count them. The `other` bucket is the cardinality overflow, not a
  * model anyone can choose.
  */
-export function modelStatsFromCells(cells: MetricCell[]): ModelStats[] {
-  // Cells for the same model can come from different servers when no server was
+export function modelStatsFromCells(cells: MetricCell[]): ModelStats[] {  // Cells for the same model can come from different servers when no server was
   // named; they are summed rather than overwritten.
   const byModel = new Map<
     string,

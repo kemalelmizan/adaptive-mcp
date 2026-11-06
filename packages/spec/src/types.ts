@@ -298,6 +298,40 @@ export interface ModelStats {
 }
 
 /**
+ * One context load, as the host observed it.
+ *
+ * A context item is anything the host puts in front of the model: a prompt section,
+ * a skill body, a resource, a tool description. Recording *what was loaded, why, and
+ * at what estimated cost* is what lets a host (and later an advisor) compare items by
+ * use instead of by guesswork.
+ */
+export interface ContextEvent {
+  /** Stable id of the item, in the host's vocabulary. */
+  item: string;
+  /** What kind of item it is (`base`, `skills`, `resource`, `tool`, …). */
+  kind: string;
+  /** Why it was loaded, in the host's words. */
+  reason?: string;
+  /** Estimated tokens it contributed. */
+  tokens?: number;
+  sessionId?: string;
+  timestamp?: string;
+  /** Optional event id, for a test or a log to correlate. */
+  id?: string;
+}
+
+/** How often one context item has been loaded, and what it cost. */
+export interface ContextStat {
+  item: string;
+  kind: string;
+  /** Number of loads observed. */
+  loads: number;
+  /** Sum of the estimated tokens across those loads. */
+  tokens: number;
+  lastSeen: string;
+}
+
+/**
  * A bounded dimension tuple for a metric cell. Keys with undefined values are
  * omitted. Kept open-ended (`[key]`) so new dimensions don't need a migration;
  * cardinality is bounded by the host (models from its catalog, 3 decoding
@@ -527,6 +561,16 @@ export interface Store {
    * simply omits it and callers fall back to the tool-level heuristic.
    */
   modelStats?(toolName: string, serverName?: string): ModelStats[];
+
+  /**
+   * Record one context load (an item the host put in front of the model). Folded
+   * into metric cells under a reserved scope, so no tool record is created and the
+   * counters stay bounded like every other rollup.
+   */
+  recordContext?(event: ContextEvent): void;
+
+  /** Per-item load counts and estimated token cost, most-loaded first. */
+  contextStats?(): ContextStat[];
 
   // Graph methods (optional - only implemented when graph tracking is enabled)
   /** Record an execution node in the graph. */
