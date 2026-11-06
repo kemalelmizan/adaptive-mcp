@@ -9,7 +9,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # Full history: the format gate compares against the merge base (#49).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
         with:
@@ -25,6 +28,12 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      # Scoped on purpose: the committed tree predates prettier's current markdown and
+      # argument-wrapping output, so a repository-wide check cannot pass (#49). This
+      # requires new files, and files already clean at the merge base, to stay clean.
+      - name: Format (changed files)
+        run: pnpm format:check
 
       - name: Typecheck
         run: pnpm typecheck

@@ -247,10 +247,18 @@ argument-reading bugs in the release scripts.
 **Prettier caveat.** `pnpm format` (`prettier --write .`) rewrites files you did
 not touch: the committed tree predates the current prettier's output for TS
 argument wrapping and for markdown (`*` bullets and `*emphasis*` become `-` and
-`_emphasis_`), and **no prettier version in the declared range is clean** (#49).
-Run prettier on the files a change already touches, never as a blanket sweep — a
-blanket run buries the real change in cosmetic churn across ~98 files. CI checks
-ESLint but not formatting, so nothing will catch it for you.
+`_emphasis_`), and **no prettier version in the declared range is clean** (#49
+measured 98–116 unformatted files across 3.3.3 / 3.5.3 / 3.7.4 / 3.9.5, and 114
+with `printWidth: 120`). Run prettier on the files a change already touches, never
+as a blanket sweep — a blanket run buries the real change in cosmetic churn across
+~98 files.
+
+`pnpm format:check` enforces exactly that rule in CI (`scripts/check-format.mjs`): a
+**new** file, or a file that was already clean at the merge base, must be formatted;
+a file that was already drifting is listed as a warning and not gated. So CI now
+catches formatting regressions without a mass reformat, and it will never fail you
+for drift you did not introduce. The gate compares against `origin/main` by default;
+set `FORMAT_BASE=<ref>` to compare against something else.
 
 ## Long-term research questions
 

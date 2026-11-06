@@ -27,7 +27,8 @@
     "maintenance:docs": "node scripts/maintenance.ts docs",
     "docs": "node scripts/docs.ts",
     "docs:check": "node scripts/check-docs.ts",
-    "deps:check": "node scripts/check-deps.ts"
+    "deps:check": "node scripts/check-deps.ts",
+    "format:check": "node scripts/check-format.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
