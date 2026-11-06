@@ -10,6 +10,8 @@ import type {
   ModelStats,
   ContextEvent,
   ContextStat,
+  ContextEdge,
+  ContextRelation,
   PlanStep,
   Recommendation,
   RecommendationType,
@@ -400,6 +402,50 @@ export class MemoryStore implements Store {
         lastSeen: cell.lastSeen,
       }))
       .sort((a, b) => b.loads - a.loads || a.item.localeCompare(b.item));
+  }
+
+  /**
+   * Record one dependency edge between context items. Idempotent per relation: the
+   * same `(from, to, relation)` replaces itself rather than piling up, so a host can
+   * re-derive its edges on every startup without growing the table.
+   */
+  recordContextEdge(edge: ContextEdge): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO context_edges (from_item, to_item, relation, reason, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        edge.from,
+        edge.to,
+        edge.relation ?? "requires",
+        edge.reason ?? null,
+        edge.createdAt ?? new Date().toISOString(),
+      );
+  }
+
+  /** Every recorded edge, or those leaving one item, in a stable order. */
+  contextEdges(from?: string): ContextEdge[] {
+    const rows = (
+      from === undefined
+        ? this.db.prepare(`SELECT * FROM context_edges ORDER BY from_item, relation, to_item`).all()
+        : this.db
+            .prepare(`SELECT * FROM context_edges WHERE from_item = ? ORDER BY relation, to_item`)
+            .all(from)
+    ) as unknown as Array<{
+      from_item: string;
+      to_item: string;
+      relation: string;
+      reason: string | null;
+      created_at: string;
+    }>;
+    return rows.map((row) => ({
+      from: row.from_item,
+      to: row.to_item,
+      relation: row.relation as ContextRelation,
+      ...(row.reason !== null ? { reason: row.reason } : {}),
+      createdAt: row.created_at,
+    }));
   }
 
   /** Pre-aggregate an event into the bounded set of metric cells it belongs to. */

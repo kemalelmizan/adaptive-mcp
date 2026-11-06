@@ -101,7 +101,8 @@ Tracked in the `Context orchestration` milestone of each repo.
    budgets ([agent#90](https://github.com/adaptivemcp/agent/issues/90)). Measured by
    [`context-bench`](https://github.com/kemalelmizan/adaptive-mcp/issues/66), which
    lands before any selection work.
-2. **P1** — dependency edges; pin/expire/evict/restore; context telemetry as a metric
-   dimension.
+2. **P1** — dependency edges (shape in `spec`, storage in `memory`, traversal in the
+   host); pin/expire/evict/restore; context telemetry as a metric dimension (shipped in
+   `memory`; the host wiring is queued behind the next core release).
 3. **P2** — adaptive selection (an advisor over context metric cells) and
    model-aware representation, each only if the benchmark shows headroom.
