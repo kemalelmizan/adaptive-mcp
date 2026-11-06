@@ -129,7 +129,7 @@ export function progressive(maxReads = 3): Strategy {
     const byId = new Map(corpus.map((doc) => [doc.id, doc]));
     const question = terms(task.question);
     const index = corpus.map((doc) => `- ${doc.id}: ${doc.summary}`).join("\n");
-    const wanted = byId.get(task.answerIn)?.fact;
+    const wanted = task.answer;
 
     const loaded: string[] = [];
     const bodies: string[] = [];

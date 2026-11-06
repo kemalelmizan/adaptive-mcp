@@ -53,13 +53,12 @@ if (model) {
   for (const strategy of strategies) {
     for (const task of TASKS) {
       const result = strategy(task, CORPUS);
-      const fact = CORPUS.find((doc) => doc.id === task.answerIn)?.fact ?? "";
       const answer = await askModel(model, result.text, task.question);
       live.push({
         strategy: result.strategy,
         taskId: task.id,
         hidden: task.hiddenDependency === true,
-        ok: answersCorrectly(answer.text, fact),
+        ok: answersCorrectly(answer.text, task.answer),
         tokens: result.tokens,
         durationMs: answer.durationMs,
         answer: answer.text.replace(/\s+/g, " ").slice(0, 80),
