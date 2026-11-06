@@ -28,4 +28,13 @@ describe("model answers", () => {
       modelFromEnv(["--model", "http://y/v1", "--model-name", "qwen"], {}),
     ).toEqual({ baseURL: "http://y/v1", model: "qwen" });
   });
+
+  it("turns on the strict answer constraint only when asked", () => {
+    expect(
+      modelFromEnv(["--model", "http://y/v1"], {}),
+    ).toEqual({ baseURL: "http://y/v1", model: "local" });
+    expect(modelFromEnv(["--model", "http://y/v1", "--strict"], {})).toMatchObject({
+      strict: true,
+    });
+  });
 });

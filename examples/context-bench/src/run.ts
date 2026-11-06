@@ -14,12 +14,12 @@ import { CORPUS } from "./corpus.js";
 import { answersCorrectly, askModel, modelFromEnv } from "./model.js";
 import { adaptive, learnFromTask, seedEdges } from "./adaptive.js";
 import { representationRatio } from "./representation.js";
-import { allUpfront, compiled, lexical, progressive } from "./strategies.js";
+import { allUpfront, compiled, idIndex, lexical, progressive } from "./strategies.js";
 import { TASKS } from "./tasks.js";
 import { MemoryStore } from "@adaptivemcp/memory";
 
 const argv = process.argv.slice(2);
-const fixed: TaskOutcome[] = [allUpfront, lexical(), progressive(), compiled()].flatMap(
+const fixed: TaskOutcome[] = [allUpfront, lexical(), progressive(), compiled(), idIndex()].flatMap(
   (strategy) => TASKS.map((task) => runTask(task, CORPUS, strategy)),
 );
 
@@ -79,7 +79,9 @@ if (interesting.length > 0) {
 
 const model = modelFromEnv(argv);
 if (model) {
-  console.log(`\nmodel: ${model.model} at ${model.baseURL}`);
+  console.log(
+    `\nmodel: ${model.model} at ${model.baseURL}${model.strict ? " (strict answers)" : ""}`,
+  );
   interface LiveRow {
     strategy: string;
     taskId: string;
@@ -110,6 +112,7 @@ if (model) {
     lexical(),
     progressive(),
     compiled(),
+    idIndex(),
     adaptive(liveStore, { name: "adaptive-warm" }),
   ];
   for (const strategy of liveStrategies) {
