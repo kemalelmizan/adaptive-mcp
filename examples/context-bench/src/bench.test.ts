@@ -4,17 +4,21 @@ import { CORPUS } from "./corpus.js";
 import { allUpfront, lexical, progressive, terms } from "./strategies.js";
 import { TASKS } from "./tasks.js";
 
-const hiddenTask = TASKS.find((task) => task.hiddenDependency)!;
-const hiddenDoc = CORPUS.find((doc) => doc.id === hiddenTask.answerIn)!;
+const hiddenTasks = TASKS.filter((task) => task.hiddenDependency);
+const directTasks = TASKS.filter((task) => !task.hiddenDependency);
 
 describe("context bench", () => {
-  it("has a genuinely hidden dependency: the answering document shares no terms with the question", () => {
-    const asked = terms(hiddenTask.question);
-    const inIndex = terms(`${hiddenDoc.title} ${hiddenDoc.summary}`);
-    const overlap = [...inIndex].filter((term) => asked.has(term));
+  it("has genuinely hidden dependencies: neither answer document shares a term with its question", () => {
+    expect(hiddenTasks).toHaveLength(2);
+    for (const task of hiddenTasks) {
+      const doc = CORPUS.find((entry) => entry.id === task.answerIn)!;
+      const asked = terms(task.question);
+      const inIndex = terms(`${doc.title} ${doc.summary}`);
+      const overlap = [...inIndex].filter((term) => asked.has(term));
 
-    // If this ever stops being true, the benchmark stops testing what it claims.
-    expect(overlap).toEqual([]);
+      // If this stops being true, the benchmark stops testing what it claims.
+      expect(overlap, task.id).toEqual([]);
+    }
   });
 
   it("loads everything upfront: every task is answerable, at full cost", () => {
@@ -25,27 +29,29 @@ describe("context bench", () => {
     expect(outcomes.every((outcome) => outcome.pollution > 0.8)).toBe(true);
   });
 
-  it("finds the direct answers lexically, but not the hidden dependency", () => {
+  it("finds every direct answer lexically, and neither hidden dependency", () => {
     const outcomes = TASKS.map((task) => runTask(task, CORPUS, lexical()));
-    const hidden = outcomes.find((outcome) => outcome.taskId === hiddenTask.id)!;
+    const byId = new Map(outcomes.map((outcome) => [outcome.taskId, outcome]));
 
-    expect(outcomes.filter((outcome) => !outcome.hidden).every((outcome) => outcome.success)).toBe(
-      true,
-    );
-    expect(hidden.success).toBe(false);
-    expect(hidden.requiredLoaded).toBe(false);
+    for (const task of directTasks) expect(byId.get(task.id)?.success, task.id).toBe(true);
+    for (const task of hiddenTasks) {
+      expect(byId.get(task.id)?.success, task.id).toBe(false);
+      expect(byId.get(task.id)?.requiredLoaded, task.id).toBe(false);
+    }
   });
 
-  it("reaches the hidden dependency through the pointer, and keeps the cost down", () => {
+  it("reaches both hidden dependencies through pointers, and keeps the cost down", () => {
     const outcomes = TASKS.map((task) => runTask(task, CORPUS, progressive()));
-    const hidden = outcomes.find((outcome) => outcome.taskId === hiddenTask.id)!;
+    const byId = new Map(outcomes.map((outcome) => [outcome.taskId, outcome]));
 
     expect(outcomes.every((outcome) => outcome.success)).toBe(true);
-    // The pointer is what makes it reachable: one read to find it, one to follow.
-    expect(hidden.reads).toBe(2);
-    expect(hidden.hops).toBe(1);
-    // And it does not read the whole corpus to get there.
-    expect(hidden.loaded.length).toBeLessThan(CORPUS.length);
+    for (const task of hiddenTasks) {
+      const outcome = byId.get(task.id)!;
+      // One read to find it, one to follow the pointer.
+      expect(outcome.reads, task.id).toBe(2);
+      expect(outcome.hops, task.id).toBe(1);
+      expect(outcome.loaded.length, task.id).toBeLessThan(CORPUS.length);
+    }
   });
 
   it("costs less than loading everything, across the pack", () => {

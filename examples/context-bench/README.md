@@ -13,17 +13,32 @@ same corpus and tasks:
 | `lexical(top3)` | the best 3 documents by term overlap with the question, zero-score ones excluded |
 | `progressive`   | an index (title + summary) and bodies read on demand, following pointers         |
 
+## The pack
+
+10 tasks over 13 documents. Eight tasks are answerable from a document whose
+vocabulary overlaps the question; **two are not** — their answer lives in a document
+sharing no terms with the question, reachable only by following a pointer:
+
+| Hidden task                  | Route                                             |
+| ---------------------------- | ------------------------------------------------- |
+| payments API timeout change  | `api-payments` → `constraint-eu` ("p99 under 2s") |
+| billing export format change | `billing-export` → `retention-policy` ("90 days") |
+
+Five `legacy` documents are deliberate distractors: they match the questions' words
+and hold the wrong facts, so precision and pollution mean something. A test asserts
+that each hidden answer document shares no term with its question, so the benchmark
+cannot quietly stop testing what it claims.
+
 ## What it measures — and what it does not
 
 The default run is **deterministic**: the reader is an oracle that knows which fact
 answers the task and stops when it has it. That isolates _availability and cost_ from
-sampling noise, and it is why the numbers are stable.
+sampling noise.
 
 It does **not** measure model skill. `--model <baseURL>` adds a second table that asks
 a real OpenAI-compatible model the same questions with the same contexts — that is the
-half where pollution and reasoning show up. Two different questions, two tables.
-
-Metrics:
+half where pollution and extraction failures show up. Two different questions, two
+tables.
 
 | Metric           | Definition                                                                                   |
 | ---------------- | -------------------------------------------------------------------------------------------- |
@@ -31,17 +46,8 @@ Metrics:
 | `tokens`         | estimated context tokens (chars/4) — the strategy's cost, not the model's usage              |
 | `precision`      | required document loaded ? `1/loaded` : `0`                                                  |
 | `recall`         | required document loaded                                                                     |
-| `reads` / `hops` | retrieval calls, and how many were caused by following a pointer                             |
+| `reads` / `hops` | retrieval calls, and how many were caused by a pointer                                       |
 | `pollution`      | share of loaded documents that were not required                                             |
-
-## The hidden-dependency task
-
-Four tasks are answerable from a document whose vocabulary overlaps the question. The
-fifth is not: _"I am changing the payments API default timeout. What else must I check
-before shipping?"_ is answered by `constraint-eu` ("p99 under 2s"), a document that
-shares **no terms** with the question. The only route is the pointer in
-`api-payments`. A test asserts that disjointness, so the benchmark cannot silently
-stop testing what it claims.
 
 ## Deterministic run
 
@@ -52,47 +58,73 @@ pnpm --filter @adaptivemcp/context-bench bench
 
 ```
 strategy           pass   tokens   precision  recall  reads  hops  pollution
-all-upfront        5/5    181      0.13       1.00    0.0    0.0   0.88
-lexical(top3)      4/5    25       0.70       0.80    1.0    0.0   0.30
-progressive        5/5    153      0.90       1.00    1.2    0.2   0.10
+all-upfront        10/10  280      0.08       1.00    0.0    0.0   0.92
+lexical(top3)      8/10   45       0.43       0.80    1.0    0.0   0.57
+progressive        10/10  249      0.85       1.00    1.3    0.2   0.15
 ```
 
-The hidden task: `lexical` loads only `api-payments` and misses; `progressive` reads
-it, follows the pointer, and reaches the constraint in two reads.
+`lexical` misses both hidden tasks: it loads `api-payments` / `billing-export` and
+never the documents they point at. `progressive` reads two documents per hidden task —
+one to find the pointer, one to follow it.
 
-## Live-model run
+## Live-model runs
 
 ```bash
 pnpm --filter @adaptivemcp/context-bench bench -- \
-  --model http://127.0.0.1:8080/v1 --model-name qwen3-coder
+  --model http://127.0.0.1:8080/v1 --model-name qwen3-coder --no-think
 ```
 
-Recorded 2026-11-06 against `Qwen3-Coder-30B-A3B-Instruct` (llama.cpp, temperature 0):
+Recorded 2026-11-06, llama.cpp, temperature 0, one run per model. `--no-think` sets
+`chat_template_kwargs: { enable_thinking: false }`, without which Qwen3 spends the
+whole budget on `reasoning_content` and returns empty content — a 0/10 that measures
+the template, not the strategy.
+
+**Qwen3-Coder-30B-A3B (GPU):**
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        4/5    181      1183
-lexical(top3)      4/5    25       1403
-progressive        5/5    153      1425
+all-upfront        9/10   280      781
+lexical(top3)      8/10   45       968
+progressive        10/10  249      779
 ```
 
-**The interesting result is the disagreement between the tables.** The deterministic
-oracle passes the hidden task with _all-upfront_ — the constraint is in the prompt.
-The model does not: given all eight documents it misses the constraint, while given
-the two documents reachable through the pointer it finds it. That is context
-pollution, and it is invisible to a harness that only checks availability.
+**Qwen3-8B (CPU):**
 
-Caveats, because the sample is small: five tasks, one model, one run, one corpus.
-Treat this as a hypothesis to expand, not a conclusion. It does, however, say
-something useful already: _loading more context is not monotonically better_, which is
-exactly what the strategy is supposed to improve.
+```
+strategy           pass   tokens   mean ms
+all-upfront        9/10   280      7037
+lexical(top3)      7/10   45       1435
+progressive        8/10   249      1599
+```
+
+### Reading the tables together
+
+- The deterministic table says the information is **available**: progressive 10/10.
+- The 30B model reproduces the original finding at twice the size: **all-upfront
+  misses a hidden task that progressive gets**, despite loading the answering
+  document. Lexical misses both, as designed.
+- The 8B is the interesting counter-case: its misses are **extraction**, not
+  retrieval. Given everything, it answers the pointer sentence ("Read the retention
+  policy…") instead of the fact; given the index it echoes the title ("Retention
+  policy") or the line ("- constraint-eu"). A smaller model is the bottleneck, not
+  the strategy.
+- So the gain from progressive disclosure is **model-dependent**, and on this pack it
+  is largest where the model can use what it is given. That is a useful constraint on
+  any adaptive selection: the policy should not outrun the model's ability to read.
+
+## Caveats
+
+10 tasks, one corpus, one run per model, temperature 0. The matcher is exact
+(case- and number-word-insensitive: "ten minutes" = "10 minutes") and rewards the
+fact, not a paraphrase — which is why one task's key is a number ("5 minutes") rather
+than a sentence: an imperative sentence was measuring paraphrasing, not retrieval.
+Treat the tables as a direction to test further, not a conclusion.
 
 ## Design notes
 
-- The corpus and tasks are data (`src/corpus.ts`, `src/tasks.ts`), so a larger pack is
-  a data change, not a code change.
+- The corpus and tasks are data (`src/corpus.ts`, `src/tasks.ts`); a task owns its
+  answer, so one document can answer several questions.
 - Zero-score documents are not returned by `lexical`; padding the top-k would inflate
   recall and pollution by accident.
 - The model mode is opt-in: it needs a server, is not deterministic, and CI stays
-  offline. `answersCorrectly` normalises case and number words ("ten minutes" =
-  "10 minutes") and nothing else.
+  offline.

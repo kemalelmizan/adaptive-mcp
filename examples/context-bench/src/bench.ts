@@ -30,14 +30,13 @@ export interface TaskOutcome {
 
 export function runTask(task: BenchTask, corpus: Document[], strategy: Strategy): TaskOutcome {
   const result = strategy(task, corpus);
-  const fact = corpus.find((doc) => doc.id === task.answerIn)?.fact;
   const requiredLoaded = result.loaded.includes(task.answerIn);
   const loaded = result.loaded.length;
   return {
     taskId: task.id,
     strategy: result.strategy,
     hidden: task.hiddenDependency === true,
-    success: fact !== undefined && result.text.includes(fact),
+    success: result.text.includes(task.answer),
     tokens: result.tokens,
     precision: loaded === 0 ? 0 : (requiredLoaded ? 1 : 0) / loaded,
     recall: requiredLoaded ? 1 : 0,

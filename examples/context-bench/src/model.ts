@@ -16,6 +16,13 @@ export interface ModelOptions {
   model: string;
   temperature?: number;
   timeoutMs?: number;
+  /**
+   * Extra chat-template knobs. Qwen3 hybrid-reasoning servers need
+   * `{ enable_thinking: false }` or they spend the whole budget on
+   * `reasoning_content` and return empty content — a 0/10 table that measures the
+   * model's template, not the strategy.
+   */
+  chatTemplateKwargs?: Record<string, unknown>;
 }
 
 export interface ModelAnswer {
@@ -38,6 +45,7 @@ export async function askModel(
       model: options.model,
       temperature: options.temperature ?? 0,
       max_tokens: 120,
+      ...(options.chatTemplateKwargs ? { chat_template_kwargs: options.chatTemplateKwargs } : {}),
       messages: [
         {
           role: "system",
@@ -114,5 +122,9 @@ export function modelFromEnv(
   return {
     baseURL,
     model: nameAt >= 0 ? (argv[nameAt + 1] ?? "local") : (env.CONTEXT_BENCH_MODEL_NAME ?? "local"),
+    // `--no-think` is for llama.cpp's Qwen3 hybrids; other servers ignore it.
+    ...(argv.includes("--no-think")
+      ? { chatTemplateKwargs: { enable_thinking: false } }
+      : {}),
   };
 }
