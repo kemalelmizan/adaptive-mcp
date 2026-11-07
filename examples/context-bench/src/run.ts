@@ -11,6 +11,7 @@
  */
 import { formatTable, runTask, summarise, type TaskOutcome } from "./bench.js";
 import { CORPUS } from "./corpus.js";
+import { deterministicOutcomes } from "./deterministic.js";
 import { answersCorrectly, askModel, modelFromEnv } from "./model.js";
 import { adaptive, learnFromTask, seedEdges } from "./adaptive.js";
 import { representationRatio } from "./representation.js";
@@ -20,44 +21,8 @@ import { TASKS } from "./tasks.js";
 import { MemoryStore } from "@adaptivemcp/memory";
 
 const argv = process.argv.slice(2);
-const fixed: TaskOutcome[] = [allUpfront, lexical(), progressive(), compiled(), idIndex()].flatMap(
-  (strategy) => TASKS.map((task) => runTask(task, CORPUS, strategy)),
-);
-
-/**
- * A pass with the adaptive strategy, learning after each task.
- *
- * Learning happens *after* the task is measured, so a task never benefits from what
- * it taught the store. Two passes over the same store are reported: the first is
- * what a host does on a new corpus, the second is after one pass of experience.
- */
-function adaptivePass(
-  store: MemoryStore,
-  label: string,
-  options: { session: boolean },
-): TaskOutcome[] {
-  const strategy = adaptive(store, { name: label, session: options.session });
-  return TASKS.map((task) => {
-    const before = new Set(strategy.session());
-    const outcome = runTask(task, CORPUS, strategy);
-    const learned = strategy.session().filter((id) => !before.has(id));
-    learnFromTask(store, CORPUS, task, learned);
-    return outcome;
-  });
-}
-
-const store = new MemoryStore({ path: ":memory:" });
-seedEdges(store, CORPUS);
-const adaptiveOutcomes = [
-  ...adaptivePass(store, "adaptive-cold", { session: true }),
-  ...adaptivePass(store, "adaptive-warm", { session: true }),
-  // Selection alone: a warm prior, but no carry-over between tasks, so the token
-  // column is directly comparable with the fixed strategies'.
-  ...adaptivePass(store, "adaptive-select", { session: false }),
-];
-store.close();
-
-const outcomes: TaskOutcome[] = [...fixed, ...adaptiveOutcomes];
+// Shared with `deterministic.test.ts`, which pins the table printed below.
+const outcomes: TaskOutcome[] = deterministicOutcomes();
 
 console.log(`context-bench — ${TASKS.length} tasks, ${CORPUS.length} documents\n`);
 console.log(formatTable(summarise(outcomes)));

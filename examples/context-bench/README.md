@@ -80,6 +80,13 @@ adaptive-warm      11/11  440      0.30       1.00    1.2    0.4   0.70
 adaptive-select    11/11  360      0.74       1.00    1.6    0.4   0.26
 ```
 
+Re-run 2026-11-07 against `@adaptivemcp/*` 0.7.0 (the release that shipped context-load
+telemetry): every cell is identical, so the adaptive rows below are current, not a
+pre-release snapshot. This table is now **pinned by
+`deterministic.test.ts`** — the runner and the test share `deterministicOutcomes()`,
+so a strategy change that is not reflected here fails CI instead of leaving the docs
+describing a benchmark that no longer exists.
+
 `lexical` reaches 8 of 11: it misses exactly the three hidden tasks and nothing else. It
 used to lose a fourth — `deploy-rule` — to a `legacy` document that repeated the
 question's words and sorted first; ranking now prefers a current document when two match
