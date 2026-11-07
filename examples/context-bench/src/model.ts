@@ -31,6 +31,11 @@ export interface ModelOptions {
    * exact failure the 8B showed.
    */
   strict?: boolean;
+  /**
+   * Bearer token for servers that require one (llama.cpp's `--api-key`, a hosted
+   * OpenAI-compatible endpoint). Never logged.
+   */
+  apiKey?: string;
 }
 
 const INSTRUCTION =
@@ -66,7 +71,10 @@ export async function askModel(
   const started = Date.now();
   const response = await fetch(`${options.baseURL.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+    },
     body: JSON.stringify({
       model: options.model,
       temperature: options.temperature ?? 0,
@@ -152,5 +160,11 @@ export function modelFromEnv(
     // `--no-think` is for llama.cpp's Qwen3 hybrids; other servers ignore it.
     ...(argv.includes("--no-think") ? { chatTemplateKwargs: { enable_thinking: false } } : {}),
     ...(argv.includes("--strict") ? { strict: true } : {}),
+    // `--api-key` wins; the environment is for a key you do not want in shell history.
+    ...(() => {
+      const keyAt = argv.indexOf("--api-key");
+      const apiKey = keyAt >= 0 ? argv[keyAt + 1] : env.CONTEXT_BENCH_API_KEY;
+      return apiKey ? { apiKey } : {};
+    })(),
   };
 }
