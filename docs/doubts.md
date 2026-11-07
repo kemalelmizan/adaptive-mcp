@@ -84,7 +84,7 @@ symptom; the underlying naming/boundary question is still open.
   3. Leave the package as-is; fix documentation only (done for
      `examples/README.md`; would need the same pass over the top-level
      `README.md`'s Architecture section if it makes the same server/client
-     implication — there is no separate `docs/architecture.md`).
+     implication — there is no separate architecture document).
   Leaning toward (3) short-term (cheapest, already partly done) with (2) as a
   cheap follow-up if the confusion recurs; (1) only if the two-store model
   in §1 hardens into an actual deployment requirement (e.g. a server MUST NOT

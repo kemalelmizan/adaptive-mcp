@@ -15,7 +15,7 @@
  *   5. each `CLAIMS` entry's code probe agrees with its ROADMAP status marker:
  *      a capability that exists in code must be marked ✅/🟡, and a marker must
  *      not claim a capability the code no longer has;
- *   6. every backticked in-repo path cited in the ROADMAP exists;
+ *   6. every backticked in-repo path cited in README/docs exists;
  *   7. prose claims that contradict a code probe are caught (a "not yet" left
  *      behind after the work landed), including claims about the sibling
  *      `agent` repo when it is checked out locally;
@@ -29,8 +29,8 @@
  * or via `pnpm maintenance:check`.
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import {
   PUBLISHABLE_PACKAGES,
   REPO_ROOT,
@@ -368,27 +368,75 @@ const PROSE_GUARDS: ProseGuard[] = [
 ];
 
 /**
- * Backticked in-repo paths in the ROADMAP must exist.
+ * Citations that deliberately name a file this repo does not have.
  *
- * Prose citations decay silently when a file is renamed or a planned path is
- * written as if it were real (`examples/src/scenarios/conformance.js` never
- * existed). This is the same rule the agent repo applies to its docs, limited to
- * the path roots this repo owns: a reference-clone path (`opencode/...`) is not
- * in-repo and is deliberately not checked.
+ * Narrow by design: a prefix per document plus the reason. A proposed path in *another*
+ * repository is the only case that cannot be fixed by editing the sentence into truth, and
+ * listing it here keeps the guard strict everywhere else.
  */
+const CITATION_IGNORES: Record<string, Array<{ prefix: string; reason: string }>> = {
+  "docs/doubts.md": [
+    {
+      prefix: "packages/sdk/",
+      reason:
+        "proposed files inside the upstream @modelcontextprotocol/sdk (the SEP PR skeleton), " +
+        "not this repo",
+    },
+  ],
+};
+
 const CITATION = /`((?:packages|examples|docs|scripts|apps)\/[\w./-]+)`/g;
 
-function checkRoadmapCitations(): void {
-  const roadmap = read("docs/ROADMAP.md");
-  const missing: string[] = [];
-  for (const match of roadmap.matchAll(CITATION)) {
-    const raw = match[1];
-    if (raw === undefined) continue;
-    const path = raw.replace(/[.,;:]+$/, "").replace(/\/$/, "");
-    if (!existsSync(resolve(REPO_ROOT, path))) missing.push(raw);
-  }
-  for (const path of missing) {
-    fail(`docs/ROADMAP.md cites \`${path}\`, which does not exist`);
+/** Every markdown file under `docs/`, as `[label, relative-path]`, in a stable order. */
+function listDocs(): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  const walk = (relative: string): void => {
+    for (const entry of readdirSync(join(REPO_ROOT, relative), { withFileTypes: true })) {
+      const child = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) walk(child);
+      else if (entry.name.endsWith(".md")) out.push([child, child]);
+    }
+  };
+  walk("docs");
+  return out.sort(([a], [b]) => a.localeCompare(b));
+}
+
+/**
+ * Backticked in-repo paths in the prose must exist.
+ *
+ * Prose citations decay silently when a file is renamed or a planned path is written as if it
+ * were real (`examples/src/scenarios/conformance.js` never existed). README and every
+ * `docs/**` file are checked, not just the ROADMAP: the same failure mode applies to
+ * `doubts.md` and the SEP draft, and the cost is one filesystem lookup per citation.
+ */
+function checkCitations(): void {
+  const files: Array<[string, string]> = [["README.md", "README.md"], ...listDocs()];
+  for (const [label, relative] of files) {
+    const ignores = CITATION_IGNORES[label] ?? [];
+    const used = new Set<string>();
+    const text = read(relative);
+    const missing: string[] = [];
+    for (const match of text.matchAll(CITATION)) {
+      const raw = match[1];
+      if (raw === undefined) continue;
+      const ignore = ignores.find((entry) => raw.startsWith(entry.prefix));
+      if (ignore) {
+        used.add(ignore.prefix);
+        continue;
+      }
+      const path = raw.replace(/[.,;:]+$/, "").replace(/\/$/, "");
+      if (!existsSync(resolve(REPO_ROOT, path))) missing.push(raw);
+    }
+    for (const path of missing) {
+      fail(`${label} cites \`${path}\`, which does not exist`);
+    }
+    // A stale exemption is how an allowlist rots into a dumping ground: if the proposed path
+    // is gone from the document, or the file now exists, the prefix must go.
+    for (const ignore of ignores) {
+      if (!used.has(ignore.prefix)) {
+        fail(`${label} exemption for \`${ignore.prefix}*\` matches nothing; remove it`);
+      }
+    }
   }
 }
 
@@ -434,7 +482,7 @@ function main(): void {
   checkRoadmapInventory();
   checkClaims();
   checkProseClaims();
-  checkRoadmapCitations();
+  checkCitations();
   checkPublishClosure();
 
   if (failures.length > 0) {
