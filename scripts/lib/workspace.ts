@@ -62,6 +62,18 @@ export function run(
 const execFileAsync = promisify(execFile);
 
 /**
+ * The stdout of a promisified `execFile`, whichever shape the runtime resolves with.
+ *
+ * Node 26 resolves to the raw string; older releases resolve to `{ stdout, stderr }`.
+ * Reading `.stdout` unconditionally is what made `isPublished()` claim every version was
+ * missing and blocked the v0.7.0 tag (#84), so the shape is handled once, here, and
+ * tested directly.
+ */
+export function stdoutOf(result: string | { stdout: string }): string {
+  return typeof result === "string" ? result : result.stdout;
+}
+
+/**
  * Async variant of `run`, for publishing several packages in parallel. Captures
  * stdout/stderr instead of inheriting stdio (parallel writers would interleave);
  * on a non-zero exit the rejected error carries `.stdout`/`.stderr`.
@@ -82,7 +94,7 @@ export async function runAsync(
     encoding: "utf8",
     maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024,
   })) as unknown as string | { stdout: string };
-  return typeof result === "string" ? result : result.stdout;
+  return stdoutOf(result);
 }
 
 /** The current version of a `@adaptivemcp/*` package, from its package.json. */
@@ -95,7 +107,7 @@ export function packageVersion(pkg: string): string {
  * bare name on the registry is a *different* package (`spec` exists on npm), so
  * every registry query goes through here.
  */
-function qualify(pkg: string): string {
+export function qualify(pkg: string): string {
   return pkg.startsWith("@") ? pkg : `@adaptivemcp/${pkg}`;
 }
 
