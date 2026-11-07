@@ -71,12 +71,18 @@ export async function runAsync(
   args: string[],
   opts: { cwd?: string; maxBuffer?: number } = {},
 ): Promise<string> {
-  const { stdout } = await execFileAsync(cmd, args, {
+  // `util.promisify(execFile)` resolves to the raw stdout on Node 26 and to
+  // `{ stdout, stderr }` on older releases, so accept both. The previous form
+  // destructured `stdout` unconditionally, which made every read return
+  // `undefined` here — `isPublished()` then said "not published" for versions
+  // that were on the registry, so a release could publish everything and then
+  // refuse to tag (v0.7.0, #84).
+  const result = (await execFileAsync(cmd, args, {
     cwd: opts.cwd ?? REPO_ROOT,
     encoding: "utf8",
     maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024,
-  });
-  return stdout;
+  })) as unknown as string | { stdout: string };
+  return typeof result === "string" ? result : result.stdout;
 }
 
 /** The current version of a `@adaptivemcp/*` package, from its package.json. */
