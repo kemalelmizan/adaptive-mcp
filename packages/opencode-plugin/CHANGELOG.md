@@ -1,5 +1,34 @@
 # @adaptivemcp/opencode-plugin
 
+## 0.4.0
+
+### Minor Changes
+
+- c8ed89d: Record which model served each tool call.
+
+  The plugin previously recorded every call with no model at all, so learned
+  statistics could not tell one model from another and a model recommendation had
+  nothing to compare. V1 reports this on `chat.params`; V2 has no such hook, so the
+  adapter subscribes to the `session.model.selected` event (present in v2.0.32) and
+  attributes calls to `provider/model`. The model is captured when the call starts,
+  so a mid-turn switch does not relabel earlier calls.
+
+### Patch Changes
+
+- Updated dependencies [e1ac0d5]
+- Updated dependencies [b2eeb03]
+- Updated dependencies [4a87faa]
+- Updated dependencies [820e510]
+- Updated dependencies [46a345d]
+  - @adaptivemcp/memory@0.7.0
+  - @adaptivemcp/routing@0.5.0
+  - @adaptivemcp/approval@0.2.7
+  - @adaptivemcp/evaluation@0.4.3
+  - @adaptivemcp/extension@0.5.3
+  - @adaptivemcp/middleware@0.1.5
+  - @adaptivemcp/orchestration@0.2.7
+  - @adaptivemcp/telemetry@0.1.10
+
 ## 0.3.1
 
 ### Patch Changes

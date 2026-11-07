@@ -1,6 +1,6 @@
 {
   "name": "@adaptivemcp/context-bench",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "description": "A deterministic harness comparing context strategies: all-upfront, lexical retrieval, progressive disclosure, and adaptive selection.",

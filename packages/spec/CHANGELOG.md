@@ -1,5 +1,79 @@
 # @adaptivemcp/spec
 
+## 0.7.0
+
+### Minor Changes
+
+- e1ac0d5: Keep the order a host declared for context edges.
+
+  `ContextEdge.ordinal` and migration 9: `context_edges` gains an `ordinal` column, and
+  `contextEdges()` orders by `(from_item, relation, ordinal, to_item)` instead of by the
+  target's name.
+
+  Pointer order is meaningful — a document lists what to read first — and without it a host
+  following the recorded edges follows them alphabetically. That is how the second-hop
+  benchmark caught it: `catalog-constraints` declares the answer first and a distractor
+  second, and the adaptive strategy read the distractor, spent its budget, and never reached
+  the answer.
+
+  Recording with no ordinal appends (`max + 1` for that document), so a host that records in
+  declaration order needs to think about nothing; re-recording the same edge keeps its place
+  and replaces its reason. Existing rows get `0` and fall back to the previous ordering.
+
+- b2eeb03: Persist dependency edges between context items.
+
+  `ContextEdge` / `ContextRelation` and optional `Store.recordContextEdge` /
+  `contextEdges`: a `context_edges` table (migration 7), idempotent per
+  `(from, to, relation)` so a host can re-derive its edges on every startup without
+  growing the table, with `requires` and `see-also` kept apart because they mean
+  different things to a host deciding what to follow.
+
+  The shape and the record are shared; traversal — how many hops, what to do on a cycle,
+  whether to follow at all — stays host policy, the same split as pause/resume. This is
+  what the benchmark's hidden-dependency task needs: an answer that is reachable only
+  through a pointer.
+
+- 4a87faa: Persist the retention lifecycle of context items.
+
+  `ContextLifecycle` / `ContextLifecycleState` and optional
+  `Store.setContextLifecycle` / `contextLifecycle` / `contextLifecycles`: a
+  `context_lifecycle` table (migration 8), one row per item, rewritten in place so a
+  sweep never grows the table.
+
+  Only two states, `active` and `archived`, because a state the system cannot decide is
+  decoration: `evicted` is the absence of a record, and `restore` is a write back to
+  `active`. `pinned` outranks `expiresAt` — a sweep may archive anything expired and
+  unpinned, but it must not archive a pin. _When_ to sweep is the host's policy, the same
+  split as edges and pause/resume.
+
+- 820e510: Record context loads, so a host can learn which context earns its tokens.
+
+  `ContextEvent`/`ContextStat` and optional `Store.recordContext`/`contextStats`: a load
+  folds into a metric cell under a reserved `context` scope, dimensioned by
+  `contextItem` + `contextKind`. No `tools` row is created — a context item is not a
+  tool — and the counters stay bounded like every other rollup, so a long session costs
+  one counter update per item, not a row per load.
+
+  This is the telemetry half of ADR-005's P1: without it a host can say what it loaded
+  but not what it was worth.
+
+- 46a345d: Per-model statistics, and a router that uses them.
+
+  The store already folded a `{ model }` metric cell per tool (`MetricDimensions.model`,
+  with a cardinality cap), but nothing read it: `Router` chose from a static
+  cost/latency list, so "use the model that actually works on this tool" had no
+  evidence behind it.
+
+  - `spec`: `ModelStats`, and an optional `Store.modelStats(tool, server?)` — optional
+    like `metricCells`, so a backend without dimensional rollups falls back cleanly.
+  - `memory`: `modelStats()` sums the `{ model }` lifetime cells (ignoring the overall
+    cell, the decoding slices that would double-count, the hourly windows, and the
+    `other` overflow bucket), and `modelStatsFromCells()` exposes the derivation.
+  - `routing`: `routeTool` now prefers the model with the best **observed** record when
+    one has `minModelInvocations` (default 5) samples — reliability first, then latency,
+    then cost — and only falls back to the static heuristic when no model has enough
+    evidence. The rationale cites the sample count and failure rate it decided from.
+
 ## 0.6.0
 
 ### Minor Changes

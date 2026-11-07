@@ -1,5 +1,24 @@
 # @adaptivemcp/runtime
 
+## 0.4.3
+
+### Patch Changes
+
+- Updated dependencies [e1ac0d5]
+- Updated dependencies [b2eeb03]
+- Updated dependencies [4a87faa]
+- Updated dependencies [820e510]
+- Updated dependencies [46a345d]
+  - @adaptivemcp/spec@0.7.0
+  - @adaptivemcp/memory@0.7.0
+  - @adaptivemcp/routing@0.5.0
+  - @adaptivemcp/approval@0.2.7
+  - @adaptivemcp/evaluation@0.4.3
+  - @adaptivemcp/extension@0.5.3
+  - @adaptivemcp/middleware@0.1.5
+  - @adaptivemcp/orchestration@0.2.7
+  - @adaptivemcp/telemetry@0.1.10
+
 ## 0.4.2
 
 ### Patch Changes
