@@ -341,9 +341,10 @@ Formerly README's "What's next" list. No host is required to understand the
 the whole design bets on graceful degradation for hosts that ignore unknown
 resources. That claim is currently untested.
 
-- Add `examples/src/scenarios/conformance.js`-style scenarios that simulate a
-  host ignoring the extension entirely (resource never read, tool never
-  called) and assert the base MCP server/client still work normally.
+- Add a scenario under `examples/src/scenarios/` in the style of
+  `decoding-policy.ts` that simulates a host ignoring the extension entirely
+  (resource never read, tool never called) and asserts the base MCP
+  server/client still work normally.
 - Doubles as groundwork for the SEP graduation conformance suite referenced in
   doubts.md §6 (see the Blocked list below).
 
@@ -438,8 +439,8 @@ loaded from `.opencode/plugins/` or an npm package.
 **Update (2026-09-28): rewired to the real V1 hooks and unit-tested.**
 `@adaptivemcp/opencode-plugin` now exports a genuine OpenCode V1 `Plugin`
 (`createAdaptivePlugin`) whose hooks are exactly the real ones — verified against
-the reference source (`opencode` `packages/plugin/src/index.ts`, interface
-`Hooks`): `tool.execute.before`, `tool.execute.after`, `event`, `dispose`. The
+the reference source (`opencode/packages/plugin/src/index.ts` in the
+reference clone, interface `Hooks`): `tool.execute.before`, `tool.execute.after`, `event`, `dispose`. The
 earlier cut invented `tool.execute.error` and `session.*` hooks that V1 does not
 have, and never exported a host-shaped plugin. Now: telemetry + middleware run in
 `tool.execute.before`/`tool.execute.after`; session ids come from
@@ -571,9 +572,9 @@ Treats every tool invocation as a node in a directed acyclic graph (DAG),
 turning telemetry into execution intelligence: critical path, bottlenecks,
 failure cascades, cost-per-workflow, causal root-cause analysis, anti-pattern
 detection, workflow forecasting, and MCP protocol support (paginated
-resource, subscribe/notify) for exposing the graph. (Absorbed from the
-now-retired `docs/EXECUTION_GRAPH_ROADMAP.md`, which tracked this work across
-its own phases 4-12 before being folded in here.)
+resource, subscribe/notify) for exposing the graph. (Absorbed from a
+now-retired execution-graph roadmap document, which tracked this work across its
+own phases 4-12 before being folded in here.)
 
 - `@adaptivemcp/spec`: `ExecutionNode` + graph analysis types; canonical
   `ExecutionGraphResource` wire schema and `buildExecutionGraph` builder.
