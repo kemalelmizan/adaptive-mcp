@@ -15,7 +15,10 @@
  *   5. each `CLAIMS` entry's code probe agrees with its ROADMAP status marker:
  *      a capability that exists in code must be marked ✅/🟡, and a marker must
  *      not claim a capability the code no longer has;
- *   6. the publishable set is dependency-closed: a published package cannot
+ *   6. prose claims that contradict a code probe are caught (a "not yet" left
+ *      behind after the work landed), including claims about the sibling
+ *      `agent` repo when it is checked out locally;
+ *   7. the publishable set is dependency-closed: a published package cannot
  *      depend on an unpublished `@adaptivemcp/*` package, because npm would
  *      have nothing to resolve (this shipped broken once: `routing` and
  *      `evaluation` both depended on `graph-analysis`, which was not
@@ -263,6 +266,60 @@ function checkClaims(): void {
   }
 }
 
+/**
+ * A sentence the docs should no longer contain once a capability ships.
+ *
+ * The status table has probes; the paragraphs under it did not, which is how 6f
+ * ended up marked "✅ done" above a body still saying "does not yet emit". These
+ * guards are deliberately ugly regexes over exact stale sentences: a broad rule
+ * would fail on history that is worth keeping.
+ */
+interface ProseGuard {
+  capability: string;
+  /** File whose presence/content proves the capability. */
+  probeFile: string;
+  probe: RegExp;
+  /** Sentence that must be gone once `probe` matches. */
+  forbidden: RegExp;
+}
+
+const PROSE_GUARDS: ProseGuard[] = [
+  {
+    capability: "budget / require_approval are emitted in the derived view",
+    probeFile: "packages/extension/src/view.ts",
+    probe: /require_approval/,
+    forbidden: /does not yet emit the `budget` or `require_approval` fields/,
+  },
+  {
+    capability: "the agent repo has an HTTP MCP transport",
+    probeFile: "../agent/src/mcp/http.ts",
+    probe: /class HttpToolset/,
+    forbidden: /no HTTP transport in the agent yet/,
+  },
+  {
+    capability: "the agent repo implements OAuth discovery",
+    probeFile: "../agent/src/mcp/oauth.ts",
+    probe: /export function acquireToken/,
+    forbidden: /no HTTP transport in the agent yet/,
+  },
+];
+
+function checkProseClaims(): void {
+  const roadmap = read("docs/ROADMAP.md");
+  for (const guard of PROSE_GUARDS) {
+    // A missing probe file means the capability is not in this checkout (the
+    // sibling agent repo is absent in CI), so the claim cannot be contradicted.
+    if (!existsSync(resolve(REPO_ROOT, guard.probeFile))) continue;
+    if (!guard.probe.test(read(guard.probeFile))) continue;
+    if (guard.forbidden.test(roadmap)) {
+      fail(
+        `docs/ROADMAP.md still says "${guard.forbidden.source}" while ` +
+          `${guard.probeFile} shows ${guard.capability}; update the prose`,
+      );
+    }
+  }
+}
+
 function checkPublishClosure(): void {
   // npm resolves `dependencies` at install time: a published package pointing
   // at an unpublished one is uninstallable for every user of the published
@@ -288,6 +345,7 @@ function main(): void {
   checkReadmeTable();
   checkRoadmapInventory();
   checkClaims();
+  checkProseClaims();
   checkPublishClosure();
 
   if (failures.length > 0) {
@@ -297,7 +355,7 @@ function main(): void {
   }
   console.log(
     "docs check passed: package inventory, README table, ROADMAP inventory, status claims, " +
-      "and the publishable dependency closure are consistent.",
+      "prose claims, and the publishable dependency closure are consistent.",
   );
 }
 

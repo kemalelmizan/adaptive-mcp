@@ -233,7 +233,7 @@ or the docs, or if a Phase 6/8 item row disappears.
 | 6e  | ✅ done — Conformance scenarios (graceful degradation)                          | Low — test-only, no production code changes                                  | Done — component tests + a host-ignores-extension scenario (`examples/src/ignore-extension.conformance.test.ts`)                                                                                                                                                     | Medium — confidence/trust, not new capability                                                    |
 | 6f  | ✅ done — Emit `budget` / `require_approval` in the reference impl              | Medium — touches the wire schema tracked for SEP graduation                  | Medium — extend `ExtensionController` view + `spec` types                                                                                                                                                                                                            | High — unblocks the SEP stabilization gate (see Blocked list)                                    |
 | 6g  | ✅ done — Multi-server aggregation (merge `tools-metadata` across servers)      | Medium — key-collision handling across servers in `ExtensionController`      | Low remaining — `aggregateViews()` merges composite keys + metric cells, with tests; the agent's single store is the cross-server aggregate                                                                                                                          | Medium/High — real multi-server hosts need this                                                  |
-| 6h  | ✅ done — Client OAuth delegation flow                                          | Medium — credential handling is security-sensitive                           | Low remaining — authorize/callback/refresh/token-storage implemented, now with a test suite and CSRF `state` validation; live-provider validation still pending (no HTTP transport yet)                                                                              | Medium — unblocks one integration, not the core loop                                             |
+| 6h  | ✅ done — Client OAuth delegation flow                                          | Medium — credential handling is security-sensitive                           | Low remaining — authorize/callback/refresh/token-storage implemented, now with a test suite and CSRF `state` validation; live-provider validation still pending (transport exists; no live provider used)                                                            | Medium — unblocks one integration, not the core loop                                             |
 | 6i  | ✅ done — Host adapter (OpenCode plugin)                                        | Medium — depends on OpenCode's hook signatures                               | Proven live on OpenCode v2.0.26 (V2 `setup(ctx)` + `tool.hook`, direct config load via the package's root `index.mjs`, DB rows + `tools-metadata.yaml` asserted); published to npm as @adaptivemcp/opencode-plugin@0.2.0; execution-graph linkage stays out of scope | High — proves the loop on a real, popular agent instead of only synthetic demos                  |
 | 6j  | ✅ done — Session-scoped telemetry                                              | Medium/High — schema change threaded through `spec`/`telemetry`/`evaluation` | Low remaining — `sessionId` was already threaded; the co-occurrence pass now ships (`Evaluator.evaluateCooccurrence`) with tests                                                                                                                                     | Medium — research-oriented (AGENTS.md open question); benefits from 6i's real session boundaries |
 
@@ -356,17 +356,17 @@ This entry was stale (found while scoping Phase 8); kept below for history.
 Whether this actually unblocks the SEP stabilization gate mentioned below is a
 separate question this update doesn't resolve.
 
-Known gap from doubts.md §8 / §11: the reference impl (`@adaptivemcp/extension`)
-does not yet emit the `budget` or `require_approval` fields in the
-`tools-metadata` view, even though the SEP draft and the precedence rule
-(host UI > suggestion > nothing) already assume they exist.
+Original gap (doubts.md §8 / §11, now closed): the reference impl did not emit
+`budget` or `require_approval` in the `tools-metadata` view, even though the SEP
+draft and the precedence rule (host UI > suggestion > nothing) assumed they
+exist. `toToolMetadataView()` now promotes both from `routing`/`approval`
+recommendations, so the precedence rule is exercised rather than theoretical for
+those fields.
 
-- Extend `ExtensionController`'s view projection + the relevant `spec` types to
-  emit both fields once a `Router`/`ApprovalGate` recommendation exists for a
-  tool.
-- Until this ships, the precedence rule in `docs/sep-2133-tools-metadata.md`
-  §Security is theoretical for those two fields — this item is a prerequisite
-  for the upstream SDK PR gate (see Blocked list).
+What is _still_ open is the gate that motivated the item, not the emission: the
+upstream SDK PR (see Blocked list) is what makes the SEP stabilization
+schedulable. `scripts/check-docs.ts` now fails if this paragraph ever repeats
+the old "does not yet emit" claim while `view.ts` keeps emitting both fields.
 
 ### 6g. Multi-server aggregation
 
@@ -421,7 +421,11 @@ validation (single-use, server-bound, TTL), token injection, expiry refresh, and
 validates the issued `state` (it previously only checked presence), and `afterCall`
 no longer throws a bogus `OAUTH_TOKEN_REFRESHED` (which did not trigger a retry) —
 it refreshes best-effort for the next call. Still unvalidated against a live
-provider (no HTTP transport in the agent yet).
+provider: the sibling `agent` repo now has an HTTP MCP transport and a full
+OAuth discovery + authorization-code flow (`src/mcp/oauth.ts`, conformance-
+checked), so the remaining work is a live provider, not a missing transport.
+`scripts/check-docs.ts` guards this sentence against the agent's absence of
+either.
 
 ### 6i. Host adapter: prove the loop on a real harness
 
