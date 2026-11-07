@@ -74,6 +74,26 @@ export function stdoutOf(result: string | { stdout: string }): string {
 }
 
 /**
+ * The logged-in npm user, or `null` when this shell cannot publish.
+ *
+ * A release without credentials fails every package with `E401`, and the script's summary
+ * ("failed 14") buries the one line that explains it. Checking once, up front, is the
+ * difference between "log in and retry" and guessing at OTPs (#84).
+ *
+ * The runner is injectable so this is testable without touching npm.
+ */
+export async function npmAuthUser(
+  run: (cmd: string, args: string[]) => Promise<string> = (cmd, args) => runAsync(cmd, args),
+): Promise<string | null> {
+  try {
+    const user = stdoutOf(await Promise.resolve(run("npm", ["whoami"]))).trim();
+    return user.length > 0 ? user : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Async variant of `run`, for publishing several packages in parallel. Captures
  * stdout/stderr instead of inheriting stdio (parallel writers would interleave);
  * on a non-zero exit the rejected error carries `.stdout`/`.stderr`.

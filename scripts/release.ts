@@ -55,6 +55,7 @@ import {
   run,
   runAsync,
   isDirty,
+  npmAuthUser,
   onlyBumpIsDirty,
   npmRegistry,
   changesetStatus,
@@ -250,6 +251,17 @@ async function main(): Promise<void> {
   }
   if (isDirty()) {
     console.log("[release] --continue: tree holds the version bump; resuming the release.");
+  }
+
+  // Fail once with the real reason. Without this, a shell that is not logged in to npm
+  // reports every package as a publish failure, which reads like a network problem or a
+  // timed-out OTP (#84).
+  if (!(await npmAuthUser())) {
+    console.error(
+      "[release] not logged in to npm: run `npm login` (or export NPM_TOKEN) in this shell " +
+        "before releasing, otherwise every publish fails with E401.",
+    );
+    process.exit(1);
   }
 
   const packagesArg = PACKAGES_ARG ? parsePackagesArg(PACKAGES_ARG) : undefined;

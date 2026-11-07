@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isExpectedBumpFile, packageVersion, qualify, stdoutOf } from "./workspace.ts";
+import { isExpectedBumpFile, npmAuthUser, packageVersion, qualify, stdoutOf } from "./workspace.ts";
 
 describe("release script plumbing", () => {
   it("reads stdout from either promisified execFile shape", () => {
@@ -27,6 +27,18 @@ describe("release script plumbing", () => {
     // Pins the path convention: `@adaptivemcp/spec` lives in `packages/spec`.
     expect(packageVersion("@adaptivemcp/spec")).toMatch(/^\d+\.\d+\.\d+/);
     expect(packageVersion("spec")).toBe(packageVersion("@adaptivemcp/spec"));
+  });
+
+  it("reports the logged-in npm user, or null when the shell cannot publish", async () => {
+    // A release without credentials failed all 14 publishes and buried the reason; the
+    // preflight turns that into one sentence. Both shapes of a runner result are accepted.
+    expect(await npmAuthUser(async () => "kemalelmizan\n")).toBe("kemalelmizan");
+    expect(await npmAuthUser(async () => "")).toBeNull();
+
+    const failing = async () => {
+      throw new Error("npm error need auth");
+    };
+    expect(await npmAuthUser(failing)).toBeNull();
   });
 
   it("qualifies a bare package name before asking the registry", () => {
