@@ -32,6 +32,7 @@ export default defineConfig({
       "apps/*/src/**/*.test.ts",
       "examples/src/**/*.test.ts",
       "examples/context-bench/src/**/*.test.ts",
+      "scripts/**/*.test.ts",
     ],
     environment: "node",
     reporters: ["dot"],
