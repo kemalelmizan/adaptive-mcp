@@ -134,16 +134,53 @@ of heuristic that looks clever and ages badly. The measured effect is one direct
 ## Live-model runs
 
 ```bash
-pnpm --filter @adaptivemcp/context-bench bench -- \
-  --model http://127.0.0.1:8080/v1 --model-name qwen3-coder --no-think
+# a keyed server (llama.cpp --api-key) takes the token from the environment, so it does not
+# appear in the command line or the shell history
+CONTEXT_BENCH_API_KEY=… \
+  pnpm --filter @adaptivemcp/context-bench bench -- \
+    --model http://127.0.0.1:8080/v1 --model-name qwen3-coder --no-think
 ```
+
+`--model-profile capable|limited` picks the `routed` arm. It matters: the same model scores
+differently under the two profiles, and a run that forgets the flag reports the wrong row.
 
 Recorded 2026-11-06, llama.cpp, temperature 0, one run per model. `--no-think` sets
 `chat_template_kwargs: { enable_thinking: false }`, without which Qwen3 spends the
 whole budget on `reasoning_content` and returns empty content — a 0/10 that measures
 the template, not the strategy.
 
-**Qwen3-Coder-30B-A3B (GPU):**
+### Re-measured 2026-11-07 (CPU)
+
+The 2026-11-06 tables were a snapshot. Re-running the **8B** on CPU (`llama.cpp` built without
+CUDA, `Qwen3-8B-Q4_K_M.gguf`, 16 threads, temperature 0, `--no-think`,
+`--model-profile limited`) reproduced the pass counts and the routing claim:
+
+```
+strategy           pass   tokens   mean ms
+all-upfront        10/11  408      3254
+lexical(top3)      8/11   56       1573
+progressive        8/11   365      2025
+compiled           8/11   358      5073
+index-ids          8/11   124      4613
+adaptive-warm      9/11   440      3661
+routed             9/11   440      3439      (limited → retain)
+```
+
+What this confirms, and what it does not:
+
+- **The pass/fail pattern is stable**: all-upfront misses one hidden task, progressive and
+  the dense variants miss one, `adaptive-warm` recovers it, and `routed` matches the best
+  fixed arm. That is the claim the deterministic table is built on.
+- **`lexical` moved 7/11 → 8/11.** At temperature 0 llama.cpp is still not bit-reproducible
+  across builds (batching and kernel differences), so a one-task swing is measurement noise,
+  not a regression. Treat pass counts as ±1.
+- **Latency is not comparable** across machines or builds; the millisecond column only orders
+  strategies within one run.
+- **The 30B was not re-run**: the prebuilt CUDA server links `libcudart.so.12` and this host
+  ships CUDA 13, so it was rebuilt CPU-only for this run, and 30B on 16 CPU threads is hours
+  rather than minutes. The GPU table below stays a 2026-11-06 snapshot and is labelled as one.
+
+**Qwen3-Coder-30B-A3B (GPU, recorded 2026-11-06):**
 
 ```
 strategy           pass   tokens   mean ms
