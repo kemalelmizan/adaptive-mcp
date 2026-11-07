@@ -348,6 +348,12 @@ const PROSE_GUARDS: ProseGuard[] = [
     forbidden: /does not yet emit the `budget` or `require_approval` fields/,
   },
   {
+    capability: "the binary wrapper is an @adaptivemcp package",
+    probeFile: "packages/mcp-binary/package.json",
+    probe: /"name": "@adaptivemcp\/mcp-binary"/,
+    forbidden: /@modelcontextprotocol\/mcp-binary/,
+  },
+  {
     capability: "ApprovalPolicy glob matching has regression tests",
     probeFile: "packages/approval/src/gate.test.ts",
     probe: /denyTools/,
