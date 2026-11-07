@@ -15,10 +15,11 @@
  *   5. each `CLAIMS` entry's code probe agrees with its ROADMAP status marker:
  *      a capability that exists in code must be marked ✅/🟡, and a marker must
  *      not claim a capability the code no longer has;
- *   6. prose claims that contradict a code probe are caught (a "not yet" left
+ *   6. every backticked in-repo path cited in the ROADMAP exists;
+ *   7. prose claims that contradict a code probe are caught (a "not yet" left
  *      behind after the work landed), including claims about the sibling
  *      `agent` repo when it is checked out locally;
- *   7. the publishable set is dependency-closed: a published package cannot
+ *   8. the publishable set is dependency-closed: a published package cannot
  *      depend on an unpublished `@adaptivemcp/*` package, because npm would
  *      have nothing to resolve (this shipped broken once: `routing` and
  *      `evaluation` both depended on `graph-analysis`, which was not
@@ -100,6 +101,27 @@ const CLAIMS: Claim[] = [
     capability: "budget / require_approval emitted in the derived view",
     file: "packages/extension/src/view.ts",
     pattern: /require_approval/,
+    minStatus: "done",
+  },
+  {
+    id: "8a",
+    capability: "DecodingAdvisor emits a symbolic DecodingProfile",
+    file: "packages/routing/src/decoding-advisor.ts",
+    pattern: /class DecodingAdvisor/,
+    minStatus: "done",
+  },
+  {
+    id: "8c",
+    capability: "DecodingRecommendation wrapper with confidence + reasons",
+    file: "packages/spec/src/types.ts",
+    pattern: /DecodingRecommendation/,
+    minStatus: "done",
+  },
+  {
+    id: "8f",
+    capability: "decision trace as staged reasons[]",
+    file: "packages/routing/src/decoding-advisor.ts",
+    pattern: /intent baseline: \$\{baseline\}/,
     minStatus: "done",
   },
   {
@@ -304,6 +326,31 @@ const PROSE_GUARDS: ProseGuard[] = [
   },
 ];
 
+/**
+ * Backticked in-repo paths in the ROADMAP must exist.
+ *
+ * Prose citations decay silently when a file is renamed or a planned path is
+ * written as if it were real (`examples/src/scenarios/conformance.js` never
+ * existed). This is the same rule the agent repo applies to its docs, limited to
+ * the path roots this repo owns: a reference-clone path (`opencode/...`) is not
+ * in-repo and is deliberately not checked.
+ */
+const CITATION = /`((?:packages|examples|docs|scripts|apps)\/[\w./-]+)`/g;
+
+function checkRoadmapCitations(): void {
+  const roadmap = read("docs/ROADMAP.md");
+  const missing: string[] = [];
+  for (const match of roadmap.matchAll(CITATION)) {
+    const raw = match[1];
+    if (raw === undefined) continue;
+    const path = raw.replace(/[.,;:]+$/, "").replace(/\/$/, "");
+    if (!existsSync(resolve(REPO_ROOT, path))) missing.push(raw);
+  }
+  for (const path of missing) {
+    fail(`docs/ROADMAP.md cites \`${path}\`, which does not exist`);
+  }
+}
+
 function checkProseClaims(): void {
   const roadmap = read("docs/ROADMAP.md");
   for (const guard of PROSE_GUARDS) {
@@ -346,6 +393,7 @@ function main(): void {
   checkRoadmapInventory();
   checkClaims();
   checkProseClaims();
+  checkRoadmapCitations();
   checkPublishClosure();
 
   if (failures.length > 0) {
@@ -355,7 +403,7 @@ function main(): void {
   }
   console.log(
     "docs check passed: package inventory, README table, ROADMAP inventory, status claims, " +
-      "prose claims, and the publishable dependency closure are consistent.",
+      "prose claims, cited paths, and the publishable dependency closure are consistent.",
   );
 }
 
