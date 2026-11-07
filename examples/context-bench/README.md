@@ -180,31 +180,46 @@ What this confirms, and what it does not:
   ships CUDA 13, so it was rebuilt CPU-only for this run, and 30B on 16 CPU threads is hours
   rather than minutes. The GPU table below stays a 2026-11-06 snapshot and is labelled as one.
 
-**Qwen3-Coder-30B-A3B (GPU, recorded 2026-11-06):**
+**Qwen3-Coder-30B-A3B (GPU, re-measured 2026-11-07):**
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        10/11  408      1294
-lexical(top3)      8/11   56       794
-progressive        11/11  365      1030
-compiled           11/11  358      1261
-index-ids          10/11  124      1505
-adaptive-warm      9/11   440      740
-routed             11/11  365      950
+all-upfront        9/11   408      935
+lexical(top3)      8/11   56       1452
+progressive        11/11  365      1414
+compiled           10/11  358      1437
+index-ids          11/11  124      1580
+adaptive-warm      9/11   440      806
+routed             11/11  365      1171      (capable → fresh)
 ```
 
-**Qwen3-8B (CPU):**
+Host: `llama.cpp` built against CUDA 13 (`-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=86
+-DLLAMA_UI_GZIP=OFF`; the latter because the checked-out UI assets include a file the gzip
+step cannot read), RTX 3060 Ti 8 GB, `Qwen3-Coder-30B-A3B-Instruct-Q4_K_M` partially offloaded
+(fit automatically; 17.7 GB does not fit in 8 GB), context 8192, temperature 0, `--no-think`,
+`--model-profile capable`.
+
+What changed against the 2026-11-06 snapshot: `all-upfront` 10→9, `compiled` 11→10,
+`index-ids` 10→11. Those are **one-task swings**, the same ±1 seen on the CPU re-run and the
+consequence of temperature 0 not being bit-reproducible across builds. The claims that matter
+survive: **progressive answers all 11**, and **routed matches the best fixed arm (11/11 @365)**.
+Latency is lower on this build than the earlier snapshot, but cross-build latencies are not
+comparable — the column orders strategies within one run.
+
+**Qwen3-8B (CPU, re-measured 2026-11-07):**
 
 ```
 strategy           pass   tokens   mean ms
-all-upfront        10/11  408      3694
-lexical(top3)      7/11   56       2374
-progressive        8/11   365      2742
-compiled           8/11   358      4844
-index-ids          8/11   124      3390
-adaptive-warm      9/11   440      3254
-routed             9/11   440      3130
+all-upfront        10/11  408      3254
+lexical(top3)      8/11   56       1573
+progressive        8/11   365      2025
+compiled           8/11   358      5073
+index-ids          8/11   124      4613
+adaptive-warm      9/11   440      3661
+routed             9/11   440      3439      (limited → retain)
 ```
+
+The 2026-11-06 CPU snapshot agreed on every pass count except `lexical` (7/11 then, 8/11 now).
 
 ### Routing on capability
 
@@ -220,6 +235,9 @@ The last two tables disagree about retention, so the harness now routes rather t
 ```
 qwen3-coder-30b  --model-profile capable   routed 11/11 @365   (best fixed arm: progressive 11/11 @365)
 qwen3-8b         --model-profile limited   routed  9/11 @440   (best fixed arm: adaptive-warm 9/11 @440)
+
+Both rows above hold in the 2026-11-07 re-runs on the rebuilt `llama.cpp` (CUDA 13 GPU, CPU
+8B), which is the point: the pass counts move by ±1, the routing claim does not.
 ```
 
 `routed` matches the best fixed arm on each model, which is the whole claim: no single
