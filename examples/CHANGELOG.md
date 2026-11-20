@@ -1,5 +1,12 @@
 # @adaptivemcp/examples
 
+## 0.0.15
+
+### Patch Changes
+
+- Updated dependencies [cc7475e]
+  - @adaptivemcp/mcp-binary@0.2.1
+
 ## 0.0.14
 
 ### Patch Changes
