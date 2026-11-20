@@ -471,9 +471,10 @@ real-host adapter, and more).
   `127.0.0.1` unless you intend remote access, and put authentication and
   rate-limiting in front of it.
 - **Patched transitives.** The MCP SDK pulls HTTP-server dependencies (hono,
-  `@hono/node-server`, express → qs, ajv → fast-uri) and `ip-address`. The
-  workspace pins patched versions with `overrides` in `pnpm-workspace.yaml`.
-  Run `pnpm audit --prod` before releases and when bumping
+  `@hono/node-server`, express → `body-parser` / `qs` / `proxy-addr`,
+  `express-rate-limit` → `ip-address`, ajv → `fast-uri`). The workspace enforces
+  patched floors with `overrides` in `pnpm-workspace.yaml`. Run
+  `pnpm audit --prod` before releases and when bumping
   `@modelcontextprotocol/sdk`; it currently reports **0 runtime advisories**.
 - `js-yaml` is used only for `dump()` (serialization), never `load()` on
   untrusted input.
