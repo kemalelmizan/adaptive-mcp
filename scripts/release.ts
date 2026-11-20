@@ -64,7 +64,8 @@ import {
   isPublished,
   waitForPublished,
 } from "./lib/workspace.ts";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const CHANGESET_DIR = join(REPO_ROOT, ".changeset");
@@ -177,17 +178,27 @@ async function publishOne(pkg: string): Promise<PublishResult> {
   if (await isPublished(pkg, version)) {
     return { pkg, version, status: "skipped" };
   }
-  // `pnpm publish` (not `npm publish`) rewrites `workspace:*` deps to real
-  // versions at pack time. `--no-git-checks` is required because `changeset
-  // version` leaves the tree dirty at this point.
-  const args = ["publish", "--access", "public", "--ignore-scripts", "--no-git-checks"];
-  if (OTP) args.push("--otp", OTP);
+  // Pack with `pnpm pack` first so `workspace:*` deps are rewritten to real
+  // semver ranges, then publish the tarball with `npm publish` (stdio inherited)
+  // so npm's browser-based 2FA auth link streams directly to the terminal.
+  const packDir = mkdtempSync(join(tmpdir(), "adaptivemcp-pack-"));
   try {
-    await runAsync("pnpm", args, { cwd: packageDir(pkg) });
+    await runAsync("pnpm", ["pack", "--pack-destination", packDir], { cwd: packageDir(pkg) });
+    const tarball = readdirSync(packDir).find((file) => file.endsWith(".tgz"));
+    if (!tarball) {
+      return { pkg, version, status: "failed", error: "pnpm pack produced no .tgz tarball" };
+    }
+    const args = ["publish", join(packDir, tarball), "--access", "public", "--ignore-scripts"];
+    if (OTP) args.push("--otp", OTP);
+    if (OTP) {
+      await runAsync("npm", args, { cwd: packageDir(pkg) });
+    } else {
+      run("npm", args, { cwd: packageDir(pkg) });
+    }
     return { pkg, version, status: "published" };
   } catch (error) {
-    // pnpm reports its own errors on stdout (an OTP rejection, for example), so
-    // the cause is as likely to be in `stdout` as in `stderr`; keep both.
+    // When running in parallel (--otp), pnpm/npm reports errors on stdout/stderr;
+    // when running sequentially (browser link), stdio was already printed above.
     const e = error as { stderr?: string; stdout?: string; message?: string };
     const raw = `${e.stderr ?? ""}\n${e.stdout ?? ""}\n${e.message ?? ""}`;
     // The registry is eventually consistent: a just-published version can read
@@ -198,6 +209,8 @@ async function publishOne(pkg: string): Promise<PublishResult> {
     }
     const detail = raw.trim().split("\n").slice(-4).join(" | ");
     return { pkg, version, status: "failed", error: detail };
+  } finally {
+    rmSync(packDir, { recursive: true, force: true });
   }
 }
 
@@ -209,7 +222,17 @@ async function publishAll(candidates: string[]): Promise<PublishResult[]> {
     const due = wave.filter((p) => candidates.includes(p));
     if (due.length === 0) continue;
     console.log(`[release] wave ${index + 1}/${waves.length} (${due.length}): ${due.join(", ")}`);
-    const settled = await Promise.all(due.map((pkg) => publishOne(pkg)));
+    let settled: PublishResult[];
+    if (OTP) {
+      settled = await Promise.all(due.map((pkg) => publishOne(pkg)));
+    } else {
+      // Browser-based auth prints an interactive link per publish; run sequentially
+      // so prompts never interleave.
+      settled = [];
+      for (const pkg of due) {
+        settled.push(await publishOne(pkg));
+      }
+    }
     for (const result of settled) {
       const icon = result.status === "published" ? "✓" : result.status === "skipped" ? "=" : "✗";
       const suffix = result.status === "failed" ? ` — ${result.error}` : "";
